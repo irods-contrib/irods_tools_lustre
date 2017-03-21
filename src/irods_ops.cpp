@@ -1,11 +1,13 @@
 // irods includes
 #include "rodsClient.h"
+#include "rodsType.h"
 #include "parseCommandLine.h"
 #include "rodsPath.h"
 #include "regUtil.h"
 #include "irods_client_api_table.hpp"
 #include "irods_pack_table.hpp"
 #include "rodsType.h"
+#include "dataObjRename.h"
 
 // other includes
 #include <string>
@@ -17,14 +19,16 @@
 rcComm_t *irods_conn;
 
 const char *mdtname = "lustre01-MDT0000";
-const char *lustre_root_path = "/lustre01/";
+const char *lustre_root_path = "/lustre01";
 const char *register_path = "/tempZone";
 const char *resource_name = "demoResc";
 
 
+
+
 // Returns the path in irods for a file in lustre.
 // On error returns ""
-std::string get_irods_path_for_src_path(const std::string src_file_path) {
+std::string lustre_path_to_irods_path(const std::string src_file_path) {
 
     if (strncmp(src_file_path.c_str(), lustre_root_path, strlen(lustre_root_path)) != 0) {
         return "";
@@ -34,6 +38,20 @@ std::string get_irods_path_for_src_path(const std::string src_file_path) {
 }
 
 extern "C" {
+
+int get_irods_path_from_lustre_path(const char *lustre_path_cstr, char *irods_path_cstr) {
+
+    std::string lustre_path(lustre_path_cstr);
+    std::string irods_path = lustre_path_to_irods_path(lustre_path);
+    if (irods_path.length() == 0) {
+         return -1;
+    }
+
+    snprintf(irods_path_cstr, MAX_NAME_LEN, "%s", irods_path.c_str()); 
+
+    return 0;
+
+}
 
 int instantiate_irods_connection() {
 
@@ -67,15 +85,15 @@ void disconnect_irods_connection() {
     irods_conn = nullptr;
 }
 
-int add_avu(const char *src_file_path_cstr, const char *attr_cstr, const char *val_cstr, const char *unit_cstr, bool is_collection) {
+int add_avu(const char *src_path_lustre_cstr, const char *attr_cstr, const char *val_cstr, const char *unit_cstr, bool is_collection) {
 
     if (!irods_conn) {
         printf("Error:  Called add_avu() without an active irods_conn\n");
         return -1;
     }
 
-    std::string src_file_path(src_file_path_cstr);
-    std::string irods_path = get_irods_path_for_src_path(src_file_path);
+    std::string src_file_path(src_path_lustre_cstr);
+    std::string irods_path = lustre_path_to_irods_path(src_file_path);
 
     if (irods_path == "") {
          printf("Can't calculate irods_path from src_path.\n");
@@ -111,15 +129,15 @@ int add_avu(const char *src_file_path_cstr, const char *attr_cstr, const char *v
 }
 
 
-int make_collection(const char *src_collection_path_cstr) {
+int make_collection(const char *src_path_lustre_cstr) {
 
     if (!irods_conn) {
         printf("Error:  Called make_collection() without an active irods_conn\n");
         return -1;
     }
 
-    std::string src_collection_path(src_collection_path_cstr);
-    std::string irods_path = get_irods_path_for_src_path(src_collection_path);
+    std::string src_path_lustre(src_path_lustre_cstr);
+    std::string irods_path = lustre_path_to_irods_path(src_path_lustre);
     int status;
     collInp_t collCreateInp;
 
@@ -141,15 +159,15 @@ int make_collection(const char *src_collection_path_cstr) {
     return 0; 
 }
 
-int register_file(const char *src_file_path_cstr) {
+int register_file(const char *src_path_lustre_cstr) {
 
     if (!irods_conn) {
         printf("Error:  Called register_file() without an active irods_conn\n");
         return -1;
     }
 
-    std::string src_file_path(src_file_path_cstr);
-    std::string irods_path = get_irods_path_for_src_path(src_file_path);
+    std::string src_file_path(src_path_lustre_cstr);
+    std::string irods_path = lustre_path_to_irods_path(src_file_path);
     int status;
     dataObjInp_t dataObjOprInp;
 
@@ -238,7 +256,7 @@ int find_irods_path_with_avu(const char *attr, const char *value, const char *un
     return 0;
 }
 
-int remove_data_object(const char *src_path_cstr) {
+int remove_data_object(const char *src_path_irods_cstr) {
 
     if (!irods_conn) {
         printf("Error:  Called remove_data_object() without an active irods_conn\n");
@@ -250,13 +268,13 @@ int remove_data_object(const char *src_path_cstr) {
 
     dataObjInp.openFlags = O_RDONLY;
 
-    rstrcpy(dataObjInp.objPath, src_path_cstr, MAX_NAME_LEN);
+    rstrcpy(dataObjInp.objPath, src_path_irods_cstr, MAX_NAME_LEN);
     int status = rcDataObjUnlink(irods_conn, &dataObjInp);
  
     return status; 
 }
 
-int remove_collection(const char *src_path_cstr) {
+int remove_collection(const char *src_path_irods_cstr) {
 
     if (!irods_conn) {
         printf("Error:  Called remove_collection() without an active irods_conn\n");
@@ -266,9 +284,98 @@ int remove_collection(const char *src_path_cstr) {
     collInp_t collInp;
     memset(&collInp, 0, sizeof(collInp_t));
 
-    rstrcpy(collInp.collName, src_path_cstr, MAX_NAME_LEN);
+    rstrcpy(collInp.collName, src_path_irods_cstr, MAX_NAME_LEN);
     int status = rcRmColl(irods_conn, &collInp, false);
     
+    return status;
+}
+
+int rename_irods_object(const char *src_path_irods_cstr, const char *dest_path_irods_cstr, bool is_collection) {
+
+    if (!irods_conn) {
+        printf("Error:  Called rename_data_object() without an active irods_conn\n");
+        return -1;
+    }
+
+    dataObjCopyInp_t dataObjRenameInp;
+    memset(&dataObjRenameInp, 0, sizeof(dataObjCopyInp_t));
+
+    if (is_collection) {
+        dataObjRenameInp.srcDataObjInp.oprType = RENAME_COLL;
+        dataObjRenameInp.destDataObjInp.oprType = RENAME_COLL;
+    } else {
+        dataObjRenameInp.srcDataObjInp.oprType = RENAME_DATA_OBJ;
+        dataObjRenameInp.destDataObjInp.oprType = RENAME_DATA_OBJ;
+    }
+
+    rstrcpy(dataObjRenameInp.destDataObjInp.objPath, dest_path_irods_cstr, MAX_NAME_LEN);
+    rstrcpy(dataObjRenameInp.srcDataObjInp.objPath, src_path_irods_cstr, MAX_NAME_LEN);
+
+    int status = rcDataObjRename(irods_conn, &dataObjRenameInp);
+
+    return status;
+}
+
+int rename_data_object(const char *src_path_irods_cstr, const char *dest_path_irods_cstr) {
+    return rename_irods_object(src_path_irods_cstr, dest_path_irods_cstr, false);
+}
+
+int rename_collection(const char *src_path_irods_cstr, const char *dest_path_irods_cstr) {
+    return rename_irods_object(src_path_irods_cstr, dest_path_irods_cstr, true);
+}
+ 
+
+int update_vault_path_for_data_object(const char *irods_path_cstr, const char *new_vault_path_cstr) {
+
+    if (!irods_conn) {
+        printf("Error:  Called update_vault_path_for_object() without an active irods_conn\n");
+        return -1;
+    }
+
+    modDataObjMeta_t modDataObjMetaInp;
+    keyValPair_t regParam;
+    dataObjInfo_t dataObjInfo;
+
+    memset(&regParam, 0, sizeof( regParam ) );
+    addKeyVal(&regParam, FILE_PATH_KW, new_vault_path_cstr);
+
+    memset(&dataObjInfo, 0, sizeof(dataObjInfo));
+    rstrcpy(dataObjInfo.objPath, irods_path_cstr, MAX_NAME_LEN);
+
+    modDataObjMetaInp.regParam = &regParam;
+    modDataObjMetaInp.dataObjInfo = &dataObjInfo;
+
+    int status = rcModDataObjMeta(irods_conn, &modDataObjMetaInp);
+
+    return status;
+
+}
+
+int update_data_object_size(const char *irods_path_cstr, rodsLong_t size) {
+
+    if (!irods_conn) {
+        printf("Error:  Called update_data_object_size() without an active irods_conn\n");
+        return -1;
+    }
+
+    modDataObjMeta_t modDataObjMetaInp;
+    keyValPair_t regParam;
+    dataObjInfo_t dataObjInfo;
+    char size_str[MAX_NAME_LEN];
+
+    snprintf(size_str, MAX_NAME_LEN, "%lld", size);
+
+    memset(&regParam, 0, sizeof( regParam ) );
+    addKeyVal(&regParam, DATA_SIZE_KW, size_str);
+
+    memset(&dataObjInfo, 0, sizeof(dataObjInfo));
+    rstrcpy(dataObjInfo.objPath, irods_path_cstr, MAX_NAME_LEN);
+
+    modDataObjMetaInp.regParam = &regParam;
+    modDataObjMetaInp.dataObjInfo = &dataObjInfo;
+
+    int status = rcModDataObjMeta(irods_conn, &modDataObjMetaInp);
+
     return status;
 }
 

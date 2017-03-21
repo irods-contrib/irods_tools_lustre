@@ -31,64 +31,53 @@ extern const char *lustre_root_path;
 extern const char *register_path;
 extern const char *resource_name;
 
+int (*lustre_operators[CL_LAST])(const char *, struct changelog_rec *);
 
 void get_fidstr_from_record(struct changelog_rec *rec, char *fidstr) {
-    sprintf(fidstr, DFID_NOBRACE, PFID(&rec->cr_tfid));
-}
 
-int handle_record(const char *root_path, struct changelog_rec *rec, char *fullpath) {
-
-    char fidstr[MAX_NAME_LEN] = "";
-    char irods_path[MAX_NAME_LEN] = "";
+    struct changelog_ext_rename *rnm;
 
     switch (rec->cr_type) {
 
-        case CL_CREATE:
-            // If we have a create followed by a delete we may not know the full path.  Just return.
-            if (strcmp(fullpath, "") == 0)
-                return 0;
- 
-            register_file(fullpath);
-            get_fidstr_from_record(rec, fidstr);
-            add_avu(fullpath, "fidstr", fidstr, NULL, false);
-            break;
-        case CL_MKDIR:
-            // If we have a create followed by a delete we may not know the full path.  Just return.
-            if (strcmp(fullpath, "") == 0)
-                return 0;
-
-            make_collection(fullpath);
-            get_fidstr_from_record(rec, fidstr);
-            add_avu(fullpath, "fidstr", fidstr, NULL, true);
-            break;
-        case CL_UNLINK:
-            get_fidstr_from_record(rec, fidstr);
-
-            // It is possible that the data object was never created.
-            if (find_irods_path_with_avu("fidstr", fidstr, NULL, false, irods_path) != 0) {
-                return 0;
-            }
-            remove_data_object(irods_path);
-            break;
-        case CL_RMDIR:
-            get_fidstr_from_record(rec, fidstr);
-
-            // It is possible that the collection was never created.
-            if (find_irods_path_with_avu("fidstr", fidstr, NULL, true, irods_path) != 0) {
-                return 0;
-            }
-            remove_collection(irods_path);
+        case CL_RENAME:
+            rnm = changelog_rec_rename(rec);
+            sprintf(fidstr, DFID_NOBRACE, PFID(&rnm->cr_sfid));
             break;
         default:
-            printf("OTHER\n");
+            sprintf(fidstr, DFID_NOBRACE, PFID(&rec->cr_tfid));
             break;
     }
 
-    return 0;
 }
+
+// Determines if the object (file, dir) from the changelog record still exists in Lustre.
+bool object_exists_in_lustre(const char *root_path, struct changelog_rec *rec) {
+
+    char fidstr[MAX_NAME_LEN] = "";
+    char fullpath[MAX_NAME_LEN] = "";
+    long long recno = -1;
+    int linkno = 0;
+
+    int rc;
+
+    // TODO is there a better way than llapi_fid2path to see if file exists
+    get_fidstr_from_record(rec, fidstr);
+
+    rc = llapi_fid2path(root_path, fidstr, fullpath, MAX_NAME_LEN, &recno, &linkno);
+
+    if (rc < 0)
+        return false;
+
+    return true;
+}
+
 
 // Precondition:  fullpath is a buffer of MAX_NAME_LEN length
 int get_full_path_from_record(const char *root_path, struct changelog_rec *rec, char *fullpath) {
+
+    if (!object_exists_in_lustre(root_path, rec)) {
+        return -1;        
+    }
 
     char fidstr[MAX_NAME_LEN] = "";
     long long recno = -1;
@@ -97,21 +86,14 @@ int get_full_path_from_record(const char *root_path, struct changelog_rec *rec, 
 
     *fullpath = '\0';
 
-    if (rec->cr_type == CL_UNLINK || rec->cr_type == CL_RMDIR) {
-	// File or dir no longer exists at this point.  We can't get the path from the fidstr.  
-        // Just return. 
-        return 0;
-    }
-
     // use fidstr to get path
 
     get_fidstr_from_record(rec, fidstr);
     rc = llapi_fid2path(root_path, fidstr, fullpath, MAX_NAME_LEN, &recno, &linkno);
 
     if (rc < 0) {
-        // Silently ignore since this may fail if the object has been deleted
-        // before this runs.
-        return 0;    
+        fprintf(stderr, "llapi_fid2path in get_full_path_from_record() returned an error.");
+        return -1;
     }
 
     // add root path to fullpath
@@ -120,7 +102,237 @@ int get_full_path_from_record(const char *root_path, struct changelog_rec *rec, 
     strncpy(fullpath, temp, MAX_NAME_LEN);
 
     return 0;
+
+}
+
+int handle_file_add(const char *root_path, struct changelog_rec *rec) {
+
+    // If the file no longer exists just silently return.
+    if (!object_exists_in_lustre(root_path, rec)) {
+        return 0;
+    }
+
+    int rc = 0;
+    char fullpath[MAX_NAME_LEN] = "";
+    char fidstr[MAX_NAME_LEN] = "";
+    char irods_path[MAX_NAME_LEN] = "";
+
+    get_full_path_from_record(root_path, rec, fullpath);
+
+    rc = register_file(fullpath);
+
+    if (rc != 0) return rc;
+
+    get_fidstr_from_record(rec, fidstr);
+    return add_avu(fullpath, "fidstr", fidstr, NULL, false);
    
+    
+}
+
+int handle_directory_add(const char *root_path, struct changelog_rec *rec) {
+
+    // If the directory no longer exists just silently return
+    if (!object_exists_in_lustre(root_path, rec)) {
+        return 0;
+    }
+
+    int rc = 0;
+    char fullpath[MAX_NAME_LEN] = "";
+    char fidstr[MAX_NAME_LEN] = "";
+    char irods_path[MAX_NAME_LEN] = "";
+
+    get_full_path_from_record(root_path, rec, fullpath);
+
+    rc = make_collection(fullpath);
+
+    if (rc != 0) return rc;
+
+    get_fidstr_from_record(rec, fidstr);
+    return add_avu(fullpath, "fidstr", fidstr, NULL, true);
+}
+
+int handle_file_remove(const char *root_path, struct changelog_rec *rec) {
+
+    // If the file no longer exists just silently return
+    if (!object_exists_in_lustre(root_path, rec)) {
+        return 0;
+    }
+   
+    char fidstr[MAX_NAME_LEN] = "";
+    char irods_path[MAX_NAME_LEN] = "";
+ 
+    get_fidstr_from_record(rec, fidstr);
+
+    // It is possible that the data object was never created.
+    if (find_irods_path_with_avu("fidstr", fidstr, NULL, false, irods_path) != 0) {
+        return 0;
+    }
+    return remove_data_object(irods_path);
+}
+
+int handle_rename(const char *root_path, struct changelog_rec *rec) {
+
+    // If the file no longer exists just silently return
+    if (!object_exists_in_lustre(root_path, rec)) {
+        return 0;
+    }
+
+    int rc;
+    char fullpath[MAX_NAME_LEN] = "";
+    char fidstr[MAX_NAME_LEN] = "";
+    char new_irods_path[MAX_NAME_LEN] = "";
+    char current_irods_path[MAX_NAME_LEN] = "";
+
+    get_full_path_from_record(root_path, rec, fullpath);
+    get_fidstr_from_record(rec, fidstr);
+
+    // see if this is a file or directory
+    struct stat statbuf;
+    stat(fullpath, &statbuf);
+    bool is_directory = S_ISDIR(statbuf.st_mode);
+  
+
+    // It is possible that the data object was never created
+    if (find_irods_path_with_avu("fidstr", fidstr, NULL, is_directory, current_irods_path) != 0) {
+        // Just add new file 
+        if (is_directory) {
+            rc = make_collection(fullpath);
+        } else {
+            rc = register_file(fullpath);
+        }
+        if (rc != 0) return rc;
+
+        rc = add_avu(fullpath, "fidstr", fidstr, NULL, is_directory);
+        return rc;
+    }
+
+    // get the new irods path 
+    get_irods_path_from_lustre_path(fullpath, new_irods_path);
+
+    // see if the current and new path are the same.  if so just return
+    if (strcmp(new_irods_path, current_irods_path) == 0) {
+        return 0;
+    }
+
+    if (is_directory) {
+        rc = rename_collection(current_irods_path, new_irods_path);
+    } else {
+        rc = rename_data_object(current_irods_path, new_irods_path);
+    } 
+    if (rc != 0) return rc; 
+
+    if (!is_directory) { 
+        return update_vault_path_for_data_object(new_irods_path, fullpath); 
+    }
+   
+    return 0;
+ 
+}
+
+int handle_directory_remove(const char *root_path, struct changelog_rec *rec) {
+
+    char fidstr[MAX_NAME_LEN] = "";
+    char irods_path[MAX_NAME_LEN] = "";
+
+    get_fidstr_from_record(rec, fidstr);
+
+    // It is possible that the collection was never created.
+    if (find_irods_path_with_avu("fidstr", fidstr, NULL, true, irods_path) != 0) {
+        return 0;
+    }
+    return remove_collection(irods_path);
+}
+
+int handle_truncate(const char *root_path, struct changelog_rec *rec) {
+
+    char fidstr[MAX_NAME_LEN] = "";
+    char irods_path[MAX_NAME_LEN] = "";
+    char fullpath[MAX_NAME_LEN] = "";
+    int rc = 0;
+    struct stat st;
+    rodsLong_t file_size;
+ 
+    get_full_path_from_record(root_path, rec, fullpath);
+    get_fidstr_from_record(rec, fidstr);
+    
+    rc = find_irods_path_with_avu("fidstr", fidstr, NULL, false, irods_path);
+    if (rc != 0) return rc; 
+
+    if (stat(fullpath, &st) != 0) {
+        return errno;
+    }
+
+    file_size = st.st_size;
+
+    return update_data_object_size(irods_path, file_size);
+
+}
+
+
+int not_implemented(const char *root_path, struct changelog_rec *rec) {
+    fprintf(stderr, "OPERATION NOT YET IMPLEMENTED");
+    return 0;
+}
+
+void init_lustre_operators() {
+    lustre_operators[CL_MARK] = &not_implemented; 
+    lustre_operators[CL_CREATE] = &handle_file_add;
+    lustre_operators[CL_MKDIR] = &handle_directory_add;
+    lustre_operators[CL_HARDLINK] = &not_implemented;
+    lustre_operators[CL_SOFTLINK] = &not_implemented;
+    lustre_operators[CL_MKNOD] = &not_implemented;
+    lustre_operators[CL_UNLINK] = &handle_file_remove;
+    lustre_operators[CL_RMDIR] = &handle_directory_remove;
+    lustre_operators[CL_RENAME] = &handle_rename;
+    lustre_operators[CL_OPEN] = &not_implemented;
+    lustre_operators[CL_CLOSE] = &not_implemented;
+    lustre_operators[CL_LAYOUT] = &not_implemented;
+    lustre_operators[CL_TRUNC] = &handle_truncate;
+    lustre_operators[CL_SETATTR] = &not_implemented;
+    lustre_operators[CL_XATTR] = &not_implemented;
+    lustre_operators[CL_HSM] = &not_implemented;
+    lustre_operators[CL_MTIME] = &not_implemented;
+    lustre_operators[CL_CTIME] = &not_implemented;
+    lustre_operators[CL_ATIME] = &not_implemented;
+}
+
+
+int handle_record(const char *root_path, struct changelog_rec *rec) {
+
+    if (rec->cr_type >= CL_LAST) {
+        fprintf(stderr, "Invalid cr_type - %i", rec->cr_type);
+        return -1;
+    }
+
+    
+    int rc = (*lustre_operators[rec->cr_type])(root_path, rec);
+    /*switch (rec->cr_type) {
+
+        case CL_CREATE:
+            rc = handle_file_add(root_path, rec);
+            break;
+        case CL_MKDIR:
+            rc = handle_directory_add(root_path, rec);
+            break;
+        case CL_UNLINK:
+            rc = handle_file_remove(root_path, rec);
+            break;
+        case CL_RMDIR:
+            rc = handle_directory_remove(root_path, rec);
+            break;
+        case CL_RENAME:
+            rc = handle_rename(root_path, rec);
+            break;
+        default:
+            printf("OTHER\n");
+            break;
+    }*/
+
+    if (rc != 0) {
+        fprintf(stderr, "Non-zero return code (%i) for operation %s\n", rc, changelog_type2str(rec->cr_type));
+    }
+
+    return rc;
 }
 
 void get_time_str(time_t time, char *time_str) {
@@ -139,6 +351,8 @@ int main(int ac, char **av)
     int                      c;
     int                      rc;
     char                     clid[64] = {0};
+
+    init_lustre_operators();
 
     rc = instantiate_irods_connection(); 
     if (rc < 0) {
@@ -187,10 +401,6 @@ int main(int ac, char **av)
 
         printf("\n");
 
-        char fullpath[MAX_NAME_LEN];
-        get_full_path_from_record(lustre_root_path, rec, fullpath);
-        //printf("fullpath %s\n", fullpath);
-
         // get metadata
         /*struct stat file_stat;
         rc = stat(fullpath, &file_stat);
@@ -207,7 +417,7 @@ int main(int ac, char **av)
         printf("Type: \t\t%s\n", S_ISDIR(file_stat.st_mode) ? "directory" : 
                              ( S_ISREG(file_stat.st_mode) ? "regular file" : "other" ) );*/
 
-        handle_record(lustre_root_path, rec, fullpath);
+        handle_record(lustre_root_path, rec);
  
         rc = lcap_changelog_clear(ctx, mdtname, clid, rec->cr_index);
         if (rc < 0) {
