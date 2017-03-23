@@ -8,12 +8,12 @@
 #include "irods_pack_table.hpp"
 #include "rodsType.h"
 #include "dataObjRename.h"
+#include "irods_ops.h"
 
 // other includes
 #include <string>
 #include <stdio.h>
-
-#include "irods_ops.h"
+#include <boost/filesystem.hpp>
 
 // TODO change for multithreaded
 rcComm_t *irods_conn;
@@ -22,8 +22,6 @@ const char *mdtname = "lustre01-MDT0000";
 const char *lustre_root_path = "/lustre01";
 const char *register_path = "/tempZone";
 const char *resource_name = "demoResc";
-
-
 
 
 // Returns the path in irods for a file in lustre.
@@ -36,6 +34,69 @@ std::string lustre_path_to_irods_path(const std::string src_file_path) {
 
     return std::string(register_path) + src_file_path.substr(strlen(lustre_root_path));
 }
+
+int update_data_object_metadata(const char *irods_path_cstr, const char *value, const char *meta_type) {
+
+    if (!irods_conn) {
+        printf("Error:  Called update_data_object_metadata() without an active irods_conn\n");
+        return -1;
+    }
+
+    modDataObjMeta_t modDataObjMetaInp;
+    keyValPair_t regParam;
+    dataObjInfo_t dataObjInfo;
+
+    memset(&regParam, 0, sizeof( regParam ) );
+    addKeyVal(&regParam, meta_type, value);
+
+    memset(&dataObjInfo, 0, sizeof(dataObjInfo));
+    rstrcpy(dataObjInfo.objPath, irods_path_cstr, MAX_NAME_LEN);
+
+    modDataObjMetaInp.regParam = &regParam;
+    modDataObjMetaInp.dataObjInfo = &dataObjInfo;
+
+    int status = rcModDataObjMeta(irods_conn, &modDataObjMetaInp);
+
+    return status;
+}
+
+int check_if_data_object_exists(const char *irods_path_cstr, bool &object_exists) {
+
+    if (!irods_conn) {
+        printf("Error:  Called object_exists() without an active irods_conn\n");
+        return -1;
+    }
+
+    boost::filesystem::path path(irods_path_cstr);
+    std::string data_object = path.filename().string();
+    std::string collection = path.parent_path().string(); 
+
+    genQueryInp_t  gen_inp;
+    genQueryOut_t* gen_out = NULL;
+    memset(&gen_inp, 0, sizeof(gen_inp));
+
+    std::string query_str = "select DATA_NAME where DATA_NAME = '" + data_object + "' and COLL_NAME = '" +
+                     collection + "'";
+
+    fillGenQueryInpFromStrCond((char*)query_str.c_str(), &gen_inp);
+    gen_inp.maxRows = MAX_SQL_ROWS;
+
+    int status = rcGenQuery(irods_conn, &gen_inp, &gen_out);
+
+    if ( status < 0 || !gen_out ) {
+        freeGenQueryOut(&gen_out);
+        clearGenQueryInp(&gen_inp);
+        return -1;
+    }
+
+    object_exists = gen_out->rowCnt > 0;
+
+    freeGenQueryOut(&gen_out);
+    clearGenQueryInp(&gen_inp);
+
+    return 0;
+}
+
 
 extern "C" {
 
@@ -159,7 +220,8 @@ int make_collection(const char *src_path_lustre_cstr) {
     return 0; 
 }
 
-int register_file(const char *src_path_lustre_cstr) {
+// irods_path_cstr should be a buffer of size MAX_NAME_LEN
+int register_file(const char *src_path_lustre_cstr, char *irods_path_cstr) {
 
     if (!irods_conn) {
         printf("Error:  Called register_file() without an active irods_conn\n");
@@ -168,6 +230,8 @@ int register_file(const char *src_path_lustre_cstr) {
 
     std::string src_file_path(src_path_lustre_cstr);
     std::string irods_path = lustre_path_to_irods_path(src_file_path);
+    snprintf(irods_path_cstr, MAX_NAME_LEN, "%s", irods_path.c_str());
+
     int status;
     dataObjInp_t dataObjOprInp;
 
@@ -292,10 +356,25 @@ int remove_collection(const char *src_path_irods_cstr) {
 
 int rename_irods_object(const char *src_path_irods_cstr, const char *dest_path_irods_cstr, bool is_collection) {
 
+
     if (!irods_conn) {
         printf("Error:  Called rename_data_object() without an active irods_conn\n");
         return -1;
     }
+
+    int rc = 0;
+
+    // if this is a data object, check to see if an object exists at the target location
+    // if so delete it.
+    if (!is_collection) {
+        bool target_data_object_exists;
+        check_if_data_object_exists(dest_path_irods_cstr, target_data_object_exists);
+        if (target_data_object_exists) {
+            rc = remove_data_object(dest_path_irods_cstr);
+            if (rc != 0) return rc;
+        }
+    }
+
 
     dataObjCopyInp_t dataObjRenameInp;
     memset(&dataObjRenameInp, 0, sizeof(dataObjCopyInp_t));
@@ -352,34 +431,17 @@ int update_vault_path_for_data_object(const char *irods_path_cstr, const char *n
 }
 
 int update_data_object_size(const char *irods_path_cstr, rodsLong_t size) {
-
-    if (!irods_conn) {
-        printf("Error:  Called update_data_object_size() without an active irods_conn\n");
-        return -1;
-    }
-
-    modDataObjMeta_t modDataObjMetaInp;
-    keyValPair_t regParam;
-    dataObjInfo_t dataObjInfo;
     char size_str[MAX_NAME_LEN];
-
     snprintf(size_str, MAX_NAME_LEN, "%lld", size);
-
-    memset(&regParam, 0, sizeof( regParam ) );
-    addKeyVal(&regParam, DATA_SIZE_KW, size_str);
-
-    memset(&dataObjInfo, 0, sizeof(dataObjInfo));
-    rstrcpy(dataObjInfo.objPath, irods_path_cstr, MAX_NAME_LEN);
-
-    modDataObjMetaInp.regParam = &regParam;
-    modDataObjMetaInp.dataObjInfo = &dataObjInfo;
-
-    int status = rcModDataObjMeta(irods_conn, &modDataObjMetaInp);
-
-    return status;
+    return update_data_object_metadata(irods_path_cstr, size_str, DATA_SIZE_KW);
 }
 
 
+int update_data_object_modify_time(const char *irods_path_cstr, time_t modify_time) {
+    char time_str[MAX_NAME_LEN];
+    snprintf(time_str, MAX_NAME_LEN, "%ld", modify_time);
+    return update_data_object_metadata(irods_path_cstr, time_str, DATA_MODIFY_KW);
+}
 
 }
 

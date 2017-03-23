@@ -7,7 +7,7 @@ CPP_OPT=-DBOOST_SYSTEM_NO_DEPRECATED -DRODS_SERVER -D_FILE_OFFSET_BITS=64 -D_LAR
 LINK_OPT=-O3 -DNDEBUG -stdlib=libc++ -lc++abi -Wl,-rpath,/opt/irods-externals/clang-runtime3.8-0/lib:/opt/irods-externals/boost1.60.0-0/lib:/opt/irods-externals/zeromq4-14.1.3-0/lib -ldl 
  
 
-LIBS=/usr/lib/libirods_client.so.4.2.0 /usr/lib/libirods_plugin_dependencies.so.4.2.0 /usr/lib/libirods_common.so.4.2.0 /opt/irods-externals/boost1.60.0-0/lib/libboost_filesystem.so /opt/irods-externals/boost1.60.0-0/lib/libboost_program_options.so /opt/irods-externals/boost1.60.0-0/lib/libboost_system.so /opt/irods-externals/zeromq4-14.1.3-0/lib/libzmq.so
+LIBS=/usr/lib/libirods_client.so.4.2.0 /usr/lib/libirods_plugin_dependencies.so.4.2.0 /usr/lib/libirods_common.so.4.2.0 /opt/irods-externals/boost1.60.0-0/lib/libboost_filesystem.so /opt/irods-externals/boost1.60.0-0/lib/libboost_program_options.so /opt/irods-externals/boost1.60.0-0/lib/libboost_system.so /opt/irods-externals/zeromq4-14.1.3-0/lib/libzmq.so 
 
 LIB_DIRS=-L/opt/irods-externals/zeromq4-14.1.3-0/lib
 

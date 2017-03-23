@@ -15,7 +15,7 @@ void disconnect_irods_connection();
 
 int add_avu(const char *src_path_lustre, const char *attr, const char *val, const char *unit, bool is_collection);
 
-int register_file(const char *src_path_lustre); 
+int register_file(const char *src_path_lustre, char *irods_path); 
 
 int make_collection(const char *src_path_lustre);
 
@@ -36,6 +36,9 @@ int update_vault_path_for_data_object(const char *irods_path, const char *new_va
 int get_irods_path_from_lustre_path(const char *lustre_path, char *irods_path);
 
 int update_data_object_size(const char *irods_path, rodsLong_t size);
+
+int update_data_object_modify_time(const char *irods_path, time_t modify_time); 
+
 
 #ifdef __cplusplus
 }
