@@ -31,10 +31,11 @@ static inline bool fid_is_zero(const lustre_fid *fid) {
 }
 #endif
 
-extern const char *mdtname;
-extern const char *lustre_root_path;
-extern const char *register_path;
-extern const char *resource_name;
+const char *mdtname = "lustre01-MDT0000";
+const char *lustre_root_path = "/lustre01";
+const char *register_path = "/tempZone/lustre";
+const char *resource_name = "demoResc";
+
 
 int (*lustre_operators[CL_LAST])(const char *, struct changelog_rec *);
 
@@ -51,6 +52,22 @@ int sync_modify_time(const char *lustre_full_path, const char *irods_path) {
     return update_data_object_modify_time(irods_path, file_stat.st_mtime);
 
 }
+
+// Returns the path in irods for a file in lustre.  
+// Precondition:  irods_path is a buffer of size MAX_NAME_LEN
+int lustre_path_to_irods_path(const char *lustre_path, char *irods_path) {
+
+    // make sure the file is underneath the lustre_root_path
+    if (strncmp(lustre_path, lustre_root_path, strlen(lustre_root_path)) != 0) {
+        return -1;
+    }
+
+    snprintf(irods_path, MAX_NAME_LEN, "%s%s", register_path, lustre_path + strlen(lustre_root_path));
+
+    return 0;
+
+}
+
 
 void get_fidstr_from_record(struct changelog_rec *rec, char *fidstr) {
 
@@ -138,12 +155,18 @@ int handle_file_add(const char *root_path, struct changelog_rec *rec) {
 
     get_full_path_from_record(root_path, rec, lustre_full_path);
 
-    rc = register_file(lustre_full_path, irods_path);
+    rc = lustre_path_to_irods_path(lustre_full_path, irods_path);
+    if (rc != 0) {
+        fprintf(stderr, "Could not translate lustre_path [%s] to irods_path", lustre_full_path);
+        return rc;
+    }
+
+    rc = register_file(lustre_full_path, irods_path, resource_name);
 
     if (rc != 0) return rc;
 
     get_fidstr_from_record(rec, fidstr);
-    rc = add_avu(lustre_full_path, "fidstr", fidstr, NULL, false);
+    rc = add_avu(irods_path, "fidstr", fidstr, NULL, false);
 
     if (rc != 0) return rc;
 
@@ -167,12 +190,18 @@ int handle_directory_add(const char *root_path, struct changelog_rec *rec) {
 
     get_full_path_from_record(root_path, rec, lustre_full_path);
 
-    rc = make_collection(lustre_full_path);
+    rc = lustre_path_to_irods_path(lustre_full_path, irods_path);
+    if (rc != 0) {
+        fprintf(stderr, "Could not translate lustre_path [%s] to irods_path", lustre_full_path);
+        return rc;
+    }
+
+    rc = make_collection(irods_path);
 
     if (rc != 0) return rc;
 
     get_fidstr_from_record(rec, fidstr);
-    return add_avu(lustre_full_path, "fidstr", fidstr, NULL, true);
+    return add_avu(irods_path, "fidstr", fidstr, NULL, true);
 }
 
 int handle_file_remove(const char *root_path, struct changelog_rec *rec) {
@@ -214,25 +243,28 @@ int handle_rename(const char *root_path, struct changelog_rec *rec) {
     struct stat statbuf;
     stat(lustre_full_path, &statbuf);
     bool is_directory = S_ISDIR(statbuf.st_mode);
+
+    rc = lustre_path_to_irods_path(lustre_full_path, new_irods_path);
+    if (rc != 0) {
+        fprintf(stderr, "Could not translate lustre_path [%s] to irods_path", lustre_full_path);
+        return rc;
+    }
   
 
     // It is possible that the data object was never created
     if (find_irods_path_with_avu("fidstr", fidstr, NULL, is_directory, current_irods_path) != 0) {
-        // Just add new file 
+        // Just add new data object or collection
         if (is_directory) {
-            rc = make_collection(lustre_full_path);
+            rc = make_collection(new_irods_path);
         } else {
-            rc = register_file(lustre_full_path, new_irods_path);
+            rc = register_file(lustre_full_path, new_irods_path, resource_name);
             sync_modify_time(lustre_full_path, new_irods_path);
         }
         if (rc != 0) return rc;
 
-        rc = add_avu(lustre_full_path, "fidstr", fidstr, NULL, is_directory);
+        rc = add_avu(new_irods_path, "fidstr", fidstr, NULL, is_directory);
         return rc;
     }
-
-    // get the new irods path 
-    get_irods_path_from_lustre_path(lustre_full_path, new_irods_path);
 
     // see if the current and new path are the same.  if so just return
     if (strcmp(new_irods_path, current_irods_path) == 0) {

@@ -15,7 +15,7 @@ void disconnect_irods_connection();
 
 int add_avu(const char *src_path_lustre, const char *attr, const char *val, const char *unit, bool is_collection);
 
-int register_file(const char *src_path_lustre, char *irods_path); 
+int register_file(const char *src_path_lustre, const char *irods_path, const char *resource_name); 
 
 int make_collection(const char *src_path_lustre);
 

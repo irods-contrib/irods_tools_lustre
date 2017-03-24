@@ -18,23 +18,6 @@
 // TODO change for multithreaded
 rcComm_t *irods_conn;
 
-const char *mdtname = "lustre01-MDT0000";
-const char *lustre_root_path = "/lustre01";
-const char *register_path = "/tempZone";
-const char *resource_name = "demoResc";
-
-
-// Returns the path in irods for a file in lustre.
-// On error returns ""
-std::string lustre_path_to_irods_path(const std::string src_file_path) {
-
-    if (strncmp(src_file_path.c_str(), lustre_root_path, strlen(lustre_root_path)) != 0) {
-        return "";
-    }
-
-    return std::string(register_path) + src_file_path.substr(strlen(lustre_root_path));
-}
-
 int update_data_object_metadata(const char *irods_path_cstr, const char *value, const char *meta_type) {
 
     if (!irods_conn) {
@@ -100,20 +83,6 @@ int check_if_data_object_exists(const char *irods_path_cstr, bool &object_exists
 
 extern "C" {
 
-int get_irods_path_from_lustre_path(const char *lustre_path_cstr, char *irods_path_cstr) {
-
-    std::string lustre_path(lustre_path_cstr);
-    std::string irods_path = lustre_path_to_irods_path(lustre_path);
-    if (irods_path.length() == 0) {
-         return -1;
-    }
-
-    snprintf(irods_path_cstr, MAX_NAME_LEN, "%s", irods_path.c_str()); 
-
-    return 0;
-
-}
-
 int instantiate_irods_connection() {
 
     rodsEnv myEnv;
@@ -146,25 +115,16 @@ void disconnect_irods_connection() {
     irods_conn = nullptr;
 }
 
-int add_avu(const char *src_path_lustre_cstr, const char *attr_cstr, const char *val_cstr, const char *unit_cstr, bool is_collection) {
+int add_avu(const char *irods_path_cstr, const char *attr_cstr, const char *val_cstr, const char *unit_cstr, bool is_collection) {
 
     if (!irods_conn) {
         printf("Error:  Called add_avu() without an active irods_conn\n");
         return -1;
     }
 
-    std::string src_file_path(src_path_lustre_cstr);
-    std::string irods_path = lustre_path_to_irods_path(src_file_path);
-
-    if (irods_path == "") {
-         printf("Can't calculate irods_path from src_path.\n");
-         return -1;
-    }
-    
-
     modAVUMetadataInp_t mod_inp;
     memset( &mod_inp, 0, sizeof( mod_inp ) );
-    std::string op("add");
+    const char *op = "add";
     std::string type;
 
     if (is_collection)
@@ -172,9 +132,9 @@ int add_avu(const char *src_path_lustre_cstr, const char *attr_cstr, const char 
     else
         type = "-d";
  
-    mod_inp.arg0 = (char*)op.c_str();
+    mod_inp.arg0 = (char*)op;
     mod_inp.arg1 = (char*)type.c_str();
-    mod_inp.arg2 = (char*)irods_path.c_str();
+    mod_inp.arg2 = (char*)irods_path_cstr;
     mod_inp.arg3 = (char*)attr_cstr; 
     mod_inp.arg4 = (char*)val_cstr;
     mod_inp.arg5 = (char*)unit_cstr; 
@@ -182,7 +142,7 @@ int add_avu(const char *src_path_lustre_cstr, const char *attr_cstr, const char 
     int status = rcModAVUMetadata(irods_conn, &mod_inp);
 
     if( status < 0 && CATALOG_ALREADY_HAS_ITEM_BY_THAT_NAME != status ) {
-        printf("failed to add avu [%s %s %s] on %s\n", attr_cstr, val_cstr, unit_cstr == nullptr ? "NULL" : unit_cstr, irods_path.c_str());
+        printf("failed to add avu [%s %s %s] on %s\n", attr_cstr, val_cstr, unit_cstr == nullptr ? "NULL" : unit_cstr, irods_path_cstr);
         return -1;
     }
 
@@ -190,25 +150,18 @@ int add_avu(const char *src_path_lustre_cstr, const char *attr_cstr, const char 
 }
 
 
-int make_collection(const char *src_path_lustre_cstr) {
+int make_collection(const char *irods_path_cstr) {
 
     if (!irods_conn) {
         printf("Error:  Called make_collection() without an active irods_conn\n");
         return -1;
     }
 
-    std::string src_path_lustre(src_path_lustre_cstr);
-    std::string irods_path = lustre_path_to_irods_path(src_path_lustre);
     int status;
     collInp_t collCreateInp;
 
-    if (irods_path == "") {
-         printf("Can't calculate irods_path from src_path.\n");
-         return -1;
-    }
-
     memset(&collCreateInp, 0, sizeof(collCreateInp));
-    snprintf(collCreateInp.collName, MAX_NAME_LEN, "%s", irods_path.c_str());
+    snprintf(collCreateInp.collName, MAX_NAME_LEN, "%s", irods_path_cstr);
 
     status = rcCollCreate(irods_conn, &collCreateInp);
 
@@ -221,32 +174,23 @@ int make_collection(const char *src_path_lustre_cstr) {
 }
 
 // irods_path_cstr should be a buffer of size MAX_NAME_LEN
-int register_file(const char *src_path_lustre_cstr, char *irods_path_cstr) {
+int register_file(const char *src_path_lustre_cstr, const char *irods_path_cstr, const char *resource_name) {
 
     if (!irods_conn) {
         printf("Error:  Called register_file() without an active irods_conn\n");
         return -1;
     }
 
-    std::string src_file_path(src_path_lustre_cstr);
-    std::string irods_path = lustre_path_to_irods_path(src_file_path);
-    snprintf(irods_path_cstr, MAX_NAME_LEN, "%s", irods_path.c_str());
-
     int status;
     dataObjInp_t dataObjOprInp;
-
-    if (irods_path == "") {
-         printf("Can't calculate irods_path from src_path.\n");
-         return -1;
-    }
 
     memset(&dataObjOprInp, 0, sizeof(dataObjInp_t));
     addKeyVal(&dataObjOprInp.condInput, DATA_TYPE_KW, "generic");
     addKeyVal(&dataObjOprInp.condInput, FORCE_FLAG_KW, "" );
     addKeyVal(&dataObjOprInp.condInput, DEST_RESC_NAME_KW, resource_name);
-    addKeyVal(&dataObjOprInp.condInput, FILE_PATH_KW, src_file_path.c_str());
+    addKeyVal(&dataObjOprInp.condInput, FILE_PATH_KW, src_path_lustre_cstr);
 
-    snprintf(dataObjOprInp.objPath, MAX_NAME_LEN, "%s", irods_path.c_str());
+    snprintf(dataObjOprInp.objPath, MAX_NAME_LEN, "%s", irods_path_cstr);
 
     status = rcPhyPathReg( irods_conn, &dataObjOprInp );
     if ( status < 0 && status != CAT_NO_ROWS_FOUND ) {
