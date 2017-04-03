@@ -31,13 +31,12 @@ static inline bool fid_is_zero(const lustre_fid *fid) {
 }
 #endif
 
+#define SLEEP_TIME 5
+
 const char *mdtname = "lustre01-MDT0000";
 const char *lustre_root_path = "/lustre01";
 const char *register_path = "/tempZone/lustre";
 const char *resource_name = "demoResc";
-
-
-int (*lustre_operators[CL_LAST])(const char *, struct changelog_rec *);
 
 int sync_modify_time(const char *lustre_full_path, const char *irods_path) {
 
@@ -358,28 +357,43 @@ int not_implemented(const char *root_path, struct changelog_rec *rec) {
     return 0;
 }
 
-void init_lustre_operators() {
-    lustre_operators[CL_MARK] = &not_implemented; 
-    lustre_operators[CL_CREATE] = &handle_file_add;
-    lustre_operators[CL_MKDIR] = &handle_directory_add;
-    lustre_operators[CL_HARDLINK] = &not_implemented;
-    lustre_operators[CL_SOFTLINK] = &not_implemented;
-    lustre_operators[CL_MKNOD] = &do_nothing;                  // nothing to do in irods for this
-    lustre_operators[CL_UNLINK] = &handle_file_remove;
-    lustre_operators[CL_RMDIR] = &handle_directory_remove;
-    lustre_operators[CL_RENAME] = &handle_rename;
-    lustre_operators[CL_OPEN] = &do_nothing;                   // not implemented in lustre
-    lustre_operators[CL_CLOSE] = &not_implemented;
-    lustre_operators[CL_LAYOUT] = &do_nothing;                 // file layout stripping - nothing to do in irods
-    lustre_operators[CL_TRUNC] = &handle_truncate;
-    lustre_operators[CL_SETATTR] = &do_nothing;                // nothing to do in irods for this
-    lustre_operators[CL_XATTR] = &not_implemented;
-    lustre_operators[CL_HSM] = &not_implemented;
-    lustre_operators[CL_MTIME] = &handle_update_modify_time;
-    lustre_operators[CL_CTIME] = &do_nothing;                  // irods does not have a change time
-    lustre_operators[CL_ATIME] = &do_nothing;                  // irods does not have an access time
+int do_close(const char *root_path, struct changelog_rec *rec) {
+    char lustre_full_path[MAX_NAME_LEN] = "";
+    get_full_path_from_record(root_path, rec, lustre_full_path);
+    printf("CLOSE executed on %s\n", lustre_full_path); 
+    return 0;
 }
 
+int do_xattr(const char *root_path, struct changelog_rec *rec) {
+    char lustre_full_path[MAX_NAME_LEN] = "";
+    get_full_path_from_record(root_path, rec, lustre_full_path);
+    printf("XATTR executed on %s\n", lustre_full_path);
+    return handle_truncate(root_path, rec);
+}
+
+
+int (*lustre_operators[CL_LAST])(const char *, struct changelog_rec *) =
+{   &not_implemented,           // CL_MARK
+    &handle_file_add,           // CL_CREATE
+    &handle_directory_add,      // CL_MKDIR
+    &not_implemented,           // CL_HARDLINK
+    &not_implemented,           // CL_SOFTLINK
+    &do_nothing,                // CL_MKNOD 
+    &handle_file_remove,        // CL_UNLINK
+    &handle_directory_remove,   // CL_RMDIR
+    &handle_rename,             // CL_RENAME
+    &do_nothing,                // CL_EXT
+    &do_nothing,                // CL_OPEN - not implemented in lustre
+    &do_close,                  // CL_CLOSE
+    &do_nothing,                // CL_LAYOUT 
+    &handle_truncate,           // CL_TRUNC
+    &do_nothing,                // CL_SETATTR 
+    &do_xattr,                  // CL_XATTR
+    &not_implemented,           // CL_HSM
+    &handle_update_modify_time, // CL_MTIME
+    &do_nothing,                // CL_CTIME - irods does not have a change time
+    &do_nothing                 // CL_ATIME - irods does not have an access time
+};
 
 int handle_record(const char *root_path, struct changelog_rec *rec) {
 
@@ -415,8 +429,6 @@ int main(int ac, char **av)
     int                      rc;
     char                     clid[64] = {0};
 
-    init_lustre_operators();
-
     rc = instantiate_irods_connection(); 
     if (rc < 0) {
         fprintf(stderr, "instantiate_irods_connection failed.  exiting...\n");
@@ -431,6 +443,8 @@ int main(int ac, char **av)
         return 1;
     }
 
+    while (1) {
+    sleep(SLEEP_TIME);
     while ((rc = lcap_changelog_recv(ctx, &rec)) == 0) {
         time_t      secs;
         struct tm   ts;
@@ -464,22 +478,6 @@ int main(int ac, char **av)
 
         printf("\n");
 
-        // get metadata
-        /*struct stat file_stat;
-        rc = stat(lustre_full_path, &file_stat);
-        if(rc < 0) {
-            disconnect_irods_connection();
-            return rc;
-        }
-        printf("Information for %s\n",lustre_full_path);
-        printf("---------------------------\n");
-        printf("File Size: \t\t%d bytes\n",(int)file_stat.st_size);
-        //printf("Number of Links: \t%d\n",file_stat.st_nlink);
-        //printf("File inode: \t\t%d\n",file_stat.st_ino);
-
-        printf("Type: \t\t%s\n", S_ISDIR(file_stat.st_mode) ? "directory" : 
-                             ( S_ISREG(file_stat.st_mode) ? "regular file" : "other" ) );*/
-
         handle_record(lustre_root_path, rec);
  
         rc = lcap_changelog_clear(ctx, mdtname, clid, rec->cr_index);
@@ -496,6 +494,7 @@ int main(int ac, char **av)
             disconnect_irods_connection();
             return 1;
         }
+    }
     }
 
     if (rc && rc != 1) {

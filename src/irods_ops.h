@@ -33,7 +33,7 @@ int rename_collection(const char *src_path_irods, const char *dest_path_irods);
 
 int update_vault_path_for_data_object(const char *irods_path, const char *new_vault_path);
 
-int get_irods_path_from_lustre_path(const char *lustre_path, char *irods_path);
+//int get_irods_path_from_lustre_path(const char *lustre_path, char *irods_path);
 
 int update_data_object_size(const char *irods_path, rodsLong_t size);
 
