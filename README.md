@@ -33,21 +33,10 @@ cd ..
 4.  Create an LCAPD configuration file in /etc/lcapd.config.  The following is a sample file.  Update the MDT name as necessary.
 
 `
-# Sample configuration file for LCAP
-
-# MDT(s) to read records from
 MDTDevice   lustre01-MDT0000
-
-# ChangeLog reader identifier as provided by lctl during registration
 CLReader        cl1
-
-# How many records to send back per batch (bucket)
 Batch_Records   8192
-
-# How many buckets to keep in memory, per MDT
 Max_Buckets     256
-
-# Available loggers: stderr, syslog
 LogType         stderr
 `
 
