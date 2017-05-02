@@ -22,6 +22,7 @@
 #include "lcap_client.h"
 #include "irods_ops.h"
 #include "rodsDef.h"
+#include "lustre_change_table.hpp"
 
 #ifndef LPX64
 # define LPX64   "%#llx"
@@ -429,22 +430,27 @@ int main(int ac, char **av)
     int                      rc;
     char                     clid[64] = {0};
 
+    printf("instantiate_irods_connection\n");
     rc = instantiate_irods_connection(); 
     if (rc < 0) {
         fprintf(stderr, "instantiate_irods_connection failed.  exiting...\n");
         disconnect_irods_connection();
         return 1;
     }
+    printf("instantiate_irods_connection done\n");
 
+    printf("lcap_changelog_start\n");
     rc = lcap_changelog_start(&ctx, flags, mdtname, 0LL);
     if (rc < 0) {
         fprintf(stderr, "lcap_changelog_start: %s\n", zmq_strerror(-rc));
         disconnect_irods_connection();
         return 1;
     }
+    printf("lcap_changelog_start done\n");
 
     while (1) {
     sleep(SLEEP_TIME);
+    printf("this ran");
     while ((rc = lcap_changelog_recv(ctx, &rec)) == 0) {
         time_t      secs;
         struct tm   ts;

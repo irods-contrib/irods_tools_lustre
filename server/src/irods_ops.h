@@ -39,6 +39,8 @@ int update_data_object_size(const char *irods_path, rodsLong_t size);
 
 int update_data_object_modify_time(const char *irods_path, time_t modify_time); 
 
+int send_change_map_to_irods(const char *str);
+
 
 #ifdef __cplusplus
 }
