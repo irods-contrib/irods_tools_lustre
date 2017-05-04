@@ -1,4 +1,3 @@
-#include <map>
 #include <string>
 #include <ctime>
 #include <sstream>
@@ -10,20 +9,34 @@
 // boost headers
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/lexical_cast.hpp>
+#include <boost/thread/mutex.hpp>
+#include <boost/thread.hpp>
+//#include <boost/interprocess/sync/named_mutex.hpp>
+//#include <boost/interprocess/sync/named_upgradable_mutex.hpp>
 
 // json library
 #include <jeayeson/jeayeson.hpp>
 
 #include "lustre_change_table.hpp"
 
+//using namespace boost::interprocess;
+
 extern const char *lustre_root_path;
 extern const char *register_path;
 extern const int64_t resource_id;
+
+//static std::string shared_memory_mutex_name = "change_table_mutex";
+static boost::shared_mutex change_table_mutex;
 
 extern "C" {
 
 
 void lustre_close(const char *fidstr_cstr, const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) {
+
+    boost::unique_lock<boost::shared_mutex> lock(change_table_mutex);
+ 
+    //named_upgradable_mutex named_mtx(open_or_create, shared_memory_mutex_name.c_str());
+    //named_mtx.lock();
 
     std::map<std::string, change_descriptor> *change_map = get_change_map_instance();
     std::string fidstr(fidstr_cstr);
@@ -56,10 +69,13 @@ void lustre_close(const char *fidstr_cstr, const char *parent_fidstr, const char
             entry.file_size = st.st_size;
         (*change_map)[fidstr] = entry;
     }
+
 }
 
 void lustre_mkdir(const char *fidstr_cstr, const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) {
 
+    boost::unique_lock<boost::shared_mutex> lock(change_table_mutex);
+
     std::map<std::string, change_descriptor> *change_map = get_change_map_instance();
     std::string fidstr(fidstr_cstr);
     std::string lustre_path(lustre_path_cstr);
@@ -81,10 +97,13 @@ void lustre_mkdir(const char *fidstr_cstr, const char *parent_fidstr, const char
         entry.object_type = _DIR;
         (*change_map)[fidstr] = entry;
     }
+
 }
 
 void lustre_rmdir(const char *fidstr_cstr, const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) {
 
+    boost::unique_lock<boost::shared_mutex> lock(change_table_mutex);
+
     std::map<std::string, change_descriptor> *change_map = get_change_map_instance();
     std::string fidstr(fidstr_cstr);
     std::string lustre_path(lustre_path_cstr);
@@ -108,9 +127,12 @@ void lustre_rmdir(const char *fidstr_cstr, const char *parent_fidstr, const char
         entry.object_name = object_name;
         (*change_map)[fidstr] = entry;
     }
+
 }
 
 void lustre_unlink(const char *fidstr_cstr, const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) {
+
+    boost::unique_lock<boost::shared_mutex> lock(change_table_mutex);
 
     std::map<std::string, change_descriptor> *change_map = get_change_map_instance();
     std::string fidstr(fidstr_cstr);
@@ -134,9 +156,12 @@ void lustre_unlink(const char *fidstr_cstr, const char *parent_fidstr, const cha
         (*change_map)[fidstr] = entry;
     }
 
+
 }
 
 void lustre_rename(const char *fidstr_cstr, const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr, const char *old_lustre_path_cstr) {
+
+    boost::unique_lock<boost::shared_mutex> lock(change_table_mutex);
 
     std::map<std::string, change_descriptor> *change_map = get_change_map_instance();
     std::string fidstr(fidstr_cstr);
@@ -185,12 +210,11 @@ void lustre_rename(const char *fidstr_cstr, const char *parent_fidstr, const cha
         }
     }
 
-
 }
 
 void lustre_create(const char *fidstr_cstr, const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) {
 
-    printf("lustre_create:  lustre_path_cstr = %s\n", lustre_path_cstr);
+    boost::unique_lock<boost::shared_mutex> lock(change_table_mutex);
 
     std::map<std::string, change_descriptor> *change_map = get_change_map_instance();
     std::string fidstr(fidstr_cstr);
@@ -213,9 +237,12 @@ void lustre_create(const char *fidstr_cstr, const char *parent_fidstr, const cha
         entry.object_type = _FILE;
         (*change_map)[fidstr] = entry;
     }
+
 }
 
 void lustre_mtime(const char *fidstr_cstr, const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) {
+
+    boost::unique_lock<boost::shared_mutex> lock(change_table_mutex);
 
     std::map<std::string, change_descriptor> *change_map = get_change_map_instance();
     std::string fidstr(fidstr_cstr);
@@ -237,9 +264,12 @@ void lustre_mtime(const char *fidstr_cstr, const char *parent_fidstr, const char
         (*change_map)[fidstr] = entry;
     }
 
+
 }
 
 void lustre_trunc(const char *fidstr_cstr, const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) { 
+
+    boost::unique_lock<boost::shared_mutex> lock(change_table_mutex);
 
     std::map<std::string, change_descriptor> *change_map = get_change_map_instance();
     std::string fidstr(fidstr_cstr);
@@ -268,9 +298,13 @@ void lustre_trunc(const char *fidstr_cstr, const char *parent_fidstr, const char
             entry.file_size = st.st_size;
         (*change_map)[fidstr] = entry;
     }
+
+
 }
 
 void lustre_write_change_table_to_str(char *buffer, const size_t buffer_size) {
+
+    boost::shared_lock<boost::shared_mutex> lock(change_table_mutex);
 
     std::map<std::string, change_descriptor> *change_map = get_change_map_instance();
 
@@ -302,6 +336,7 @@ void lustre_write_change_table_to_str(char *buffer, const size_t buffer_size) {
 
          strncat(buffer, temp_buffer, buffer_size);
     }
+
 }
 
 void lustre_print_change_table() {
@@ -314,6 +349,8 @@ void lustre_print_change_table() {
 // processes change table by writing records ready to be sent to iRODS into 
 // the json string in buffer.  Delete the records that are written.
 void process_table_entries_into_json(char *json_buffer, const size_t buffer_size) {
+
+    boost::shared_lock<boost::shared_mutex> lock(change_table_mutex);
 
     std::map<std::string, change_descriptor> *change_map = get_change_map_instance();
     json_map change_map_json;

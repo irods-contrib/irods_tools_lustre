@@ -1,5 +1,5 @@
 /*
- * Lustre changlog reader (lcap client) for iRODS.
+ * LCAP and Lustre libraries 
  */
 
 
@@ -18,7 +18,6 @@
 #include <stdbool.h>
 #include <string.h>
 #include <zmq.h>
-#include <signal.h>
 
 #include "lcap_client.h"
 
@@ -27,14 +26,12 @@
 #include "lustre_change_table.hpp"
 
 #ifndef LPX64
-# define LPX64   "%#llx"
-
+#define LPX64   "%#llx"
 static inline bool fid_is_zero(const lustre_fid *fid) {
     return fid->f_seq == 0 && fid->f_oid == 0;
 }
 #endif
 
-#define SLEEP_TIME 5
 
 const char *mdtname = "lustre01-MDT0000";
 const char *lustre_root_path = "/lustre01";
@@ -42,11 +39,11 @@ const char *register_path = "/tempZone/lustre";
 const char *resource_name = "demoResc";
 const int64_t resource_id = 10014;
 
-static volatile int keep_running = 1;
+struct lcap_cl_ctx      *ctx = NULL;
+int                     flags = LCAP_CL_BLOCK;
 
-void interrupt_handler(int dummy) {
-    keep_running = 0;
-}
+#define CHANGELOG_POLL_INTERVAL 5
+#define UPDATE_IRODS_INTERVAL   9
 
 int sync_modify_time(const char *lustre_full_path, const char *irods_path) {
 
@@ -295,108 +292,71 @@ void get_time_str(time_t time, char *time_str) {
         strftime(time_str, sizeof(char[20]), "%b %d %H:%M", timeinfo);
 }
 
+int start_lcap_changelog() {
+    return lcap_changelog_start(&ctx, flags, mdtname, 0LL);
+}
 
-int main(int ac, char **av) {
+int finish_lcap_changelog() {
+    return lcap_changelog_fini(ctx);
+}
 
-    struct lcap_cl_ctx      *ctx = NULL;
-    struct changelog_rec    *rec;
-    int                      flags = LCAP_CL_BLOCK;
-    int                      c;
-    int                      rc;
-    char                     clid[64] = {0};
+int poll_change_log_and_process() {
 
-    signal(SIGPIPE, SIG_IGN);
-    signal(SIGINT, interrupt_handler);
+    int                    rc;
+    char                   clid[64] = {0};
+    struct changelog_rec   *rec;
 
-    rc = instantiate_irods_connection(); 
-    if (rc < 0) {
-        fprintf(stderr, "instantiate_irods_connection failed.  exiting...\n");
-        disconnect_irods_connection();
-        return 1;
-    }
+    while ((rc = lcap_changelog_recv(ctx, &rec)) == 0) {
+        time_t      secs;
+        struct tm   ts;
 
-    rc = lcap_changelog_start(&ctx, flags, mdtname, 0LL);
-    if (rc < 0) {
-        fprintf(stderr, "lcap_changelog_start: %s\n", zmq_strerror(-rc));
-        disconnect_irods_connection();
-        return 1;
-    }
+        secs = rec->cr_time >> 30;
+        gmtime_r(&secs, &ts);
 
-    while (keep_running) {
-        sleep(SLEEP_TIME);
-        while ((rc = lcap_changelog_recv(ctx, &rec)) == 0) {
-            time_t      secs;
-            struct tm   ts;
+        printf("%llu %02d%-5s %02d:%02d:%02d.%06d %04d.%02d.%02d 0x%x t="DFID,
+               rec->cr_index, rec->cr_type, changelog_type2str(rec->cr_type),
+               ts.tm_hour, ts.tm_min, ts.tm_sec,
+               (int)(rec->cr_time & ((1 << 30) - 1)),
+               ts.tm_year + 1900, ts.tm_mon + 1, ts.tm_mday,
+               rec->cr_flags & CLF_FLAGMASK, PFID(&rec->cr_tfid));
 
-            secs = rec->cr_time >> 30;
-            gmtime_r(&secs, &ts);
+        if (rec->cr_flags & CLF_JOBID)
+            printf(" j=%s", (const char *)changelog_rec_jobid(rec));
 
-            printf("%llu %02d%-5s %02d:%02d:%02d.%06d %04d.%02d.%02d 0x%x t="DFID,
-                   rec->cr_index, rec->cr_type, changelog_type2str(rec->cr_type),
-                   ts.tm_hour, ts.tm_min, ts.tm_sec,
-                   (int)(rec->cr_time & ((1 << 30) - 1)),
-                   ts.tm_year + 1900, ts.tm_mon + 1, ts.tm_mday,
-                   rec->cr_flags & CLF_FLAGMASK, PFID(&rec->cr_tfid));
+        if (rec->cr_flags & CLF_RENAME) {
+            struct changelog_ext_rename *rnm;
 
-            if (rec->cr_flags & CLF_JOBID)
-                printf(" j=%s", (const char *)changelog_rec_jobid(rec));
-
-            if (rec->cr_flags & CLF_RENAME) {
-                struct changelog_ext_rename *rnm;
-
-                rnm = changelog_rec_rename(rec);
-                if (!fid_is_zero(&rnm->cr_sfid))
-                    printf(" s="DFID" sp="DFID" %.*s", PFID(&rnm->cr_sfid),
-                           PFID(&rnm->cr_spfid), (int)changelog_rec_snamelen(rec),
-                           changelog_rec_sname(rec));
-            }
-
-            if (rec->cr_namelen)
-                printf(" p="DFID" %.*s", PFID(&rec->cr_pfid), rec->cr_namelen,
-                       changelog_rec_name(rec));
-
-            printf("\n");
-
-            handle_record(lustre_root_path, rec);
-            lustre_print_change_table();
-
-            rc = lcap_changelog_clear(ctx, mdtname, clid, rec->cr_index);
-            if (rc < 0) {
-                fprintf(stderr, "lcap_changelog_clear: %s\n", zmq_strerror(-rc));
-                disconnect_irods_connection();
-                return 1;
-            }
-
-
-            rc = lcap_changelog_free(ctx, &rec);
-            if (rc < 0) {
-                fprintf(stderr, "lcap_changelog_free: %s\n", zmq_strerror(-rc));
-                disconnect_irods_connection();
-                return 1;
-            }
+            rnm = changelog_rec_rename(rec);
+            if (!fid_is_zero(&rnm->cr_sfid))
+                printf(" s="DFID" sp="DFID" %.*s", PFID(&rnm->cr_sfid),
+                       PFID(&rnm->cr_spfid), (int)changelog_rec_snamelen(rec),
+                       changelog_rec_sname(rec));
         }
 
-        // TODO this will be replaced by reader threads
-        if (get_change_table_size() > 0) {
-            char buffer[5096];
-            process_table_entries_into_json(buffer, 5096);
-            send_change_map_to_irods(buffer);
+        if (rec->cr_namelen)
+            printf(" p="DFID" %.*s", PFID(&rec->cr_pfid), rec->cr_namelen,
+                   changelog_rec_name(rec));
+
+        printf("\n");
+
+        handle_record(lustre_root_path, rec);
+        lustre_print_change_table();
+
+        rc = lcap_changelog_clear(ctx, mdtname, clid, rec->cr_index);
+        if (rc < 0) {
+            fprintf(stderr, "lcap_changelog_clear: %s\n", zmq_strerror(-rc));
+            disconnect_irods_connection();
+            return 1;
+        }
+
+
+        rc = lcap_changelog_free(ctx, &rec);
+        if (rc < 0) {
+            fprintf(stderr, "lcap_changelog_free: %s\n", zmq_strerror(-rc));
+            disconnect_irods_connection();
+            return 1;
         }
     }
 
-    if (rc && rc != 1) {
-        fprintf(stderr, "lcap_changelog_recv: %s\n", zmq_strerror(-rc));
-        disconnect_irods_connection();
-        return 1;
-    }
-
-    rc = lcap_changelog_fini(ctx);
-    if (rc) {
-        fprintf(stderr, "lcap_changelog_fini: %s\n", zmq_strerror(-rc));
-        disconnect_irods_connection();
-        return 1;
-    }
-
-    disconnect_irods_connection();
     return 0;
 }
