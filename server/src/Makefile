@@ -25,8 +25,8 @@ irods_ops.o: irods_ops.cpp irods_ops.h
 test: test.cpp irods_ops.o
 	$(CLANG_CPP) $(LINK_OPT) $(INC) irods_ops.o test.cpp $(LIBS) -o test
 
-connector.o: connector2.c irods_ops.h
-	$(CLANG_C) $(INC) -DHAVE_CONFIG_H -g -O2 -c -nostdinc++ -o connector.o connector2.c
+connector.o: connector.c irods_ops.h
+	$(CLANG_C) $(INC) -DHAVE_CONFIG_H -g -O2 -c -nostdinc++ -o connector.o connector.c
 
 test_change_table.o: test_change_table.cpp lustre_change_table.hpp
 	 $(CLANG_CPP) $(CPP_OPT) $(INC) -o test_change_table.o -c test_change_table.cpp

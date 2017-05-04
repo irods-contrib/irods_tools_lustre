@@ -16,8 +16,8 @@ void lustre_trunc(const char *fidstr, const char *parent_fidstr, const char *obj
 void remove_fidstr_from_table(const char *fidstr);
 void lustre_print_change_table();
 void lustre_write_change_table_to_str(char *buffer, const size_t buffer_size);
-void lustre_write_change_table_to_json_str(char *buffer, const size_t buffer_size);
-int send_to_irods();
+void process_table_entries_into_json(char *buffer, const size_t buffer_size);
+size_t get_change_table_size();
 
 
 #ifdef __cplusplus

@@ -190,6 +190,8 @@ void lustre_rename(const char *fidstr_cstr, const char *parent_fidstr, const cha
 
 void lustre_create(const char *fidstr_cstr, const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) {
 
+    printf("lustre_create:  lustre_path_cstr = %s\n", lustre_path_cstr);
+
     std::map<std::string, change_descriptor> *change_map = get_change_map_instance();
     std::string fidstr(fidstr_cstr);
     std::string lustre_path(lustre_path_cstr);
@@ -309,26 +311,35 @@ void lustre_print_change_table() {
 
 }
 
-void lustre_write_change_table_to_json_str(char *buffer, const size_t buffer_size) {
+// processes change table by writing records ready to be sent to iRODS into 
+// the json string in buffer.  Delete the records that are written.
+void process_table_entries_into_json(char *json_buffer, const size_t buffer_size) {
 
     std::map<std::string, change_descriptor> *change_map = get_change_map_instance();
     json_map change_map_json;
     jeayeson::array_t rows;
 
-    for (auto iter = change_map->begin(); iter != change_map->end(); ++iter) {
+    for (auto iter = change_map->begin(); iter != change_map->end();) {
         json_map row;
         change_descriptor fields = iter->second;
-        if (!fields.oper_complete) {
-            continue;
+
+        if (fields.oper_complete) {
+            row["fidstr"] = iter->first;
+            row["parent_fidstr"] = fields.parent_fidstr;
+            row["object_type"] = object_type_to_str(fields.object_type);
+            row["object_name"] = fields.object_name;
+            row["lustre_path"] = fields.lustre_path;
+            row["event_type"] = event_type_to_str(fields.last_event);
+            row["file_size"] = fields.file_size;
+            rows.push_back(row);
+
+            // delete entry from table 
+            iter = change_map->erase(iter);
+
+        } else {
+            ++iter;
         }
-        row["fidstr"] = iter->first;
-        row["parent_fidstr"] = fields.parent_fidstr;
-        row["object_type"] = object_type_to_str(fields.object_type);
-        row["object_name"] = fields.object_name;
-        row["lustre_path"] = fields.lustre_path;
-        row["event_type"] = event_type_to_str(fields.last_event);
-        row["file_size"] = fields.file_size;
-        rows.push_back(row);
+        
     }
 
     change_map_json["change_records"] = rows;
@@ -341,9 +352,9 @@ void lustre_write_change_table_to_json_str(char *buffer, const size_t buffer_siz
     std::string const json_str = change_map_json.to_string();
 
     if (json_str.length() > buffer_size-1) {
-        // error
+        // TODO error
     }
-    snprintf(buffer, buffer_size, "%s", json_str.c_str());
+    snprintf(json_buffer, buffer_size, "%s", json_str.c_str());
 }
     
 
@@ -398,5 +409,9 @@ std::string object_type_to_str(object_type_enum type) {
 void remove_fidstr_from_table(const char *fidstr_cstr) {
     std::string fidstr(fidstr_cstr);
     get_change_map_instance()->erase(fidstr);
+}
+
+size_t get_change_table_size() {
+    return get_change_map_instance()->size();
 }
 

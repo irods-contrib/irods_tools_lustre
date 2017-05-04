@@ -6,6 +6,7 @@
 #include "irods_re_serialization.hpp"
 #include "objStat.h"
 #include "icatHighLevelRoutines.hpp"
+#include "irods_virtual_path.hpp"
 
 #include "boost/lexical_cast.hpp"
 
@@ -21,33 +22,61 @@
 #include "inout_structs.h"
 
 int cmlExecuteNoAnswerSql( const char *sql, icatSessionStruct *icss );
+int cmlGetStringValueFromSql( const char *sql, char *cVal, int cValSize, std::vector<std::string> &bindVars, icatSessionStruct *icss );
+
 
 #define MAX_BIND_VARS 32000
 extern const char *cllBindVars[MAX_BIND_VARS];
 extern int cllBindVarCount;
 
 const char *update_data_size_sql = "update R_DATA_MAIN set data_size = ? where data_id = ("
-                   "select r_data_main.data_id "
-                   "from r_data_main "
-                   "inner join r_objt_metamap on r_data_main.data_id = r_objt_metamap.object_id "
-                   "inner join r_meta_main on r_meta_main.meta_id = r_objt_metamap.meta_id "
-                   "where r_meta_main.meta_attr_name = 'fidstr' and r_meta_main.meta_attr_value = ?)";
+                   "select R_DATA_MAIN.data_id "
+                   "from R_DATA_MAIN "
+                   "inner join R_OBJT_METAMAP on R_DATA_MAIN.data_id = R_OBJT_METAMAP.object_id "
+                   "inner join R_META_MAIN on R_META_MAIN.meta_id = R_OBJT_METAMAP.meta_id "
+                   "where R_META_MAIN.meta_attr_name = 'fidstr' and R_META_MAIN.meta_attr_value = ?)";
 
 const char *update_data_object_for_rename_sql = "update R_DATA_MAIN set data_name = ?, data_path = ?, coll_id = ("
-                   "select r_coll_main.coll_id "
-                   "from r_coll_main "
-                   "inner join r_objt_metamap on r_coll_main.coll_id = r_objt_metamap.object_id "
-                   "inner join r_meta_main on r_meta_main.meta_id = r_objt_metamap.meta_id "
-                   "where r_meta_main.meta_attr_name = 'fidstr' and r_meta_main.meta_attr_value = ?) "
+                   "select R_COLL_MAIN.coll_id "
+                   "from R_COLL_MAIN "
+                   "inner join R_OBJT_METAMAP on R_COLL_MAIN.coll_id = R_OBJT_METAMAP.object_id "
+                   "inner join R_META_MAIN on R_META_MAIN.meta_id = R_OBJT_METAMAP.meta_id "
+                   "where R_META_MAIN.meta_attr_name = 'fidstr' and R_META_MAIN.meta_attr_value = ?) "
                    "where data_id = ("
-                   "select r_data_main.data_id "
-                   "from r_data_main "
-                   "inner join r_objt_metamap on r_data_main.data_id = r_objt_metamap.object_id "
-                   "inner join r_meta_main on r_meta_main.meta_id = r_objt_metamap.meta_id "
-                   "where r_meta_main.meta_attr_name = 'fidstr' and r_meta_main.meta_attr_value = ?)";
+                   "select R_DATA_MAIN.data_id "
+                   "from R_DATA_MAIN "
+                   "inner join R_OBJT_METAMAP on R_DATA_MAIN.data_id = R_OBJT_METAMAP.object_id "
+                   "inner join R_META_MAIN on R_META_MAIN.meta_id = R_OBJT_METAMAP.meta_id "
+                   "where R_META_MAIN.meta_attr_name = 'fidstr' and R_META_MAIN.meta_attr_value = ?)";
 
-//const char *update_collection_for_rename_sql = "update R_COLL_MAIN set coll_name = ?, parent_coll_name
+const char *get_collection_path_from_fidstr_sql = "select R_COLL_MAIN.coll_name "
+                   "from R_COLL_MAIN "
+                   "inner join R_OBJT_METAMAP on R_COLL_MAIN.coll_id = R_OBJT_METAMAP.object_id "
+                   "inner join R_META_MAIN on R_META_MAIN.meta_id = R_OBJT_METAMAP.meta_id "
+                   "where R_META_MAIN.meta_attr_name = 'fidstr' and R_META_MAIN.meta_attr_value = ?";
 
+
+const char *update_collection_for_rename_sql = "update R_COLL_MAIN set coll_name = ?, parent_coll_name = ? "
+                   "where coll_id = ("
+                   "select R_COLL_MAIN.coll_id "
+                   "from R_COLL_MAIN "
+                   "inner join R_OBJT_METAMAP on R_COLL_MAIN.coll_id = R_OBJT_METAMAP.object_id "
+                   "inner join R_META_MAIN on R_META_MAIN.meta_id = R_OBJT_METAMAP.meta_id "
+                   "where R_META_MAIN.meta_attr_name = 'fidstr' and R_META_MAIN.meta_attr_value = ?)";
+
+const char *unlink_sql = "delete from R_DATA_MAIN where data_id = ("
+                   "select R_DATA_MAIN.data_id "
+                   "from R_DATA_MAIN "
+                   "inner join R_OBJT_METAMAP on R_DATA_MAIN.data_id = R_OBJT_METAMAP.object_id "
+                   "inner join R_META_MAIN on R_META_MAIN.meta_id = R_OBJT_METAMAP.meta_id "
+                   "where R_META_MAIN.meta_attr_name = 'fidstr' and R_META_MAIN.meta_attr_value = ?)";
+
+const char *rmdir_sql = "delete from R_COLL_MAIN where coll_id = ("
+                   "select R_COLL_MAIN.coll_id "
+                   "from R_COLL_MAIN "
+                   "inner join R_OBJT_METAMAP on R_COLL_MAIN.coll_id = R_OBJT_METAMAP.object_id "
+                   "inner join R_META_MAIN on R_META_MAIN.meta_id = R_OBJT_METAMAP.meta_id "
+                   "where R_META_MAIN.meta_attr_name = 'fidstr' and R_META_MAIN.meta_attr_value = ?)";
 
 
 // Returns the path in irods for a file in lustre.  
@@ -222,7 +251,6 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
                 rodsLog(LOG_NOTICE, "Skipping entry because lustre_path [%s] is not within lustre_root_path [%s].",
                        lustre_path.c_str(), lustre_root_path.c_str()); 
                 continue;
-
             }
 
             rodsLong_t file_size;
@@ -232,7 +260,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
                file_size = boost::lexical_cast<int64_t>(file_size_str);
                resource_id = boost::lexical_cast<int64_t>(resource_id_str);
             } catch (const boost::bad_lexical_cast &) {
-                rodsLog(LOG_NOTICE, "Skipping entry because %s is not a valid size.", file_size_str.c_str());
+                rodsLog(LOG_NOTICE, "Skipping create for %s because %s is not a valid size.", fidstr.c_str(), file_size_str.c_str());
                 continue;
             }
 
@@ -248,7 +276,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
             status = chlRegDataObj(_comm, &data_obj_info);
             rodsLog(LOG_NOTICE, "Return value from chlRegDataObj = %i", status);
             if (status < 0) {
-                rodsLog(LOG_ERROR, "Error registering object %s.  Error is %i", register_path.c_str(), status);
+                rodsLog(LOG_ERROR, "Error registering object %s.  Error is %i", fidstr.c_str(), status);
                 continue;
             }
 
@@ -259,7 +287,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
             status = chlAddAVUMetadata(_comm, 0, "-d", irods_path, "fidstr", fidstr.c_str(), "");
             rodsLog(LOG_NOTICE, "Return value from chlAddAVUMetdata = %i", status);
             if (status < 0) {
-                rodsLog(LOG_ERROR, "Error adding fidstr metadata to object %s.  Error is %i", register_path.c_str(), status);
+                rodsLog(LOG_ERROR, "Error adding fidstr metadata to object %s.  Error is %i", fidstr.c_str(), status);
                 continue;
             }
 
@@ -278,19 +306,11 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
             memset(&coll_info, 0, sizeof(coll_info));
             strncpy(coll_info.collName, irods_path, MAX_NAME_LEN);
 
-            //status = splitPathByKey(irods_path, coll_info.collParentName, MAX_NAME_LEN, coll_info.collName, MAX_NAME_LEN, '/');
-            //if (status < 0) {
-            //    rodsLog( LOG_ERROR, "Skipping MKDIR on %s because splitPathByKey returned an error, status = %d", irods_path, status );
-            //    continue;
-            //}
-
-            //rodsLog(LOG_NOTICE, "collParentName=%s collName=%s", coll_info.collParentName,coll_info.collName);
-
             // register object
             status = chlRegColl(_comm, &coll_info);
             rodsLog(LOG_NOTICE, "Return value from chlRegColl = %i", status);
             if (status < 0) {
-                rodsLog(LOG_ERROR, "Error registering collection %s.  Error is %i", register_path.c_str(), status);
+                rodsLog(LOG_ERROR, "Error registering collection %s.  Error is %i", fidstr.c_str(), status);
                 continue;
             } 
 
@@ -301,7 +321,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
             status = chlAddAVUMetadata(_comm, 0, "-C", irods_path, "fidstr", fidstr.c_str(), "");
             rodsLog(LOG_NOTICE, "Return value from chlAddAVUMetdata = %i", status);
             if (status < 0) {
-                rodsLog(LOG_ERROR, "Error adding fidstr metadata to object %s.  Error is %i", register_path.c_str(), status);
+                rodsLog(LOG_ERROR, "Error adding fidstr metadata to object %s.  Error is %i", fidstr.c_str(), status);
                 continue;
             }
 
@@ -315,7 +335,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
             status = cmlExecuteNoAnswerSql(update_data_size_sql, icss);
 
             if (status != 0) {
-                rodsLog(LOG_ERROR, "Error updating data_object_size for data_object %s.  Error is %i", register_path.c_str(), status);
+                rodsLog(LOG_ERROR, "Error updating data_object_size for data_object %s.  Error is %i", fidstr.c_str(), status);
                 cmlExecuteNoAnswerSql("rollback", icss);
                 continue;
             }
@@ -323,7 +343,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
             status =  cmlExecuteNoAnswerSql("commit", icss);
 
             if (status != 0) {
-                rodsLog(LOG_ERROR, "Error committing update to data_object_size for data_object %s.  Error is %i", register_path.c_str(), status);
+                rodsLog(LOG_ERROR, "Error committing update to data_object_size for data_object %s.  Error is %i", fidstr.c_str(), status);
                 continue;
             } 
 
@@ -339,7 +359,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
             status = cmlExecuteNoAnswerSql(update_data_object_for_rename_sql, icss);
 
             if (status != 0) {
-                rodsLog(LOG_ERROR, "Error updating data object rename for data_object %s.  Error is %i", register_path.c_str(), status);
+                rodsLog(LOG_ERROR, "Error updating data object rename for data_object %s.  Error is %i", fidstr.c_str(), status);
                 cmlExecuteNoAnswerSql("rollback", icss);
                 continue;
             }
@@ -347,24 +367,93 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
             status =  cmlExecuteNoAnswerSql("commit", icss);
 
             if (status != 0) {
-                rodsLog(LOG_ERROR, "Error committing update to data object rename for data_object %s.  Error is %i", register_path.c_str(), status);
+                rodsLog(LOG_ERROR, "Error committing update to data object rename for data_object %s.  Error is %i", fidstr.c_str(), status);
                 continue;
             }
 
         } else if (event_type == "RENAME" and object_type == "DIR") {
-            // TODO
+
+            char parent_path[MAX_NAME_LEN];
+            char collection_path[MAX_NAME_LEN];
+
+            // get the parent's path - using parent's fidstr
+            std::vector<std::string> bindVars;
+            bindVars.push_back(parent_fidstr);
+            status = cmlGetStringValueFromSql(get_collection_path_from_fidstr_sql, parent_path, MAX_NAME_LEN, bindVars, icss);
+            if (status != 0) {
+                rodsLog(LOG_ERROR, "Error looking up parent collection for rename for collection %s.  Error is %i", fidstr.c_str(), status);
+                cmlExecuteNoAnswerSql("rollback", icss);
+
+                // TODO as a backup just use what was sent to use and split the path
+                continue;
+            }
+
+            snprintf(collection_path, MAX_NAME_LEN, "%s%s%s", parent_path, irods::get_virtual_path_separator().c_str(), object_name.c_str());
+
+            rodsLog(LOG_NOTICE, "collection path = %s\tparent_path = %s", collection_path, parent_path);
+              
+
+            // update coll_name, parent_coll_name, and coll_id
+            cllBindVars[0] = collection_path;
+            cllBindVars[1] = parent_path;
+            cllBindVars[2] = fidstr.c_str();
+            cllBindVarCount = 3;
+            status = cmlExecuteNoAnswerSql(update_collection_for_rename_sql, icss);
+
+            if (status != 0) {
+                rodsLog(LOG_ERROR, "Error updating collection object rename for collection %s.  Error is %i", fidstr.c_str(), status);
+                cmlExecuteNoAnswerSql("rollback", icss);
+                continue;
+            }
+
+            status =  cmlExecuteNoAnswerSql("commit", icss);
+
+            if (status != 0) {
+                rodsLog(LOG_ERROR, "Error committing update to collection rename for collection %s.  Error is %i", fidstr.c_str(), status);
+                continue;
+            }
 
         } else if (event_type == "UNLINK") {
-            // TODO
+
+            cllBindVars[0] = fidstr.c_str();
+            cllBindVarCount = 1;
+            status = cmlExecuteNoAnswerSql(unlink_sql, icss);
+
+            if (status != 0) {
+                rodsLog(LOG_ERROR, "Error deleting data object %s.  Error is %i", fidstr.c_str(), status);
+                cmlExecuteNoAnswerSql("rollback", icss);
+                continue;
+            }
+
+            status =  cmlExecuteNoAnswerSql("commit", icss);
+
+            if (status != 0) {
+                rodsLog(LOG_ERROR, "Error committing delete for data object %s.  Error is %i", fidstr.c_str(), status);
+                continue;
+            }
+
 
         } else if (event_type == "RMDIR") {
-            // TODO
+
+            cllBindVars[0] = fidstr.c_str();
+            cllBindVarCount = 1;
+            status = cmlExecuteNoAnswerSql(rmdir_sql, icss);
+
+            if (status != 0) {
+                rodsLog(LOG_ERROR, "Error deleting directory %s.  Error is %i", fidstr.c_str(), status);
+                cmlExecuteNoAnswerSql("rollback", icss);
+                continue;
+            }
+
+            status =  cmlExecuteNoAnswerSql("commit", icss);
+
+            if (status != 0) {
+                rodsLog(LOG_ERROR, "Error committing delete for collection %s.  Error is %i", fidstr.c_str(), status);
+                continue;
+            }
+
 
         }
-
-
-
-
     }
 
     //rodsLog( LOG_NOTICE, "Received : %s", _inp->change_log_json);

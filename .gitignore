@@ -1,0 +1,8 @@
+*.o
+*.so
+*.so.*
+*.pem
+*.rpm
+bld
+server/src/connector
+server/src/test
