@@ -315,10 +315,10 @@ void lustre_write_change_table_to_str(char *buffer, const size_t buffer_size) {
 
     snprintf(temp_buffer, buffer_size, "%-30s %-30s %-12s %-20s %-30s %-17s %-11s %-15s %-10s\n", "FIDSTR", 
             "PARENT_FIDSTR", "OBJECT_TYPE", "OBJECT_NAME", "LUSTRE_PATH", "TIME", "EVENT_TYPE", "OPER_COMPLETE?", "FILE_SIZE");
-    strncat(buffer, temp_buffer, buffer_size);
+    strncat(buffer, temp_buffer, buffer_size-strlen(buffer)-1);
     snprintf(temp_buffer, buffer_size, "%-30s %-30s %-12s %-20s %-30s %-17s %-11s %-15s %-10s\n", "------", 
             "-------------", "-----------", "-----------", "-----------", "----", "----------", "--------------", "---------");
-    strncat(buffer, temp_buffer, buffer_size);
+    strncat(buffer, temp_buffer, buffer_size-strlen(buffer)-1);
     for (auto iter = change_map->begin(); iter != change_map->end(); ++iter) {
          std::string fidstr = iter->first;
          change_descriptor fields = iter->second;
@@ -334,16 +334,20 @@ void lustre_write_change_table_to_str(char *buffer, const size_t buffer_size) {
                  event_type_to_str(fields.last_event).c_str(), 
                  fields.oper_complete == 1 ? "true" : "false", fields.file_size);
 
-         strncat(buffer, temp_buffer, buffer_size);
+         strncat(buffer, temp_buffer, buffer_size-strlen(buffer)-1);
     }
 
 }
+
+
+
+
+
 
 void lustre_print_change_table() {
     char buffer[5012];
     lustre_write_change_table_to_str(buffer, 5012);
     printf("%s", buffer);
-
 }
 
 // processes change table by writing records ready to be sent to iRODS into 
@@ -356,7 +360,10 @@ void process_table_entries_into_json(char *json_buffer, const size_t buffer_size
     json_map change_map_json;
     jeayeson::array_t rows;
 
+    unsigned long cnt = 0;
     for (auto iter = change_map->begin(); iter != change_map->end();) {
+        cnt++;
+
         json_map row;
         change_descriptor fields = iter->second;
 
@@ -373,6 +380,12 @@ void process_table_entries_into_json(char *json_buffer, const size_t buffer_size
             // delete entry from table 
             iter = change_map->erase(iter);
 
+            // break out if we think we will exceed buffer
+            // TODO find a better way to detect if we're getting close 
+            if (cnt > buffer_size / 300) {
+                break;
+            }
+
         } else {
             ++iter;
         }
@@ -387,6 +400,8 @@ void process_table_entries_into_json(char *json_buffer, const size_t buffer_size
     //std::stringstream ss;
     //ss << change_map_json;
     std::string const json_str = change_map_json.to_string();
+
+    printf("count = %lu strlen = %lu\n", cnt, json_str.size());
 
     if (json_str.length() > buffer_size-1) {
         // TODO error

@@ -51,9 +51,9 @@ void irods_api_client_main() {
 
         printf("irods client running\n");
 
-        if (get_change_table_size() > 0) {
-            char buffer[5096];
-            process_table_entries_into_json(buffer, 5096);
+        while (get_change_table_size() > 0) {
+            char buffer[65536];
+            process_table_entries_into_json(buffer, 65536);
             send_change_map_to_irods(buffer);
         }
         sleep(UPDATE_IRODS_INTERVAL);
