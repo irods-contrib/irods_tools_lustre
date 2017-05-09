@@ -23,6 +23,7 @@
 
 #include "irods_ops.h"
 #include "rodsDef.h"
+#include "changelog_config.h"
 #include "lustre_change_table.hpp"
 
 #ifndef LPX64
@@ -32,12 +33,12 @@ static inline bool fid_is_zero(const lustre_fid *fid) {
 }
 #endif
 
+extern char mdtname[];
+extern char lustre_root_path[];
+extern char register_path[];
+extern char resource_name[];
+extern int64_t resource_id;
 
-const char *mdtname = "lustre01-MDT0000";
-const char *lustre_root_path = "/lustre01";
-const char *register_path = "/tempZone/lustre";
-const char *resource_name = "demoResc";
-const int64_t resource_id = 10014;
 
 struct lcap_cl_ctx      *ctx = NULL;
 int                     flags = LCAP_CL_BLOCK;

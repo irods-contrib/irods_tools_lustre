@@ -16,6 +16,7 @@
 #include "irods_ops.h"
 #include "rodsDef.h"
 #include "lustre_change_table.hpp"
+#include "changelog_config.h"
 
 #ifndef LPX64
 #define LPX64   "%#llx"
@@ -68,6 +69,13 @@ int main(int ac, char **av) {
 
     signal(SIGPIPE, SIG_IGN);
     signal(SIGINT, interrupt_handler);
+
+    const char *filename = "irods_lustre_config.json";
+
+    rc = read_config_file(filename);
+    if (rc < 0) {
+        return 1;
+    }
 
     rc = instantiate_irods_connection(); 
     if (rc < 0) {

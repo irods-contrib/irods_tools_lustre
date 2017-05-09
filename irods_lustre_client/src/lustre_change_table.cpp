@@ -21,9 +21,9 @@
 
 //using namespace boost::interprocess;
 
-extern const char *lustre_root_path;
-extern const char *register_path;
-extern const int64_t resource_id;
+extern char lustre_root_path[];
+extern char register_path[];
+extern int64_t resource_id;
 
 //static std::string shared_memory_mutex_name = "change_table_mutex";
 static boost::shared_mutex change_table_mutex;

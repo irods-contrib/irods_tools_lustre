@@ -23,7 +23,10 @@ lustre_change_table.o: lustre_change_table.cpp lustre_change_table.hpp
 irods_ops.o: irods_ops.cpp irods_ops.h
 	$(CLANG_CPP) $(CPP_OPT)  $(INC) -o irods_ops.o -c irods_ops.cpp
 
-changelog_poller.o: changelog_poller.c irods_ops.h
+changelog_config.o: changelog_config.cpp changelog_config.h
+	$(CLANG_CPP) $(CPP_OPT)  $(INC) -o changelog_config.o -c changelog_config.cpp
+
+changelog_poller.o: changelog_poller.c irods_ops.h changelog_config.h
 	$(CLANG_C) $(INC) -DHAVE_CONFIG_H -g -O0 -c -nostdinc++ -o changelog_poller.o -c changelog_poller.c
 
 #test_change_table.o: test_change_table.cpp lustre_change_table.hpp
@@ -39,8 +42,8 @@ main.o: main.cpp
 #	$(CLANG_CPP) $(LINK_OP) $(LIBS) test_change_table.o lustre_change_table.o -o test_change_table
 
 
-irods_lustre_connector: main.o changelog_poller.o irods_ops.o lustre_change_table.o
-	$(CLANG_CPP) $(LIBS) -g -O0 -o irods_lustre_connector main.o changelog_poller.o irods_ops.o lustre_change_table.o $(LINK_OPT) -llustreapi $(LIB_DIRS) $(LCAP_ROOT)/src/common/.libs/liblcapcommon.a $(LCAP_ROOT)/src/client/.libs/liblcap.so $(LINK_OPT) -Wl,-rpath -Wl,$(LCAP_ROOT)/src/client/.libs -lzmq 
+irods_lustre_connector: main.o changelog_config.o changelog_poller.o irods_ops.o lustre_change_table.o
+	$(CLANG_CPP) $(LIBS) -g -O0 -o irods_lustre_connector main.o changelog_config.o changelog_poller.o irods_ops.o lustre_change_table.o $(LINK_OPT) -llustreapi $(LIB_DIRS) $(LCAP_ROOT)/src/common/.libs/liblcapcommon.a $(LCAP_ROOT)/src/client/.libs/liblcap.so $(LINK_OPT) -Wl,-rpath -Wl,$(LCAP_ROOT)/src/client/.libs -lzmq 
 
 
 clean:

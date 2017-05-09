@@ -97,7 +97,13 @@ int lustre_path_to_irods_path(const char *lustre_path, const char *lustre_root_p
 std::string read_string_value_from_json_map(const std::string& key, const json_map& m) {
     std::stringstream tmp;
     tmp << m.find(key)->second; 
-    return tmp.str();
+
+    std::string returnVal = tmp.str();
+
+    // remove quotes
+    returnVal.erase(remove(returnVal.begin(), returnVal.end(), '\"' ), returnVal.end());
+
+    return returnVal;
 }
 
 
@@ -195,11 +201,8 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
     }
 
     std::string lustre_root_path = read_string_value_from_json_map("lustre_root_path", m);
-    lustre_root_path.erase(remove(lustre_root_path.begin(), lustre_root_path.end(), '\"' ), lustre_root_path.end());
     std::string register_path = read_string_value_from_json_map("register_path", m); 
-    register_path.erase(remove(register_path.begin(), register_path.end(), '\"' ), register_path.end());
     std::string resource_id_str = read_string_value_from_json_map("resource_id", m);
-    resource_id_str.erase(remove(resource_id_str.begin(), resource_id_str.end(), '\"' ), resource_id_str.end());
 
     jeayeson::array_t arr { json_value { m.find("change_records")->second } };
 
@@ -224,19 +227,12 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
 
 
         std::string event_type = read_string_value_from_json_map("event_type", m2);
-        event_type.erase(remove(event_type.begin(), event_type.end(), '\"' ), event_type.end());
         std::string fidstr = read_string_value_from_json_map("fidstr", m2);
-        fidstr.erase(remove(fidstr.begin(), fidstr.end(), '\"' ), fidstr.end());
         std::string lustre_path = read_string_value_from_json_map("lustre_path", m2);
-        lustre_path.erase(remove(lustre_path.begin(), lustre_path.end(), '\"' ), lustre_path.end());
         std::string object_name = read_string_value_from_json_map("object_name", m2);
-        object_name.erase(remove(object_name.begin(), object_name.end(), '\"' ), object_name.end());
         std::string object_type = read_string_value_from_json_map("object_type", m2);
-        object_type.erase(remove(object_type.begin(), object_type.end(), '\"' ), object_type.end());
         std::string parent_fidstr = read_string_value_from_json_map("parent_fidstr", m2);
-        parent_fidstr.erase(remove(parent_fidstr.begin(), parent_fidstr.end(), '\"' ), parent_fidstr.end());
         std::string file_size_str = read_string_value_from_json_map("file_size", m2);
-        file_size_str.erase(remove(file_size_str.begin(), file_size_str.end(), '\"' ), file_size_str.end());
 
         rodsLog(LOG_NOTICE, "event_type: %s\tfidstr: %s\tlustre_path: %s\tobject_name %s\tobject_type: %s\tparent_fidstr %s\tfile_size %s\n",
                 event_type.c_str(), fidstr.c_str(), lustre_path.c_str(), object_name.c_str(), object_type.c_str(), parent_fidstr.c_str(), 

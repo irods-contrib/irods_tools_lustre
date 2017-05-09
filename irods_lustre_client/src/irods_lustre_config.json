@@ -1,0 +1,8 @@
+{
+        "mdtname": "lustre01-MDT0000"
+        "lustre_root_path": "/lustre01"
+        "register_path": "/tempZone/lustre"
+        "resource_name": "demoResc"
+        "resource_id": 10014
+}
+
