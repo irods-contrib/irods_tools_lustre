@@ -23,7 +23,7 @@
 // TODO change for multithreaded
 rcComm_t *irods_conn;
 
-int send_change_map_to_irods(const char *str) {
+int send_change_map_to_irods(irodsLustreApiInp_t *inp) {
 
     printf("calling send_change_map_to_irods\n");
 
@@ -36,15 +36,9 @@ int send_change_map_to_irods(const char *str) {
     irods::api_entry_table& api_tbl = irods::get_client_api_table();
     init_api_table( api_tbl, pk_tbl );
 
-    irodsLustreApiInp_t inp;
-    memset( &inp, 0, sizeof( inp ) );
-
-    inp.change_log_json = (char*)malloc(strlen(str) + 1);
-    strcpy(inp.change_log_json, str);
-
     void *tmp_out = NULL;
     printf("Before procApiRequest\n");
-    int status = procApiRequest( irods_conn, 15001, &inp, NULL,
+    int status = procApiRequest( irods_conn, 15001, inp, NULL,
                              &tmp_out, NULL );
     printf("After procApiRequest.  status=%i\n", status);
 
@@ -58,6 +52,14 @@ int send_change_map_to_irods(const char *str) {
         return out->status;
     }
 }
+
+/* The routines below are not longer being used by the iRODS/Lustre connector.
+ * These were used when the connector made individual iRODS client calls for each
+ * change.  This has been replaced by the API which takes a list of changes and acts
+ * upon them.
+ *
+ * These will be deleted soon.
+ */
 
 int update_data_object_metadata(const char *irods_path_cstr, const char *value, const char *meta_type) {
 

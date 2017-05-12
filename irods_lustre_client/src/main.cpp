@@ -12,11 +12,15 @@
 #include <zmq.h>
 #include <signal.h>
 #include <thread>
+#include <stdlib.h>
 
 #include "irods_ops.h"
 #include "rodsDef.h"
 #include "lustre_change_table.hpp"
 #include "changelog_config.h"
+
+#include "../../irods_lustre_api/src/inout_structs.h"
+
 
 #ifndef LPX64
 #define LPX64   "%#llx"
@@ -53,9 +57,11 @@ void irods_api_client_main() {
         printf("irods client running\n");
 
         while (get_change_table_size() > 0) {
-            char buffer[65536];
-            process_table_entries_into_json(buffer, 65536);
-            send_change_map_to_irods(buffer);
+            irodsLustreApiInp_t inp;
+            memset( &inp, 0, sizeof( inp ) );
+            write_change_table_to_capnproto_buf(&inp);
+            send_change_map_to_irods(&inp);
+            free(inp.buf);
         }
         sleep(UPDATE_IRODS_INTERVAL);
     }

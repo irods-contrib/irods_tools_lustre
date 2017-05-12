@@ -3,11 +3,6 @@
  */
 
 
-// TODO Issues:
-//   No event for file append.
-//   No event for file update time.
-
-
 #ifdef HAVE_CONFIG_H
 #include "lcap_config.h"
 #endif

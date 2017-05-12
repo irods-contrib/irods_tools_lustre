@@ -4,7 +4,8 @@ INC=-I/opt/irods-externals/clang3.8-0/include/c++/v1 -I/usr/include/irods -I/opt
 
 #CPP_OPT=-DBOOST_SYSTEM_NO_DEPRECATED -DRODS_SERVER -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE -D_LARGE_FILES -Dlinux_platform -O3 -DNDEBUG -nostdinc++ -Wall -Wextra -Werror -Wno-unused-parameter -Wno-write-strings -std=gnu++14 
 
-CPP_OPT=-DBOOST_SYSTEM_NO_DEPRECATED -DRODS_SERVER -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE -D_LARGE_FILES -Dlinux_platform -g -O0 -DNDEBUG -nostdinc++ -Wall -Wextra -Werror -Wno-unused-parameter -Wno-write-strings -std=gnu++14 
+CPP_OPT=-DBOOST_SYSTEM_NO_DEPRECATED -DRODS_SERVER -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE -D_LARGE_FILES -Dlinux_platform -g -O0 -DNDEBUG -nostdinc++ -Wall -Wextra -Werror -Wno-unused-parameter -Wno-write-strings -std=c++11 
+#-std=gnu++14 
 
 LINK_OPT=-DNDEBUG -stdlib=libc++ -lc++abi -Wl,-rpath,/opt/irods-externals/clang-runtime3.8-0/lib:/opt/irods-externals/boost1.60.0-0/lib:/opt/irods-externals/zeromq4-14.1.3-0/lib -ldl -lpthread -lrt
 
@@ -17,7 +18,11 @@ CLANG_C=/opt/irods-externals/clang3.8-0/bin/clang
 
 all: irods_lustre_connector #test_change_table
 
-lustre_change_table.o: lustre_change_table.cpp lustre_change_table.hpp 
+change_table.capnp.c++ change_table.capnp.h: change_table.capnp
+	capnp compile -oc++ change_table.capnp
+
+
+lustre_change_table.o: lustre_change_table.cpp lustre_change_table.hpp change_table.capnp.h
 	$(CLANG_CPP) $(CPP_OPT) $(INC) -o lustre_change_table.o -c lustre_change_table.cpp -nostdinc++
 
 irods_ops.o: irods_ops.cpp irods_ops.h
@@ -43,7 +48,7 @@ main.o: main.cpp
 
 
 irods_lustre_connector: main.o changelog_config.o changelog_poller.o irods_ops.o lustre_change_table.o
-	$(CLANG_CPP) $(LIBS) -g -O0 -o irods_lustre_connector main.o changelog_config.o changelog_poller.o irods_ops.o lustre_change_table.o $(LINK_OPT) -llustreapi $(LIB_DIRS) $(LCAP_ROOT)/src/common/.libs/liblcapcommon.a $(LCAP_ROOT)/src/client/.libs/liblcap.so $(LINK_OPT) -Wl,-rpath -Wl,$(LCAP_ROOT)/src/client/.libs -lzmq 
+	$(CLANG_CPP) $(LIBS) -g -O0 -o irods_lustre_connector main.o changelog_config.o changelog_poller.o irods_ops.o lustre_change_table.o $(LINK_OPT) -llustreapi $(LIB_DIRS) $(LCAP_ROOT)/src/common/.libs/liblcapcommon.a $(LCAP_ROOT)/src/client/.libs/liblcap.so $(LINK_OPT) -Wl,-rpath -Wl,$(LCAP_ROOT)/src/client/.libs -lzmq -lcapnp -lkj -Wl,-rpath,/usr/local/lib 
 
 
 clean:

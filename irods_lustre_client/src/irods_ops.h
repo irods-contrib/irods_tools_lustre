@@ -2,6 +2,8 @@
 #define __irods_ops_h
 
 #include "rodsType.h"
+#include "../../irods_lustre_api/src/inout_structs.h"
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,7 +41,7 @@ int update_data_object_size(const char *irods_path, rodsLong_t size);
 
 int update_data_object_modify_time(const char *irods_path, time_t modify_time); 
 
-int send_change_map_to_irods(const char *str);
+int send_change_map_to_irods(irodsLustreApiInp_t *inp);
 
 
 #ifdef __cplusplus

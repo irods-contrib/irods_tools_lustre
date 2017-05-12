@@ -4,5 +4,5 @@
 *.pem
 *.rpm
 bld
-lustre_server/src/irods_lustre_connector
-lustre_server/src/test
+irods_lustre_client/src/irods_lustre_connector
+irods_lustre_client/src/test

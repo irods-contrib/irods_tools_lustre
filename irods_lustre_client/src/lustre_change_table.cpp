@@ -14,10 +14,17 @@
 //#include <boost/interprocess/sync/named_mutex.hpp>
 //#include <boost/interprocess/sync/named_upgradable_mutex.hpp>
 
-// json library
-#include <jeayeson/jeayeson.hpp>
-
 #include "lustre_change_table.hpp"
+#include "../../irods_lustre_api/src/inout_structs.h"
+
+// capnproto
+#include "change_table.capnp.h"
+#include <capnp/message.h>
+#include <capnp/serialize-packed.h>
+
+std::string event_type_to_str(ChangeDescriptor::EventTypeEnum type);
+std::string object_type_to_str(ChangeDescriptor::ObjectTypeEnum type);
+
 
 //using namespace boost::interprocess;
 
@@ -29,7 +36,6 @@ extern int64_t resource_id;
 static boost::shared_mutex change_table_mutex;
 
 extern "C" {
-
 
 void lustre_close(const char *fidstr_cstr, const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) {
 
@@ -60,11 +66,11 @@ void lustre_close(const char *fidstr_cstr, const char *parent_fidstr, const char
         change_descriptor entry;
         entry.parent_fidstr = parent_fidstr;
         entry.object_name = object_name;
-        entry.object_type = (result == 0 && S_ISDIR(st.st_mode)) ? _DIR : _FILE;
+        entry.object_type = (result == 0 && S_ISDIR(st.st_mode)) ? ChangeDescriptor::ObjectTypeEnum::DIR : ChangeDescriptor::ObjectTypeEnum::FILE;
         entry.lustre_path = lustre_path; 
         entry.oper_complete = true;
         entry.timestamp = time(NULL);
-        entry.last_event = OTHER;
+        entry.last_event = ChangeDescriptor::EventTypeEnum::OTHER;
         if (result == 0)
             entry.file_size = st.st_size;
         (*change_map)[fidstr] = entry;
@@ -84,7 +90,7 @@ void lustre_mkdir(const char *fidstr_cstr, const char *parent_fidstr, const char
     if(iter != change_map->end()) {
         change_descriptor& entry = iter->second;
         entry.oper_complete = true;
-        entry.last_event = MKDIR;
+        entry.last_event = ChangeDescriptor::EventTypeEnum::MKDIR;
         entry.timestamp = time(NULL);
     } else {
         change_descriptor entry;
@@ -92,9 +98,9 @@ void lustre_mkdir(const char *fidstr_cstr, const char *parent_fidstr, const char
         entry.object_name = object_name;
         entry.lustre_path = lustre_path;
         entry.oper_complete = true;
-        entry.last_event = MKDIR;
+        entry.last_event = ChangeDescriptor::EventTypeEnum::MKDIR;
         entry.timestamp = time(NULL);
-        entry.object_type = _DIR;
+        entry.object_type = ChangeDescriptor::ObjectTypeEnum::DIR;
         (*change_map)[fidstr] = entry;
     }
 
@@ -115,14 +121,14 @@ void lustre_rmdir(const char *fidstr_cstr, const char *parent_fidstr, const char
         entry.object_name = object_name;
         entry.lustre_path = lustre_path;
         entry.oper_complete = true;
-        entry.last_event = RMDIR;
+        entry.last_event = ChangeDescriptor::EventTypeEnum::RMDIR;
         entry.timestamp = time(NULL);
     } else {
         change_descriptor entry;
         entry.oper_complete = true;
-        entry.last_event = RMDIR;
+        entry.last_event = ChangeDescriptor::EventTypeEnum::RMDIR;
         entry.timestamp = time(NULL);
-        entry.object_type = _DIR;
+        entry.object_type = ChangeDescriptor::ObjectTypeEnum::DIR;
         entry.parent_fidstr = parent_fidstr;
         entry.object_name = object_name;
         (*change_map)[fidstr] = entry;
@@ -142,16 +148,16 @@ void lustre_unlink(const char *fidstr_cstr, const char *parent_fidstr, const cha
     if(iter != change_map->end()) {   
         change_descriptor& entry = iter->second;
         entry.oper_complete = true;
-        entry.last_event = UNLINK;
+        entry.last_event = ChangeDescriptor::EventTypeEnum::UNLINK;
         entry.timestamp = time(NULL);
     } else {
         change_descriptor entry;
         //entry.parent_fidstr = parent_fidstr;
         //entry.lustre_path = lustre_path;
         entry.oper_complete = true;
-        entry.last_event = UNLINK;
+        entry.last_event = ChangeDescriptor::EventTypeEnum::UNLINK;
         entry.timestamp = time(NULL);
-        entry.object_type = _FILE;
+        entry.object_type = ChangeDescriptor::ObjectTypeEnum::FILE;
         entry.object_name = object_name;
         (*change_map)[fidstr] = entry;
     }
@@ -187,12 +193,12 @@ void lustre_rename(const char *fidstr_cstr, const char *parent_fidstr, const cha
         entry.object_name = object_name;
         entry.lustre_path = lustre_path;
         entry.oper_complete = true;
-        entry.last_event = RENAME;
+        entry.last_event = ChangeDescriptor::EventTypeEnum::RENAME;
         entry.timestamp = time(NULL);
         if (is_dir) {
-            entry.object_type = _DIR;
+            entry.object_type = ChangeDescriptor::ObjectTypeEnum::DIR;
         } else {
-            entry.object_type = _FILE;
+            entry.object_type = ChangeDescriptor::ObjectTypeEnum::FILE;
         }
         (*change_map)[fidstr] = entry;
     }
@@ -224,7 +230,7 @@ void lustre_create(const char *fidstr_cstr, const char *parent_fidstr, const cha
     if(iter != change_map->end()) {
         change_descriptor& entry = iter->second;
         entry.oper_complete = false;
-        entry.last_event = CREAT;
+        entry.last_event = ChangeDescriptor::EventTypeEnum::CREAT;
         entry.timestamp = time(NULL);
     } else {
         change_descriptor entry;
@@ -232,9 +238,9 @@ void lustre_create(const char *fidstr_cstr, const char *parent_fidstr, const cha
         entry.object_name = object_name;
         entry.lustre_path = lustre_path;
         entry.oper_complete = false;
-        entry.last_event = CREAT;
+        entry.last_event = ChangeDescriptor::EventTypeEnum::CREAT;
         entry.timestamp = time(NULL);
-        entry.object_type = _FILE;
+        entry.object_type = ChangeDescriptor::ObjectTypeEnum::FILE;
         (*change_map)[fidstr] = entry;
     }
 
@@ -258,7 +264,7 @@ void lustre_mtime(const char *fidstr_cstr, const char *parent_fidstr, const char
         //entry.parent_fidstr = parent_fidstr;
         //entry.lustre_path = lustre_path;
         //entry.object_name = object_name;
-        entry.last_event = OTHER;
+        entry.last_event = ChangeDescriptor::EventTypeEnum::OTHER;
         entry.oper_complete = false;
         entry.timestamp = time(NULL);
         (*change_map)[fidstr] = entry;
@@ -339,52 +345,52 @@ void lustre_write_change_table_to_str(char *buffer, const size_t buffer_size) {
 
 }
 
-
-
-
-
-
 void lustre_print_change_table() {
     char buffer[5012];
     lustre_write_change_table_to_str(buffer, 5012);
     printf("%s", buffer);
 }
 
+
 // processes change table by writing records ready to be sent to iRODS into 
-// the json string in buffer.  Delete the records that are written.
-void process_table_entries_into_json(char *json_buffer, const size_t buffer_size) {
+// irodsLustreApiInp_t structure formatted by capnproto.
+// Note:  The irodsLustreApiInp_t::buf is malloced and must be freed by callerrodsLustreApiInp_t.
+void write_change_table_to_capnproto_buf(irodsLustreApiInp_t *inp) {
 
     boost::shared_lock<boost::shared_mutex> lock(change_table_mutex);
 
     std::map<std::string, change_descriptor> *change_map = get_change_map_instance();
-    json_map change_map_json;
-    jeayeson::array_t rows;
+
+    //initialize capnproto message
+    capnp::MallocMessageBuilder message;
+    ChangeMap::Builder changeMap = message.initRoot<ChangeMap>();
+
+    changeMap.setLustreRootPath(lustre_root_path);
+    changeMap.setResourceId(resource_id);
+    changeMap.setRegisterPath(register_path);
+
+    // TODO investigate this
+    size_t write_count = change_map->size();
+    capnp::List<ChangeDescriptor>::Builder entries = changeMap.initEntries(write_count);
 
     unsigned long cnt = 0;
     for (auto iter = change_map->begin(); iter != change_map->end();) {
-        cnt++;
 
-        json_map row;
         change_descriptor fields = iter->second;
 
         if (fields.oper_complete) {
-            row["fidstr"] = iter->first;
-            row["parent_fidstr"] = fields.parent_fidstr;
-            row["object_type"] = object_type_to_str(fields.object_type);
-            row["object_name"] = fields.object_name;
-            row["lustre_path"] = fields.lustre_path;
-            row["event_type"] = event_type_to_str(fields.last_event);
-            row["file_size"] = fields.file_size;
-            rows.push_back(row);
+            entries[cnt].setFidstr(iter->first);
+            entries[cnt].setParentFidstr(fields.parent_fidstr);
+            entries[cnt].setObjectType(fields.object_type);
+            entries[cnt].setObjectName(fields.object_name);
+            entries[cnt].setLustrePath(fields.lustre_path);
+            entries[cnt].setEventType(fields.last_event);
+            entries[cnt].setFileSize(fields.file_size);
 
             // delete entry from table 
             iter = change_map->erase(iter);
 
-            // break out if we think we will exceed buffer
-            // TODO find a better way to detect if we're getting close 
-            if (cnt > buffer_size / 300) {
-                break;
-            }
+            ++cnt;
 
         } else {
             ++iter;
@@ -392,21 +398,12 @@ void process_table_entries_into_json(char *json_buffer, const size_t buffer_size
         
     }
 
-    change_map_json["change_records"] = rows;
-    change_map_json["lustre_root_path"] = lustre_root_path;
-    change_map_json["register_path"] = register_path;
-    change_map_json["resource_id"] = resource_id;
+    kj::Array<capnp::word> array = capnp::messageToFlatArray(message);
+    size_t message_size = array.size() * sizeof(capnp::word);
 
-    //std::stringstream ss;
-    //ss << change_map_json;
-    std::string const json_str = change_map_json.to_string();
-
-    printf("count = %lu strlen = %lu\n", cnt, json_str.size());
-
-    if (json_str.length() > buffer_size-1) {
-        // TODO error
-    }
-    snprintf(json_buffer, buffer_size, "%s", json_str.c_str());
+    inp->buf = (unsigned char*)malloc(message_size);
+    inp->buflen = message_size;
+    memcpy(inp->buf, std::begin(array), message_size);
 }
     
 
@@ -421,36 +418,36 @@ std::map<std::string, change_descriptor> *get_change_map_instance() {
     return change_map;
 }
 
-std::string event_type_to_str(create_delete_event_type_enum type) {
+std::string event_type_to_str(ChangeDescriptor::EventTypeEnum type) {
     switch (type) {
-        case OTHER:
+        case ChangeDescriptor::EventTypeEnum::OTHER:
             return "OTHER";
             break;
-        case CREAT:
+        case ChangeDescriptor::EventTypeEnum::CREAT:
             return "CREAT";
             break;
-        case UNLINK:
+        case ChangeDescriptor::EventTypeEnum::UNLINK:
             return "UNLINK";
             break;
-        case RMDIR:
+        case ChangeDescriptor::EventTypeEnum::RMDIR:
             return "RMDIR";
             break;
-        case MKDIR:
+        case ChangeDescriptor::EventTypeEnum::MKDIR:
             return "MKDIR";
             break;
-        case RENAME:
+        case ChangeDescriptor::EventTypeEnum::RENAME:
             return "RENAME";
             break;
     }
     return "";
 }
 
-std::string object_type_to_str(object_type_enum type) {
+std::string object_type_to_str(ChangeDescriptor::ObjectTypeEnum type) {
     switch (type) {
-        case _FILE:
+        case ChangeDescriptor::ObjectTypeEnum::FILE: 
             return "FILE";
             break;
-        case _DIR:
+        case ChangeDescriptor::ObjectTypeEnum::DIR:
             return "DIR";
             break;
     }

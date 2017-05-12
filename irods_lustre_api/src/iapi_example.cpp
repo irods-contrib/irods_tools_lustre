@@ -57,11 +57,11 @@ int main( int, char** ) {
 
     irodsLustreApiInp_t inp;
     memset( &inp, 0, sizeof( inp ) );
-    inp.change_log_json = "{"
+    /*inp.change_log_json = "{"
             "\"employee\": {"
             "\"name\": \"justin james\","
             "\"dob\": \"08/27/1971\"}"
-            "}";
+            "}";*/
 
     void *tmp_out = NULL;
     status = procApiRequest( conn, 15001, &inp, NULL,

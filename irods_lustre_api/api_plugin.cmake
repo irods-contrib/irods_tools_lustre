@@ -65,6 +65,8 @@ foreach(PLUGIN ${IRODS_API_PLUGINS})
     ${IRODS_EXTERNALS_FULLPATH_ARCHIVE}/lib/libarchive.so
     ${OPENSSL_CRYPTO_LIBRARY}
     /usr/lib/irods/plugins/database/libpostgres.so
+    /usr/local/lib/libcapnp.so
+    /usr/local/lib/libkj.so
     )
 
   target_compile_definitions(${PLUGIN} PRIVATE ${IRODS_API_PLUGIN_COMPILE_DEFINITIONS_${PLUGIN}} ${IRODS_COMPILE_DEFINITIONS} BOOST_SYSTEM_NO_DEPRECATED)
