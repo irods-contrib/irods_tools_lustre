@@ -56,7 +56,8 @@ void irods_api_client_main() {
 
         printf("irods client running\n");
 
-        while (get_change_table_size() > 0) {
+        // TODO - if all we have is entries where oper_complete is false, this will loop
+        while (entries_ready_to_process()) {
             irodsLustreApiInp_t inp;
             memset( &inp, 0, sizeof( inp ) );
             write_change_table_to_capnproto_buf(&inp);

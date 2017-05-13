@@ -20,7 +20,7 @@ void remove_fidstr_from_table(const char *fidstr);
 void lustre_print_change_table();
 void lustre_write_change_table_to_str(char *buffer, const size_t buffer_size);
 void write_change_table_to_capnproto_buf(irodsLustreApiInp_t *inp);
-size_t get_change_table_size();
+bool entries_ready_to_process();
 
 
 #ifdef __cplusplus
@@ -30,15 +30,20 @@ size_t get_change_table_size();
 
 #ifdef __cplusplus
 
-#include <map>
 #include <string>
 #include <ctime>
+#include <boost/multi_index_container.hpp>
+#include <boost/multi_index/sequenced_index.hpp>
+#include <boost/multi_index/member.hpp>
+#include <boost/multi_index/hashed_index.hpp>
+
 
 //enum create_delete_event_type_enum { OTHER, CREAT, UNLINK, RMDIR, MKDIR, RENAME };
 //enum object_type_enum { _FILE, _DIR };
 //
 
 struct change_descriptor {
+    std::string                   fidstr;
     std::string                   parent_fidstr;
     std::string                   object_name;
     std::string                   lustre_path;     // the lustre_path can be ascertained by the parent_fid and object_name
@@ -53,7 +58,25 @@ struct change_descriptor {
     off_t                         file_size;
 };
 
-std::map<std::string, change_descriptor> *get_change_map_instance();
+typedef boost::multi_index::multi_index_container<
+  change_descriptor,
+  boost::multi_index::indexed_by<
+    boost::multi_index::sequenced<>,
+    boost::multi_index::hashed_unique<
+      boost::multi_index::member<
+        change_descriptor, std::string, &change_descriptor::fidstr
+      >
+    >,
+    boost::multi_index::hashed_non_unique<
+      boost::multi_index::member<
+        change_descriptor, bool, &change_descriptor::oper_complete
+      >
+    >
+
+  >
+> change_map_t;
+
+change_map_t *get_change_map_instance();
 
 #endif
 
