@@ -15,7 +15,9 @@
 //#include <boost/interprocess/sync/named_upgradable_mutex.hpp>
 
 #include "lustre_change_table.hpp"
-#include "../../irods_lustre_api/src/inout_structs.h"
+//#include "../../irods_lustre_api/src/inout_structs.h"
+#include "inout_structs.h"
+#include "logging.hpp"
 
 // capnproto
 #include "change_table.capnp.h"
@@ -52,8 +54,8 @@ void lustre_close(const char *fidstr_cstr, const char *parent_fidstr, const char
     struct stat st;
     int result = stat(lustre_path.c_str(), &st);
 
-    printf("stat(%s, &st)\n", lustre_path.c_str());
-    printf("handle_close:  stat_result = %i, file_size = %ld\n", result, st.st_size);
+    LOG(LOG_DBG, "stat(%s, &st)\n", lustre_path.c_str());
+    LOG(LOG_DBG, "handle_close:  stat_result = %i, file_size = %ld\n", result, st.st_size);
 
     auto iter = change_map.find(fidstr);
     if(iter != change_map.end()) {
@@ -62,7 +64,6 @@ void lustre_close(const char *fidstr_cstr, const char *parent_fidstr, const char
         if (result == 0)
             change_map.modify(iter, [st](change_descriptor &cd){ cd.file_size = st.st_size; });
     } else {
-        std::cout << "CLOSE did not find " << fidstr << std::endl;
         // this is probably an append so no file update is done
         change_descriptor entry;
         entry.fidstr = fidstr;
@@ -207,14 +208,19 @@ void lustre_rename(const char *fidstr_cstr, const char *parent_fidstr, const cha
         entry.last_event = ChangeDescriptor::EventTypeEnum::RENAME;
         entry.timestamp = time(NULL);
         if (is_dir) {
+            entry.object_type = ChangeDescriptor::ObjectTypeEnum::DIR;
+        } else  {
+            entry.object_type = ChangeDescriptor::ObjectTypeEnum::FILE;
+        }
+        /*if (is_dir) {
             change_map.modify(iter, [](change_descriptor &cd){ cd.object_type = ChangeDescriptor::ObjectTypeEnum::DIR; });
         } else {
             change_map.modify(iter, [](change_descriptor &cd){ cd.object_type = ChangeDescriptor::ObjectTypeEnum::FILE; });
-        }
+        }*/
         get_change_map_instance()->push_back(entry);
     }
 
-    printf("rename:  old_lustre_path = %s\n", old_lustre_path.c_str());
+    LOG(LOG_DBG, "rename:  old_lustre_path = %s\n", old_lustre_path.c_str());
 
     if (is_dir) {
 
@@ -306,7 +312,7 @@ void lustre_trunc(const char *fidstr_cstr, const char *parent_fidstr, const char
     struct stat st;
     int result = stat(lustre_path.c_str(), &st);
 
-    printf("handle_trunc:  stat_result = %i, file_size = %ld\n", result, st.st_size);
+    LOG(LOG_DBG, "handle_trunc:  stat_result = %i, file_size = %ld\n", result, st.st_size);
 
     auto iter = change_map.find(fidstr);
     if(iter != change_map.end()) {
@@ -370,7 +376,7 @@ void lustre_write_change_table_to_str(char *buffer, const size_t buffer_size) {
 void lustre_print_change_table() {
     char buffer[5012];
     lustre_write_change_table_to_str(buffer, 5012);
-    printf("%s", buffer);
+    LOG(LOG_DBG, "%s", buffer);
 }
 
 
@@ -398,9 +404,9 @@ void write_change_table_to_capnproto_buf(irodsLustreApiInp_t *inp) {
     unsigned long cnt = 0;
     for (auto iter = change_map.begin(); iter != change_map.end();) {
 
-        printf("fidstr=%s oper_complete=%i\n", iter->fidstr.c_str(), iter->oper_complete);
+        LOG(LOG_DBG, "fidstr=%s oper_complete=%i\n", iter->fidstr.c_str(), iter->oper_complete);
 
-        std::cout << "change_map size = " << change_map.size() << std::endl;
+        LOG(LOG_DBG, "change_map size = %lu\n", change_map.size()); 
 
         if (iter->oper_complete) {
             entries[cnt].setFidstr(iter->fidstr);
@@ -416,7 +422,7 @@ void write_change_table_to_capnproto_buf(irodsLustreApiInp_t *inp) {
 
             ++cnt;
 
-            std::cout << "after erase change_map size = " << change_map.size() << std::endl;
+            LOG(LOG_DBG, "after erase change_map size = %lu\n", change_map.size());
 
         } else {
             ++iter;
@@ -492,7 +498,7 @@ bool entries_ready_to_process() {
     // get change map with size index
     auto &change_map = get_change_map_instance()->get<2>();
     bool ready = change_map.count(true) > 0;
-    std::cout << "entries_ready_to_process = " << ready << std::endl;
+    LOG(LOG_INFO, "entries_ready_to_process = %i\n", ready);
     return ready; 
 }
 

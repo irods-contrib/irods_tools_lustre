@@ -4,5 +4,6 @@
         "register_path": "/tempZone/lustre"
         "resource_name": "demoResc"
         "resource_id": 10014
+        "log_level": "LOG_DBG"
 }
 

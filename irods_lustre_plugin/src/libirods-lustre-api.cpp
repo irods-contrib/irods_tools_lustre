@@ -10,11 +10,14 @@
 
 #include "boost/lexical_cast.hpp"
 
+#include "database_routines.hpp"
+
 // =-=-=-=-=-=-=-
 // stl includes
 #include <sstream>
 #include <string>
 #include <iostream>
+#include <vector>
 
 // json header
 //#include <jeayeson/jeayeson.hpp>
@@ -26,7 +29,7 @@
 #pragma push_macro("ERROR")
 #undef ERROR
 
-#include "../../irods_lustre_client/src/change_table.capnp.h"
+#include "../../lustre_irods_connector/src/change_table.capnp.h"
 #include <capnp/message.h>
 #include <capnp/serialize-packed.h>
 
@@ -34,6 +37,7 @@
 #pragma pop_macro("ERROR")
 
 #include "inout_structs.h"
+#include "database_routines.hpp"
 
 int cmlExecuteNoAnswerSql( const char *sql, icatSessionStruct *icss );
 int cmlGetStringValueFromSql( const char *sql, char *cVal, int cValSize, std::vector<std::string> &bindVars, icatSessionStruct *icss );

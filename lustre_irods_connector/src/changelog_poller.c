@@ -1,11 +1,6 @@
 /*
- * Lustre changlog reader (lcap client) for iRODS.
+ * LCAP and Lustre libraries 
  */
-
-
-// TODO Issues:
-//   No event for file append.
-//   No event for file update time.
 
 
 #ifdef HAVE_CONFIG_H
@@ -20,38 +15,33 @@
 #include <zmq.h>
 
 #include "lcap_client.h"
+
 #include "irods_ops.h"
 #include "rodsDef.h"
+#include "config.h"
 #include "lustre_change_table.hpp"
 
-#ifndef LPX64
-# define LPX64   "%#llx"
+#include "logging.hpp"
 
+#ifndef LPX64
+#define LPX64   "%#llx"
 static inline bool fid_is_zero(const lustre_fid *fid) {
     return fid->f_seq == 0 && fid->f_oid == 0;
 }
 #endif
 
-#define SLEEP_TIME 5
+extern char mdtname[];
+extern char lustre_root_path[];
+extern char register_path[];
+extern char resource_name[];
+extern int64_t resource_id;
 
-const char *mdtname = "lustre01-MDT0000";
-const char *lustre_root_path = "/lustre01";
-const char *register_path = "/tempZone/lustre";
-const char *resource_name = "demoResc";
 
-int sync_modify_time(const char *lustre_full_path, const char *irods_path) {
+struct lcap_cl_ctx      *ctx = NULL;
+int                     flags = LCAP_CL_BLOCK;
 
-    struct stat file_stat;
-    int rc = 0;
-
-    rc = stat(lustre_full_path, &file_stat);
-    if(rc < 0) {
-        return rc;
-    }
-
-    return update_data_object_modify_time(irods_path, file_stat.st_mtime);
-
-}
+#define CHANGELOG_POLL_INTERVAL 5
+#define UPDATE_IRODS_INTERVAL   9
 
 // Returns the path in irods for a file in lustre.  
 // Precondition:  irods_path is a buffer of size MAX_NAME_LEN
@@ -102,7 +92,7 @@ void print_paths(struct changelog_rec *rec, const char *root_path) {
     snprintf(parent_fid, MAX_NAME_LEN, DFID_NOBRACE, PFID(&rec->cr_pfid));
     llapi_fid2path(root_path, parent_fid, parent_path, MAX_NAME_LEN, &recno, &linkno);
 
-    printf("Filename: %s\nParentPath: %s\n", filename, parent_path);
+    LOG(LOG_DBG, "Filename: %s\nParentPath: %s\n", filename, parent_path);
     
     switch (rec->cr_type) {
         case CL_RENAME:
@@ -110,7 +100,7 @@ void print_paths(struct changelog_rec *rec, const char *root_path) {
             snprintf(old_filename, MAX_NAME_LEN, "%.*s", (int)changelog_rec_snamelen(rec), changelog_rec_sname(rec));
             snprintf(old_parent_fid, MAX_NAME_LEN, DFID_NOBRACE, PFID(&rnm->cr_spfid));
             llapi_fid2path(root_path, old_parent_fid, old_parent_path, MAX_NAME_LEN, &recno, &linkno);
-            printf("Old Filename: %s\nOld ParentPath: %s\n", old_filename, old_parent_path);
+            LOG(LOG_DBG, "Old Filename: %s\nOld ParentPath: %s\n", old_filename, old_parent_path);
 
             break;
         default:
@@ -119,6 +109,10 @@ void print_paths(struct changelog_rec *rec, const char *root_path) {
     }
 }
 
+// for rename - the overwritten file's fidstr
+void get_overwritten_fidstr_from_record(struct changelog_rec *rec, char *fidstr) {
+    snprintf(fidstr, MAX_NAME_LEN, DFID_NOBRACE, PFID(&rec->cr_tfid));
+}
 
 void get_fidstr_from_record(struct changelog_rec *rec, char *fidstr) {
 
@@ -136,6 +130,7 @@ void get_fidstr_from_record(struct changelog_rec *rec, char *fidstr) {
     }
 
 }
+
 
 // Determines if the object (file, dir) from the changelog record still exists in Lustre.
 bool object_exists_in_lustre(const char *root_path, struct changelog_rec *rec) {
@@ -179,24 +174,24 @@ int get_full_path_from_record(const char *root_path, struct changelog_rec *rec, 
     rc = llapi_fid2path(root_path, fidstr, lustre_full_path, MAX_NAME_LEN, &recno, &linkno);
 
     if (rc < 0) {
-        fprintf(stderr, "llapi_fid2path in get_full_path_from_record() returned an error.");
+        LOG(LOG_ERR, "llapi_fid2path in get_full_path_from_record() returned an error.");
         return -1;
     }
 
     // add root path to lustre_full_path
-    char temp[MAX_NAME_LEN] = "";
+    char temp[MAX_NAME_LEN];
     snprintf(temp, MAX_NAME_LEN, "%s%s%s", root_path, "/", lustre_full_path);
-    strncpy(lustre_full_path, temp, MAX_NAME_LEN);
+    snprintf(lustre_full_path, MAX_NAME_LEN, "%s", temp);
 
     return 0;
 }
 
-void not_implemented(const char *root_path, const char *lustre_path) {
-    printf("OPERATION NOT YET IMPLEMENTED\n");
+void not_implemented(const char *fidstr, const char *parent_fidstr, const char *object_path, const char *lustre_path) {
+    LOG(LOG_DBG, "OPERATION NOT YET IMPLEMENTED\n");
 }
 
 
-void (*lustre_operators[CL_LAST])(const char *, const char *) =
+void (*lustre_operators[CL_LAST])(const char *, const char *, const char *, const char *) =
 {   &not_implemented,           // CL_MARK
     &lustre_create,             // CL_CREATE
     &lustre_mkdir,              // CL_MKDIR
@@ -205,7 +200,7 @@ void (*lustre_operators[CL_LAST])(const char *, const char *) =
     &not_implemented,           // CL_MKNOD 
     &lustre_unlink,             // CL_UNLINK
     &lustre_rmdir,              // CL_RMDIR
-    &not_implemented,           // CL_RENAME - this is handled as a special case - should never execute
+    &not_implemented,           // CL_RENAME - handled as a special case, this should not be executed
     &not_implemented,           // CL_EXT
     &not_implemented,           // CL_OPEN - not implemented in lustre
     &lustre_close,              // CL_CLOSE
@@ -222,17 +217,28 @@ void (*lustre_operators[CL_LAST])(const char *, const char *) =
 void handle_record(const char *root_path, struct changelog_rec *rec) {
 
     if (rec->cr_type >= CL_LAST) {
-        fprintf(stderr, "Invalid cr_type - %i", rec->cr_type);
+        LOG(LOG_ERR, "Invalid cr_type - %i", rec->cr_type);
         return;
     }
 
     char lustre_full_path[MAX_NAME_LEN] = "";
     char fidstr[MAX_NAME_LEN] = "";
+    char parent_fidstr[MAX_NAME_LEN] = "";
+    char object_name[MAX_NAME_LEN] = "";
 
-    get_full_path_from_record(root_path, rec, lustre_full_path);
     get_fidstr_from_record(rec, fidstr);
+    get_full_path_from_record(root_path, rec, lustre_full_path);
+    snprintf(parent_fidstr, MAX_NAME_LEN, DFID_NOBRACE, PFID(&rec->cr_pfid));
+    snprintf(object_name, MAX_NAME_LEN, "%.*s", rec->cr_namelen, changelog_rec_name(rec));
+
 
     if (rec->cr_type == CL_RENAME) {
+
+        // remove any entries in table 
+        char overwritten_fidstr[MAX_NAME_LEN] = "";
+        get_overwritten_fidstr_from_record(rec, overwritten_fidstr); 
+        remove_fidstr_from_table(overwritten_fidstr);
+
         long long recno = -1;
         int linkno = 0;
         struct changelog_ext_rename *rnm = changelog_rec_rename(rec);
@@ -244,27 +250,23 @@ void handle_record(const char *root_path, struct changelog_rec *rec) {
         snprintf(old_filename, MAX_NAME_LEN, "%.*s", (int)changelog_rec_snamelen(rec), changelog_rec_sname(rec));
         snprintf(old_parent_fid, MAX_NAME_LEN, DFID_NOBRACE, PFID(&rnm->cr_spfid));
         llapi_fid2path(root_path, old_parent_fid, old_parent_path, MAX_NAME_LEN, &recno, &linkno);
-        printf("Original old_parent_path = %s\n", old_parent_path);
         if (strlen(old_parent_path) == 0 || old_parent_path[0] != '/') {
             char temp[MAX_NAME_LEN];
             snprintf(temp, MAX_NAME_LEN, "/%s", old_parent_path);
-            strncpy(old_parent_path, temp, sizeof(temp));
+            snprintf(old_parent_path, MAX_NAME_LEN, "%s", temp);
             //printf("1) Updated old_parent_path = %s\n", old_parent_path);
         }
         if (old_parent_path[strlen(old_parent_path)-1] != '/') {
             char temp[MAX_NAME_LEN];
             snprintf(temp, MAX_NAME_LEN, "%s/", old_parent_path);
-            strncpy(old_parent_path, temp, sizeof(temp));
-            //printf("2) Updated old_parent_path = %s\n", old_parent_path);
+            snprintf(old_parent_path, MAX_NAME_LEN, "%s", temp);
         }
         snprintf(old_lustre_path, MAX_NAME_LEN, "%s%s%s", root_path, old_parent_path, old_filename);
 
-        lustre_rename(fidstr, old_lustre_path, lustre_full_path);
+        lustre_rename(fidstr, parent_fidstr, object_name, lustre_full_path, old_lustre_path);
     } else {
-        (*lustre_operators[rec->cr_type])(fidstr, lustre_full_path);
+        (*lustre_operators[rec->cr_type])(fidstr, parent_fidstr, object_name, lustre_full_path);
     }
-
-
 }
 
 void get_time_str(time_t time, char *time_str) {
@@ -274,32 +276,20 @@ void get_time_str(time_t time, char *time_str) {
         strftime(time_str, sizeof(char[20]), "%b %d %H:%M", timeinfo);
 }
 
+int start_lcap_changelog() {
+    return lcap_changelog_start(&ctx, flags, mdtname, 0LL);
+}
 
-int main(int ac, char **av)
-{
-    struct lcap_cl_ctx      *ctx = NULL;
-    struct changelog_rec    *rec;
-    int                      flags = LCAP_CL_BLOCK;
-    int                      c;
-    int                      rc;
-    char                     clid[64] = {0};
+int finish_lcap_changelog() {
+    return lcap_changelog_fini(ctx);
+}
 
-    rc = instantiate_irods_connection(); 
-    if (rc < 0) {
-        fprintf(stderr, "instantiate_irods_connection failed.  exiting...\n");
-        disconnect_irods_connection();
-        return 1;
-    }
+int poll_change_log_and_process() {
 
-    rc = lcap_changelog_start(&ctx, flags, mdtname, 0LL);
-    if (rc < 0) {
-        fprintf(stderr, "lcap_changelog_start: %s\n", zmq_strerror(-rc));
-        disconnect_irods_connection();
-        return 1;
-    }
+    int                    rc;
+    char                   clid[64] = {0};
+    struct changelog_rec   *rec;
 
-    while (1) {
-    sleep(SLEEP_TIME);
     while ((rc = lcap_changelog_recv(ctx, &rec)) == 0) {
         time_t      secs;
         struct tm   ts;
@@ -307,7 +297,7 @@ int main(int ac, char **av)
         secs = rec->cr_time >> 30;
         gmtime_r(&secs, &ts);
 
-        printf("%llu %02d%-5s %02d:%02d:%02d.%06d %04d.%02d.%02d 0x%x t="DFID,
+        LOG(LOG_INFO, "%llu %02d%-5s %02d:%02d:%02d.%06d %04d.%02d.%02d 0x%x t="DFID,
                rec->cr_index, rec->cr_type, changelog_type2str(rec->cr_type),
                ts.tm_hour, ts.tm_min, ts.tm_sec,
                (int)(rec->cr_time & ((1 << 30) - 1)),
@@ -315,58 +305,42 @@ int main(int ac, char **av)
                rec->cr_flags & CLF_FLAGMASK, PFID(&rec->cr_tfid));
 
         if (rec->cr_flags & CLF_JOBID)
-            printf(" j=%s", (const char *)changelog_rec_jobid(rec));
+            LOG(LOG_INFO, " j=%s", (const char *)changelog_rec_jobid(rec));
 
         if (rec->cr_flags & CLF_RENAME) {
             struct changelog_ext_rename *rnm;
 
             rnm = changelog_rec_rename(rec);
             if (!fid_is_zero(&rnm->cr_sfid))
-                printf(" s="DFID" sp="DFID" %.*s", PFID(&rnm->cr_sfid),
+                LOG(LOG_DBG, " s="DFID" sp="DFID" %.*s", PFID(&rnm->cr_sfid),
                        PFID(&rnm->cr_spfid), (int)changelog_rec_snamelen(rec),
                        changelog_rec_sname(rec));
         }
 
         if (rec->cr_namelen)
-            printf(" p="DFID" %.*s", PFID(&rec->cr_pfid), rec->cr_namelen,
+            LOG(LOG_DBG, " p="DFID" %.*s", PFID(&rec->cr_pfid), rec->cr_namelen,
                    changelog_rec_name(rec));
 
-        printf("\n");
+        LOG(LOG_INFO, "\n");
 
         handle_record(lustre_root_path, rec);
-        print_paths(rec, lustre_root_path);
-        lustre_print_change_table();
- 
+        //lustre_print_change_table();
+
         rc = lcap_changelog_clear(ctx, mdtname, clid, rec->cr_index);
         if (rc < 0) {
-            fprintf(stderr, "lcap_changelog_clear: %s\n", zmq_strerror(-rc));
-            disconnect_irods_connection();
+            LOG(LOG_ERR, "lcap_changelog_clear: %s\n", zmq_strerror(-rc));
+            //disconnect_irods_connection();
             return 1;
         }
 
 
         rc = lcap_changelog_free(ctx, &rec);
         if (rc < 0) {
-            fprintf(stderr, "lcap_changelog_free: %s\n", zmq_strerror(-rc));
-            disconnect_irods_connection();
+            LOG(LOG_ERR, "lcap_changelog_free: %s\n", zmq_strerror(-rc));
+            //disconnect_irods_connection();
             return 1;
         }
     }
-    }
 
-    if (rc && rc != 1) {
-        fprintf(stderr, "lcap_changelog_recv: %s\n", zmq_strerror(-rc));
-        disconnect_irods_connection();
-        return 1;
-    }
-
-    rc = lcap_changelog_fini(ctx);
-    if (rc) {
-        fprintf(stderr, "lcap_changelog_fini: %s\n", zmq_strerror(-rc));
-        disconnect_irods_connection();
-        return 1;
-    }
-
-    disconnect_irods_connection();
     return 0;
 }

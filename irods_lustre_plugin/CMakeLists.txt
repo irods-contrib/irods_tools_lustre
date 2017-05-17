@@ -1,11 +1,21 @@
 cmake_minimum_required(VERSION 3.5.0 FATAL_ERROR) #CPACK_DEBIAN_<COMPONENT>_PACKAGE_NAME
 
+project(irods-lustre-api C CXX)
+
 find_package(IRODS 4.2.0 EXACT REQUIRED)
+
+if (NOT ODBC_LIBRARY)
+  find_library(ODBC_LIBRARY odbc)
+  if (ODBC_LIBRARY)
+    message(STATUS "Found odbc: ${ODBC_LIBRARY}")
+  else()
+    message(FATAL_ERROR "odbc library not found")
+  endif()
+endif()
+
 
 set(CMAKE_C_COMPILER ${IRODS_EXTERNALS_FULLPATH_CLANG}/bin/clang)
 set(CMAKE_CXX_COMPILER ${IRODS_EXTERNALS_FULLPATH_CLANG}/bin/clang++)
-
-project(irods-lustre-api C CXX)
 
 include(${IRODS_TARGETS_PATH})
 
@@ -35,10 +45,29 @@ link_libraries(c++abi)
 include_directories(${IRODS_EXTERNALS_FULLPATH_CLANG}/include/c++/v1)
 set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-z,defs")
 
-include(icommand.cmake)
-include(api_plugin.cmake)
+#include(icommand.cmake)
 
-set(CPACK_PACKAGE_FILE_NAME "irods-lustre-api-plugin${IRODS_PACKAGE_FILE_NAME_SUFFIX}")
+set(
+  IRODS_DATABASE_PLUGINS
+  postgres
+  mysql
+  oracle
+  )
+
+set(CPACK_COMPONENTS_ALL ${IRODS_DATABASE_PLUGINS})
+
+foreach (DB_TYPE ${IRODS_DATABASE_PLUGINS})
+
+include(api_plugin.cmake)
+#set(COMPONENT_NAME ${DB_TYPE})
+
+
+#set(CPACK_RPM_COMPONENT_INSTALL ON)
+
+set(CPACK_COMPONENT_${DB_TYPE}_PACKAGE_FILE_NAME "irods-lustre-api-plugin-${DB_TYPE}${IRODS_PACKAGE_FILE_NAME_SUFFIX}")
+
+message(STATUS "CPACK_PACKAGE_FILE_NAME=${CPACK_PACKAGE_FILE_NAME}")
+
 set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF)
 set(CPACK_COMPONENT_INCLUDE_TOPLEVEL_DIRECTORY OFF)
 set(CPACK_COMPONENTS_GROUPING IGNORE)
@@ -50,7 +79,7 @@ set(CPACK_PACKAGE_CONTACT "Renaissance Computing Institute <info@irods.org>")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "The integrated Rule-Oriented Data System")
 set(CPACK_PACKAGE_VENDOR "Renaissance Computing Institute <info@irods.org>")
 
-set(CPACK_DEB_COMPONENT_INSTALL OFF)
+set(CPACK_DEB_COMPONENT_INSTALL ON)
 set(CPACK_DEBIAN_PACKAGE_SECTION "contrib/science")
 set(CPACK_DEBIAN_COMPRESSION_TYPE "gzip")
 set(CPACK_DEBIAN_PACKAGE_PRIORITY "extra")
@@ -58,7 +87,7 @@ set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://irods.org")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS OFF)
 set(CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION ON)
 
-set(CPACK_RPM_COMPONENT_INSTALL OFF)
+set(CPACK_RPM_COMPONENT_INSTALL ON)
 set(CPACK_RPM_PACKAGE_RELEASE "1")
 set(CPACK_RPM_PACKAGE_LICENSE "BSD-3-Clause")
 set(CPACK_RPM_PACKAGE_VENDOR "iRODS Consortium")
@@ -66,21 +95,25 @@ set(CPACK_RPM_PACKAGE_URL "https://irods.org")
 set(CPACK_RPM_PACKAGE_AUTOREQ 0)
 set(CPACK_RPM_PACKAGE_AUTOPROV 0)
 
-set(CPACK_ARCHIVE_COMPONENT_INSTALL OFF)
+set(CPACK_ARCHIVE_COMPONENT_INSTALL ON)
 
-set(CPACK_DEBIAN_PACKAGE_NAME "irods-lustre-api-plugin")
+set(CPACK_COMPONENT_${DB_TYPE}_DEBIAN_PACKAGE_NAME "irods-lustre-api-plugin-${DB_TYPE}")
 set(CPACK_DEBIAN_PACKAGE_DEPENDS "${IRODS_PACKAGE_DEPENDENCIES_STRING}, irods-runtime (= ${IRODS_VERSION}), libc6")
 
-set(CPACK_RPM_PACKAGE_NAME "irods-lustre-api-plugin")
+set(CPACK_COMPONENT_${DB_TYPE}_RPM_PACKAGE_NAME "irods-lustre-api-plugin-${DB_TYPE}")
 if (IRODS_LINUX_DISTRIBUTION_NAME STREQUAL "centos" OR IRODS_LINUX_DISTRIBUTION_NAME STREQUAL "centos linux")
   set(CPACK_RPM_PACKAGE_REQUIRES "${IRODS_PACKAGE_DEPENDENCIES_STRING}, irods-runtime = ${IRODS_VERSION}, openssl")
 elseif (IRODS_LINUX_DISTRIBUTION_NAME STREQUAL "opensuse")
   set(CPACK_RPM_PACKAGE_REQUIRES "${IRODS_PACKAGE_DEPENDENCIES_STRING}, irods-runtime = ${IRODS_VERSION}, libopenssl1_0_0")
 endif()
 
+message(STATUS "CPACK_GENERATOR ${CPACK_GENERATOR}")
+
 if (NOT CPACK_GENERATOR)
   set(CPACK_GENERATOR ${IRODS_CPACK_GENERATOR} CACHE STRING "CPack generator to use, e.g. {DEB, RPM, TGZ}." FORCE)
   message(STATUS "Setting unspecified CPACK_GENERATOR to ${CPACK_GENERATOR}. This is the correct setting for normal builds.")
 endif()
 
-include(CPack)
+endforeach()
+
+include(CPack) 

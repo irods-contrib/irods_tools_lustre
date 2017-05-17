@@ -17,9 +17,11 @@
 #include "irods_ops.h"
 #include "rodsDef.h"
 #include "lustre_change_table.hpp"
-#include "changelog_config.h"
+#include "config.h"
 
-#include "../../irods_lustre_api/src/inout_structs.h"
+//#include "../../irods_lustre_api/src/inout_structs.h"
+#include "inout_structs.h"
+#include "logging.hpp"
 
 
 #ifndef LPX64
@@ -54,9 +56,6 @@ void irods_api_client_main() {
 
     while (keep_running) {
 
-        printf("irods client running\n");
-
-        // TODO - if all we have is entries where oper_complete is false, this will loop
         while (entries_ready_to_process()) {
             irodsLustreApiInp_t inp;
             memset( &inp, 0, sizeof( inp ) );
@@ -66,27 +65,36 @@ void irods_api_client_main() {
         }
         sleep(UPDATE_IRODS_INTERVAL);
     }
-    printf("irods_client_exiting\n");
+    LOG(LOG_DBG,"irods_client_exiting\n");
 }
 
 
-int main(int ac, char **av) {
+int main(int argc, char **argv) {
 
-    int                     rc;
+    int  rc;
+    const char *config_file = "lustre_irods_connector_config.json";
+    char c;
 
     signal(SIGPIPE, SIG_IGN);
     signal(SIGINT, interrupt_handler);
 
-    const char *filename = "irods_lustre_config.json";
+    while ((c = getopt (argc, argv, "c:")) != -1) {
+        if (c == 'c') {
+            LOG(LOG_DBG,"setting configuration file to %s\n", optarg);
+            config_file = optarg;
+        }
+    } 
 
-    rc = read_config_file(filename);
+    //const char *filename = "irods_lustre_config.json";
+
+    rc = read_config_file(config_file);
     if (rc < 0) {
         return 1;
     }
 
     rc = instantiate_irods_connection(); 
     if (rc < 0) {
-        fprintf(stderr, "instantiate_irods_connection failed.  exiting...\n");
+        LOG(LOG_ERR, "instantiate_irods_connection failed.  exiting...\n");
         disconnect_irods_connection();
         return 1;
     }
@@ -95,26 +103,26 @@ int main(int ac, char **av) {
 
     rc = start_lcap_changelog();
     if (rc < 0) {
-        fprintf(stderr, "lcap_changelog_start: %s\n", zmq_strerror(-rc));
+        LOG(LOG_ERR, "lcap_changelog_start: %s\n", zmq_strerror(-rc));
         disconnect_irods_connection();
         return 1;
     }
 
     while (keep_running) {
-        printf("changelog client running\n");
+        LOG(LOG_INFO,"changelog client polling changelog\n");
         poll_change_log_and_process();
         sleep(CHANGELOG_POLL_INTERVAL);
     }
 
     rc = finish_lcap_changelog();
     if (rc) {
-        fprintf(stderr, "lcap_changelog_fini: %s\n", zmq_strerror(-rc));
+        LOG(LOG_ERR, "lcap_changelog_fini: %s\n", zmq_strerror(-rc));
         disconnect_irods_connection();
         return 1;
     }
 
     disconnect_irods_connection();
 
-    printf("changelog client exiting\n");
+    LOG(LOG_DBG,"changelog client exiting\n");
     return 0;
 }

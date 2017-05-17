@@ -1,7 +1,8 @@
 #ifndef __LUSTRE_CHANGE_TABLE_HPP
 #define __LUSTRE_CHANGE_TABLE_HPP
 
-#include "../../irods_lustre_api/src/inout_structs.h"
+//#include "../../irods_lustre_api/src/inout_structs.h"
+#include "inout_structs.h"
 
 #ifdef __cplusplus
 #include "change_table.capnp.h"
