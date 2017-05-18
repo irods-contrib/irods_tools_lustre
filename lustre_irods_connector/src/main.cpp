@@ -78,14 +78,27 @@ int main(int argc, char **argv) {
     signal(SIGPIPE, SIG_IGN);
     signal(SIGINT, interrupt_handler);
 
-    while ((c = getopt (argc, argv, "c:")) != -1) {
-        if (c == 'c') {
-            LOG(LOG_DBG,"setting configuration file to %s\n", optarg);
-            config_file = optarg;
-        }
+    while ((c = getopt (argc, argv, "c:l:h")) != -1) {
+        switch (c) {
+            case 'c':
+                LOG(LOG_DBG,"setting configuration file to %s\n", optarg);
+                config_file = optarg;
+                break;
+            case 'l':
+                dbgstream = fopen(optarg, "a");
+                if (dbgstream == NULL) {
+                    dbgstream = stdout;
+                    LOG(LOG_ERR, "could not open log file %s... using stdout instead.\n", optarg);
+                } else {
+                    LOG(LOG_DBG, "setting log file to %s\n", optarg);
+                }
+                break;
+           case 'h':
+           case '?':
+                fprintf(stdout, "Usage: lustre_irods_connector [-c <configuration_file>] [-l <log_file>] [-h]\n");
+                return 0;
+        } 
     } 
-
-    //const char *filename = "irods_lustre_config.json";
 
     rc = read_config_file(config_file);
     if (rc < 0) {
@@ -114,6 +127,8 @@ int main(int argc, char **argv) {
         sleep(CHANGELOG_POLL_INTERVAL);
     }
 
+    // clean up before exit
+
     rc = finish_lcap_changelog();
     if (rc) {
         LOG(LOG_ERR, "lcap_changelog_fini: %s\n", zmq_strerror(-rc));
@@ -124,5 +139,10 @@ int main(int argc, char **argv) {
     disconnect_irods_connection();
 
     LOG(LOG_DBG,"changelog client exiting\n");
+
+    if (dbgstream != stdout) {
+        fclose(dbgstream);
+    }
+
     return 0;
 }

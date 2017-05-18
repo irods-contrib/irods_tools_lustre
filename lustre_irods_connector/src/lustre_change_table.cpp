@@ -156,9 +156,15 @@ void lustre_unlink(const char *fidstr_cstr, const char *parent_fidstr, const cha
 
     auto iter = change_map.find(fidstr);
     if(iter != change_map.end()) {   
-        change_map.modify(iter, [](change_descriptor &cd){ cd.oper_complete = true; });
-        change_map.modify(iter, [](change_descriptor &cd){ cd.last_event = ChangeDescriptor::EventTypeEnum::UNLINK; });
-        change_map.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
+
+        // If an add and a delete occur in the same transactional unit, just delete the transaction
+        if (iter->last_event == ChangeDescriptor::EventTypeEnum::CREAT) {
+            change_map.erase(iter);
+        } else {
+            change_map.modify(iter, [](change_descriptor &cd){ cd.oper_complete = true; });
+            change_map.modify(iter, [](change_descriptor &cd){ cd.last_event = ChangeDescriptor::EventTypeEnum::UNLINK; });
+            change_map.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
+       }
     } else {
         change_descriptor entry;
         entry.fidstr = fidstr;

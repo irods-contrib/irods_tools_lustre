@@ -192,8 +192,6 @@ static irods::error serialize_irodsLustreApiOut_ptr_ptr( boost::any _p,
 
 int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsLustreApiOut_t** _out ) {
 
-    //using namespace alt_json;
-
     rodsLog( LOG_NOTICE, "Dynamic API - Lustre API" );
 
     int status;
@@ -208,16 +206,6 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
     ( *_out ) = ( irodsLustreApiOut_t* )malloc( sizeof( irodsLustreApiOut_t ) );
     ( *_out )->status = 0;
 
-    //rodsLog(LOG_NOTICE, "input: [%s]\n", _inp->buf);
-
-    //json_map m { json_data { _inp->buf } };
-
-    //if (m.find("change_records") == m.end() || m.find("lustre_root_path") == m.end() ||
-    //        m.find("register_path") == m.end() || m.find("resource_id") == m.end()) {
-    //    rodsLog(LOG_ERROR, "JSON received is not valid.  %s", _inp->buf);
-    //    return SYS_API_INPUT_ERR;
-    //}
-   
     //const kj::ArrayPtr<const capnp::word> array_ptr{ reinterpret_cast<const capnp::word*>(&(*std::begin(_inp->buf))), 
     //    reinterpret_cast<const capnp::word*>(&(*std::end(_inp->buf)))};
     const kj::ArrayPtr<const capnp::word> array_ptr{ reinterpret_cast<const capnp::word*>(&(*(_inp->buf))), 
@@ -232,21 +220,6 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
     int64_t resource_id = changeMap.getResourceId();
 
     for (ChangeDescriptor::Reader entry : changeMap.getEntries()) {
-    //for (size_t i = 0; i < arr.size(); ++i) {
-        //json_map m2 { json_value { arr[i] } };
-
-        // verify that entry has all required fields
-        /*if (m2.find("event_type") == m2.end() || m2.find("fidstr") == m2.end() ||
-                m2.find("lustre_path") == m2.end() || m2.find("object_name") == m2.end() ||
-                m2.find("object_type") == m2.end() || m2.find("parent_fidstr") == m2.end() ||
-                m2.find("file_size") == m2.end()) {
-
-            // skip entry
-            std::stringstream error_msg; 
-            error_msg << arr[i];
-            rodsLog(LOG_NOTICE, "Skipping entry %s which does not have all of the expected fields.", error_msg.str().c_str());
-            continue;
-        }*/
 
         const ChangeDescriptor::EventTypeEnum event_type = entry.getEventType();
         std::string fidstr(entry.getFidstr().cStr());
@@ -256,11 +229,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
         std::string parent_fidstr(entry.getParentFidstr().cStr());
         int64_t file_size = entry.getFileSize();
 
-        //rodsLog(LOG_NOTICE, "event_type: %s\tfidstr: %s\tlustre_path: %s\tobject_name %s\tobject_type: %s\tparent_fidstr %s\tfile_size %s\n",
-        //        event_type.c_str(), fidstr.c_str(), lustre_path.c_str(), object_name.c_str(), object_type.c_str(), parent_fidstr.c_str(), 
-        //        file_size_str.c_str());
-
-        // Handle changes in iRODS.  For efficiency these use lower level routines and do not trigger dynamic PEPs.
+        // Handle changes in iRODS.  For efficiency many use lower level DB routines and do not trigger dynamic PEPs.
 
         if (event_type == ChangeDescriptor::EventTypeEnum::CREAT) {
             char irods_path[MAX_NAME_LEN];
@@ -303,7 +272,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
 
             char irods_path[MAX_NAME_LEN];
             if (lustre_path_to_irods_path(lustre_path.c_str(), lustre_root_path.c_str(), register_path.c_str(), irods_path) < 0) {
-                rodsLog(LOG_NOTICE, "Skipping mkdir on lustre_path [%s] is not within lustre_root_path [%s].",
+                rodsLog(LOG_NOTICE, "Skipping mkdir on lustre_path [%s] which is not within lustre_root_path [%s].",
                        lustre_path.c_str(), lustre_root_path.c_str());
                 continue;
             }
