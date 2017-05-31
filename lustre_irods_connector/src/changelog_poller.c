@@ -16,9 +16,8 @@
 
 #include "lcap_client.h"
 
-#include "irods_ops.h"
 #include "rodsDef.h"
-#include "config.h"
+#include "config.hpp"
 #include "lustre_change_table.hpp"
 
 #include "logging.hpp"
@@ -30,19 +29,8 @@ static inline bool fid_is_zero(const lustre_fid *fid) {
 }
 #endif
 
-extern char mdtname[];
-extern char lustre_root_path[];
-extern char register_path[];
-extern char resource_name[];
-extern int64_t resource_id;
-
-
 struct lcap_cl_ctx      *ctx = NULL;
 int                     flags = LCAP_CL_BLOCK;
-
-#define CHANGELOG_POLL_INTERVAL 5
-#define UPDATE_IRODS_INTERVAL   9
-
 
 // for rename - the overwritten file's fidstr
 void get_overwritten_fidstr_from_record(struct changelog_rec *rec, char *fidstr) {
@@ -121,12 +109,12 @@ int get_full_path_from_record(const char *root_path, struct changelog_rec *rec, 
     return 0;
 }
 
-void not_implemented(const char *fidstr, const char *parent_fidstr, const char *object_path, const char *lustre_path) {
+void not_implemented(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr, const char *parent_fidstr, const char *object_path, const char *lustre_path) {
     LOG(LOG_DBG, "OPERATION NOT YET IMPLEMENTED\n");
 }
 
 
-void (*lustre_operators[CL_LAST])(const char *, const char *, const char *, const char *) =
+void (*lustre_operators[CL_LAST])(const lustre_irods_connector_cfg_t*, const char *, const char *, const char *, const char *) =
 {   &not_implemented,           // CL_MARK
     &lustre_create,             // CL_CREATE
     &lustre_mkdir,              // CL_MKDIR
@@ -149,7 +137,7 @@ void (*lustre_operators[CL_LAST])(const char *, const char *, const char *, cons
     &not_implemented            // CL_ATIME - irods does not have an access time
 };
 
-void handle_record(const char *root_path, struct changelog_rec *rec) {
+void handle_record(const lustre_irods_connector_cfg_t *config_struct_ptr, struct changelog_rec *rec) {
 
     if (rec->cr_type >= CL_LAST) {
         LOG(LOG_ERR, "Invalid cr_type - %i", rec->cr_type);
@@ -162,7 +150,7 @@ void handle_record(const char *root_path, struct changelog_rec *rec) {
     char object_name[MAX_NAME_LEN] = "";
 
     get_fidstr_from_record(rec, fidstr);
-    get_full_path_from_record(root_path, rec, lustre_full_path);
+    get_full_path_from_record(config_struct_ptr->lustre_root_path, rec, lustre_full_path);
     snprintf(parent_fidstr, MAX_NAME_LEN, DFID_NOBRACE, PFID(&rec->cr_pfid));
     snprintf(object_name, MAX_NAME_LEN, "%.*s", rec->cr_namelen, changelog_rec_name(rec));
 
@@ -184,7 +172,7 @@ void handle_record(const char *root_path, struct changelog_rec *rec) {
 
         snprintf(old_filename, MAX_NAME_LEN, "%.*s", (int)changelog_rec_snamelen(rec), changelog_rec_sname(rec));
         snprintf(old_parent_fid, MAX_NAME_LEN, DFID_NOBRACE, PFID(&rnm->cr_spfid));
-        llapi_fid2path(root_path, old_parent_fid, old_parent_path, MAX_NAME_LEN, &recno, &linkno);
+        llapi_fid2path(config_struct_ptr->lustre_root_path, old_parent_fid, old_parent_path, MAX_NAME_LEN, &recno, &linkno);
         if (strlen(old_parent_path) == 0 || old_parent_path[0] != '/') {
             char temp[MAX_NAME_LEN];
             snprintf(temp, MAX_NAME_LEN, "/%s", old_parent_path);
@@ -196,11 +184,11 @@ void handle_record(const char *root_path, struct changelog_rec *rec) {
             snprintf(temp, MAX_NAME_LEN, "%s/", old_parent_path);
             snprintf(old_parent_path, MAX_NAME_LEN, "%s", temp);
         }
-        snprintf(old_lustre_path, MAX_NAME_LEN, "%s%s%s", root_path, old_parent_path, old_filename);
+        snprintf(old_lustre_path, MAX_NAME_LEN, "%s%s%s", config_struct_ptr->lustre_root_path, old_parent_path, old_filename);
 
-        lustre_rename(fidstr, parent_fidstr, object_name, lustre_full_path, old_lustre_path);
+        lustre_rename(config_struct_ptr, fidstr, parent_fidstr, object_name, lustre_full_path, old_lustre_path);
     } else {
-        (*lustre_operators[rec->cr_type])(fidstr, parent_fidstr, object_name, lustre_full_path);
+        (*lustre_operators[rec->cr_type])(config_struct_ptr, fidstr, parent_fidstr, object_name, lustre_full_path);
     }
 }
 
@@ -211,15 +199,15 @@ void get_time_str(time_t time, char *time_str) {
         strftime(time_str, sizeof(char[20]), "%b %d %H:%M", timeinfo);
 }
 
-int start_lcap_changelog() {
-    return lcap_changelog_start(&ctx, flags, mdtname, 0LL);
+int start_lcap_changelog(const lustre_irods_connector_cfg_t *config_struct_ptr) {
+    return lcap_changelog_start(&ctx, flags, config_struct_ptr->mdtname, 0LL);
 }
 
 int finish_lcap_changelog() {
     return lcap_changelog_fini(ctx);
 }
 
-int poll_change_log_and_process() {
+int poll_change_log_and_process(const lustre_irods_connector_cfg_t *config_struct_ptr) {
 
     int                    rc;
     char                   clid[64] = {0};
@@ -258,10 +246,10 @@ int poll_change_log_and_process() {
 
         LOG(LOG_INFO, "\n");
 
-        handle_record(lustre_root_path, rec);
+        handle_record(config_struct_ptr, rec);
         //lustre_print_change_table();
 
-        rc = lcap_changelog_clear(ctx, mdtname, clid, rec->cr_index);
+        rc = lcap_changelog_clear(ctx, config_struct_ptr->mdtname, clid, rec->cr_index);
         if (rc < 0) {
             LOG(LOG_ERR, "lcap_changelog_clear: %s\n", zmq_strerror(-rc));
             //disconnect_irods_connection();

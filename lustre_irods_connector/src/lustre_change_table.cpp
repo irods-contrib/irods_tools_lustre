@@ -18,6 +18,7 @@
 //#include "../../irods_lustre_api/src/inout_structs.h"
 #include "inout_structs.h"
 #include "logging.hpp"
+#include "config.hpp"
 
 // capnproto
 #include "change_table.capnp.h"
@@ -30,16 +31,14 @@ std::string object_type_to_str(ChangeDescriptor::ObjectTypeEnum type);
 
 //using namespace boost::interprocess;
 
-extern char lustre_root_path[];
-extern char register_path[];
-extern int64_t resource_id;
 
 //static std::string shared_memory_mutex_name = "change_table_mutex";
 static boost::shared_mutex change_table_mutex;
 
 extern "C" {
 
-void lustre_close(const char *fidstr_cstr, const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) {
+void lustre_close(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
+        const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) {
 
     boost::unique_lock<boost::shared_mutex> lock(change_table_mutex);
  
@@ -83,7 +82,8 @@ void lustre_close(const char *fidstr_cstr, const char *parent_fidstr, const char
 
 }
 
-void lustre_mkdir(const char *fidstr_cstr, const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) {
+void lustre_mkdir(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
+        const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) {
 
     boost::unique_lock<boost::shared_mutex> lock(change_table_mutex);
 
@@ -112,7 +112,8 @@ void lustre_mkdir(const char *fidstr_cstr, const char *parent_fidstr, const char
 
 }
 
-void lustre_rmdir(const char *fidstr_cstr, const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) {
+void lustre_rmdir(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
+        const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) {
 
     boost::unique_lock<boost::shared_mutex> lock(change_table_mutex);
 
@@ -144,7 +145,8 @@ void lustre_rmdir(const char *fidstr_cstr, const char *parent_fidstr, const char
 
 }
 
-void lustre_unlink(const char *fidstr_cstr, const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) {
+void lustre_unlink(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
+        const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) {
 
     boost::unique_lock<boost::shared_mutex> lock(change_table_mutex);
 
@@ -158,7 +160,7 @@ void lustre_unlink(const char *fidstr_cstr, const char *parent_fidstr, const cha
     if(iter != change_map.end()) {   
 
         // If an add and a delete occur in the same transactional unit, just delete the transaction
-        if (iter->last_event == ChangeDescriptor::EventTypeEnum::CREAT) {
+        if (iter->last_event == ChangeDescriptor::EventTypeEnum::CREATE) {
             change_map.erase(iter);
         } else {
             change_map.modify(iter, [](change_descriptor &cd){ cd.oper_complete = true; });
@@ -181,7 +183,8 @@ void lustre_unlink(const char *fidstr_cstr, const char *parent_fidstr, const cha
 
 }
 
-void lustre_rename(const char *fidstr_cstr, const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr, const char *old_lustre_path_cstr) {
+void lustre_rename(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
+        const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr, const char *old_lustre_path_cstr) {
 
     boost::unique_lock<boost::shared_mutex> lock(change_table_mutex);
 
@@ -243,7 +246,8 @@ void lustre_rename(const char *fidstr_cstr, const char *parent_fidstr, const cha
 
 }
 
-void lustre_create(const char *fidstr_cstr, const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) {
+void lustre_create(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
+        const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) {
 
     boost::unique_lock<boost::shared_mutex> lock(change_table_mutex);
 
@@ -259,7 +263,7 @@ void lustre_create(const char *fidstr_cstr, const char *parent_fidstr, const cha
         change_map.modify(iter, [object_name](change_descriptor &cd){ cd.object_name = object_name; });
         change_map.modify(iter, [lustre_path](change_descriptor &cd){ cd.lustre_path = lustre_path; });
         change_map.modify(iter, [](change_descriptor &cd){ cd.oper_complete = false; });
-        change_map.modify(iter, [](change_descriptor &cd){ cd.last_event = ChangeDescriptor::EventTypeEnum::CREAT; });
+        change_map.modify(iter, [](change_descriptor &cd){ cd.last_event = ChangeDescriptor::EventTypeEnum::CREATE; });
         change_map.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
     } else {
         change_descriptor entry;
@@ -268,7 +272,7 @@ void lustre_create(const char *fidstr_cstr, const char *parent_fidstr, const cha
         entry.object_name = object_name;
         entry.lustre_path = lustre_path;
         entry.oper_complete = false;
-        entry.last_event = ChangeDescriptor::EventTypeEnum::CREAT;
+        entry.last_event = ChangeDescriptor::EventTypeEnum::CREATE;
         entry.timestamp = time(NULL);
         entry.object_type = ChangeDescriptor::ObjectTypeEnum::FILE;
         get_change_map_instance()->push_back(entry);
@@ -276,7 +280,8 @@ void lustre_create(const char *fidstr_cstr, const char *parent_fidstr, const cha
 
 }
 
-void lustre_mtime(const char *fidstr_cstr, const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) {
+void lustre_mtime(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
+        const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) {
 
     boost::unique_lock<boost::shared_mutex> lock(change_table_mutex);
 
@@ -305,7 +310,8 @@ void lustre_mtime(const char *fidstr_cstr, const char *parent_fidstr, const char
 
 }
 
-void lustre_trunc(const char *fidstr_cstr, const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) { 
+void lustre_trunc(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
+        const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) { 
 
     boost::unique_lock<boost::shared_mutex> lock(change_table_mutex);
 
@@ -389,7 +395,7 @@ void lustre_print_change_table() {
 // processes change table by writing records ready to be sent to iRODS into 
 // irodsLustreApiInp_t structure formatted by capnproto.
 // Note:  The irodsLustreApiInp_t::buf is malloced and must be freed by callerrodsLustreApiInp_t.
-void write_change_table_to_capnproto_buf(irodsLustreApiInp_t *inp) {
+void write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *config_struct_ptr, irodsLustreApiInp_t *inp) {
 
     boost::shared_lock<boost::shared_mutex> lock(change_table_mutex);
 
@@ -400,9 +406,9 @@ void write_change_table_to_capnproto_buf(irodsLustreApiInp_t *inp) {
     capnp::MallocMessageBuilder message;
     ChangeMap::Builder changeMap = message.initRoot<ChangeMap>();
 
-    changeMap.setLustreRootPath(lustre_root_path);
-    changeMap.setResourceId(resource_id);
-    changeMap.setRegisterPath(register_path);
+    changeMap.setLustreRootPath(config_struct_ptr->lustre_root_path);
+    changeMap.setResourceId(config_struct_ptr->irods_resource_id);
+    changeMap.setRegisterPath(config_struct_ptr->irods_register_path);
 
     size_t write_count = change_map.size();
     capnp::List<ChangeDescriptor>::Builder entries = changeMap.initEntries(write_count);
@@ -459,8 +465,8 @@ std::string event_type_to_str(ChangeDescriptor::EventTypeEnum type) {
         case ChangeDescriptor::EventTypeEnum::OTHER:
             return "OTHER";
             break;
-        case ChangeDescriptor::EventTypeEnum::CREAT:
-            return "CREAT";
+        case ChangeDescriptor::EventTypeEnum::CREATE:
+            return "CREATE";
             break;
         case ChangeDescriptor::EventTypeEnum::UNLINK:
             return "UNLINK";

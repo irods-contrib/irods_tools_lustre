@@ -13,7 +13,7 @@ struct ChangeDescriptor {
 
   enum EventTypeEnum {
     other @0;
-    creat @1;
+    create @1;
     unlink @2;
     rmdir @3;
     mkdir @4;

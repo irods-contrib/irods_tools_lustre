@@ -1,9 +1,10 @@
 {
-        "mdtname": "lustre01-MDT0000"
-        "lustre_root_path": "/lustre01"
-        "register_path": "/tempZone/lustre"
-        "resource_name": "demoResc"
-        "resource_id": 10014
-        "log_level": "LOG_DBG"
+        "mdtname": "lustre01-MDT0000",
+        "lustre_root_path": "/lustre01",
+        "irods_register_path": "/tempZone/lustre",
+        "irods_resource_name": "demoResc",
+        "log_level": "LOG_DBG",
+        "changelog_poll_interval_seconds": 5,
+        "update_irods_interval_seconds": 7
 }
 

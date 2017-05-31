@@ -10,18 +10,21 @@
 #include <stdbool.h>
 #include <string.h>
 #include <zmq.h>
+
 #include <signal.h>
 #include <thread>
 #include <stdlib.h>
+#include <iostream>
 
-#include "irods_ops.h"
-#include "rodsDef.h"
+#include "irods_ops.hpp"
 #include "lustre_change_table.hpp"
-#include "config.h"
+#include "config.hpp"
 
-//#include "../../irods_lustre_api/src/inout_structs.h"
+#include "rodsDef.h"
 #include "inout_structs.h"
 #include "logging.hpp"
+
+#include <boost/program_options.hpp>
 
 
 #ifndef LPX64
@@ -32,51 +35,101 @@
 #define LCAP_CL_BLOCK   (0x01 << 1)
 #endif
 
-#define CHANGELOG_POLL_INTERVAL 5
-#define UPDATE_IRODS_INTERVAL   9
-
 struct lcap_cl_ctx;
-//int lcap_changelog_start(struct lcap_cl_ctx **pctx, int flags, const char *mdtname, long long startrec);
-//int lcap_changelog_fini(struct lcap_cl_ctx *ctx);
 
 extern "C" {
-    int start_lcap_changelog();
-    int poll_change_log_and_process();
+    int start_lcap_changelog(const lustre_irods_connector_cfg_t*);
+    int poll_change_log_and_process(const lustre_irods_connector_cfg_t*);
     int finish_lcap_changelog();
 }
 
-static volatile int keep_running = 1;
+static char * s_recv_noblock(void *socket) {
+    char buffer [256];
+    int size = zmq_recv (socket, buffer, 255, ZMQ_NOBLOCK);
+    if (size == -1)
+        return NULL;
+    buffer[size] = '\0';
+    return strndup (buffer, sizeof(buffer) - 1);
+}
+
+//  Convert C string to 0MQ string and send to socket
+static int s_send (void *socket, const char *string) {
+    int size = zmq_send (socket, string, strlen (string), 0);
+    return size;
+}
+
+//  Sends string as 0MQ string, as multipart non-terminal
+static int s_sendmore (void *socket, const char *string) {
+    int size = zmq_send (socket, string, strlen (string), ZMQ_SNDMORE);
+    return size;
+}
+
+
+std::atomic<bool> keep_running(true);
 
 void interrupt_handler(int dummy) {
-    keep_running = 0;
+    keep_running.store(false);
 }
 
 // irods api client thread main routine
-void irods_api_client_main() {
+// this is the main loop that reads the change entries in memory and sends them to iRODS via the API.
+void irods_api_client_main(std::shared_ptr<lustre_irods_connection> conn, const lustre_irods_connector_cfg_t *config_struct_ptr) {
 
-    while (keep_running) {
+    void *context = zmq_ctx_new ();
+    void *subscriber = zmq_socket (context, ZMQ_SUB);
+    zmq_connect (subscriber, "tcp://localhost:5563");
+    zmq_setsockopt (subscriber, ZMQ_SUBSCRIBE, "changetable_readers", 1);
 
+    //while (keep_running.load()) {
+    while (true) {
+
+        bool quit = false;
         while (entries_ready_to_process()) {
             irodsLustreApiInp_t inp;
             memset( &inp, 0, sizeof( inp ) );
-            write_change_table_to_capnproto_buf(&inp);
-            send_change_map_to_irods(&inp);
+            write_change_table_to_capnproto_buf(config_struct_ptr, &inp);
+            conn->send_change_map_to_irods(&inp);
             free(inp.buf);
         }
-        sleep(UPDATE_IRODS_INTERVAL);
+
+        // see if there is a quit message, if so terminate
+        char *address = s_recv_noblock(subscriber);
+        char *contents = s_recv_noblock(subscriber);
+        printf("address and contents: %p %p\n", (void*)address, (void*)contents);
+        if (address && contents && strcmp(contents, "terminate") == 0) {
+            LOG(LOG_DBG, "irods client received a terminate message\n");
+            quit = true;
+        }
+        if (address) 
+            free(address);
+        if (contents)
+            free(contents);
+        if (quit) 
+            break;
+
+        sleep(config_struct_ptr->update_irods_interval_seconds);
     }
+
+    zmq_close (subscriber);
+    zmq_ctx_destroy (context);
+
     LOG(LOG_DBG,"irods_client_exiting\n");
 }
 
 
 int main(int argc, char **argv) {
 
-    int  rc;
     const char *config_file = "lustre_irods_connector_config.json";
     char c;
 
     signal(SIGPIPE, SIG_IGN);
-    signal(SIGINT, interrupt_handler);
+    
+    struct sigaction sa;
+    memset( &sa, 0, sizeof(sa) );
+    sa.sa_handler = interrupt_handler;
+    sigfillset(&sa.sa_mask);
+    sigaction(SIGINT,&sa,NULL);
+
 
     while ((c = getopt (argc, argv, "c:l:h")) != -1) {
         switch (c) {
@@ -98,51 +151,73 @@ int main(int argc, char **argv) {
                 fprintf(stdout, "Usage: lustre_irods_connector [-c <configuration_file>] [-l <log_file>] [-h]\n");
                 return 0;
         } 
-    } 
+    }
+ 
+    int  rc;
 
-    rc = read_config_file(config_file);
+    lustre_irods_connector_cfg_t config_struct;
+    rc = read_config_file(config_file, &config_struct);
     if (rc < 0) {
         return 1;
     }
 
-    rc = instantiate_irods_connection(); 
+  
+    std::shared_ptr<lustre_irods_connection> conn = std::make_shared<lustre_irods_connection>();
+
+    rc = conn->instantiate_irods_connection(); 
     if (rc < 0) {
         LOG(LOG_ERR, "instantiate_irods_connection failed.  exiting...\n");
-        disconnect_irods_connection();
         return 1;
     }
 
-    std::thread irods_api_client_thread(irods_api_client_main);
+    // read the resource id from resource name
+    rc = conn->populate_irods_resc_id(&config_struct); 
+    if (rc < 0) {
+        LOG(LOG_ERR, "populate_irods_resc_id returned an error\n");
+        return 1;
+    }
 
-    rc = start_lcap_changelog();
+    // start a pub/sub publisher which is used to terminate threads
+    void *context = zmq_ctx_new ();
+    void *publisher = zmq_socket (context, ZMQ_PUB);
+    zmq_bind (publisher, "tcp://*:5563");
+
+    // start the thread that sends changes to iRODS
+    std::thread irods_api_client_thread(irods_api_client_main, conn, &config_struct);
+
+    rc = start_lcap_changelog(&config_struct);
     if (rc < 0) {
         LOG(LOG_ERR, "lcap_changelog_start: %s\n", zmq_strerror(-rc));
-        disconnect_irods_connection();
         return 1;
     }
 
-    while (keep_running) {
+    while (keep_running.load()) {
+
         LOG(LOG_INFO,"changelog client polling changelog\n");
-        poll_change_log_and_process();
-        sleep(CHANGELOG_POLL_INTERVAL);
+        poll_change_log_and_process(&config_struct);
+        sleep(config_struct.changelog_poll_interval_seconds);
     }
 
-    // clean up before exit
+    // send message to threads to terminate
+    s_sendmore(publisher, "changetable_readers");
+    s_send(publisher, "terminate");
+
+    irods_api_client_thread.join();
+
+    zmq_close(publisher);
 
     rc = finish_lcap_changelog();
     if (rc) {
         LOG(LOG_ERR, "lcap_changelog_fini: %s\n", zmq_strerror(-rc));
-        disconnect_irods_connection();
         return 1;
     }
-
-    disconnect_irods_connection();
-
-    LOG(LOG_DBG,"changelog client exiting\n");
+    LOG(LOG_ERR, "finish_lcap_changelog exited normally\n");
 
     if (dbgstream != stdout) {
         fclose(dbgstream);
     }
 
+    LOG(LOG_DBG,"changelog client exiting\n");
+     
     return 0;
 }
