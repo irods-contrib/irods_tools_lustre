@@ -1,18 +1,16 @@
 #include <string>
 #include <ctime>
 #include <sstream>
-
+#include <mutex>
+#include <thread>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
+
 // boost headers
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/lexical_cast.hpp>
-#include <boost/thread/mutex.hpp>
-#include <boost/thread.hpp>
-//#include <boost/interprocess/sync/named_mutex.hpp>
-//#include <boost/interprocess/sync/named_upgradable_mutex.hpp>
 
 #include "lustre_change_table.hpp"
 //#include "../../irods_lustre_api/src/inout_structs.h"
@@ -31,22 +29,20 @@ std::string object_type_to_str(ChangeDescriptor::ObjectTypeEnum type);
 
 //using namespace boost::interprocess;
 
-
-//static std::string shared_memory_mutex_name = "change_table_mutex";
-static boost::shared_mutex change_table_mutex;
+//static boost::shared_mutex change_table_mutex;
+std::mutex change_table_mutex;
 
 extern "C" {
 
 void lustre_close(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
-        const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) {
+        const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr, void *change_map_void_ptr) {
 
-    boost::unique_lock<boost::shared_mutex> lock(change_table_mutex);
+    change_map_t *change_map = static_cast<change_map_t*>(change_map_void_ptr);
+
+    std::lock_guard<std::mutex> lock(change_table_mutex);
  
-    //named_upgradable_mutex named_mtx(open_or_create, shared_memory_mutex_name.c_str());
-    //named_mtx.lock();
-
     // get change map with hashed index of fidstr
-    auto &change_map = get_change_map_instance()->get<1>();
+    auto &change_map_fidstr = change_map->get<1>();
     std::string fidstr(fidstr_cstr);
     std::string lustre_path(lustre_path_cstr);
 
@@ -56,15 +52,16 @@ void lustre_close(const lustre_irods_connector_cfg_t *config_struct_ptr, const c
     LOG(LOG_DBG, "stat(%s, &st)\n", lustre_path.c_str());
     LOG(LOG_DBG, "handle_close:  stat_result = %i, file_size = %ld\n", result, st.st_size);
 
-    auto iter = change_map.find(fidstr);
-    if(iter != change_map.end()) {
-        change_map.modify(iter, [](change_descriptor &cd){ cd.oper_complete = true; });
-        change_map.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
+    auto iter = change_map_fidstr.find(fidstr);
+    if(iter != change_map_fidstr.end()) {
+        change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.oper_complete = true; });
+        change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
         if (result == 0)
-            change_map.modify(iter, [st](change_descriptor &cd){ cd.file_size = st.st_size; });
+            change_map_fidstr.modify(iter, [st](change_descriptor &cd){ cd.file_size = st.st_size; });
     } else {
         // this is probably an append so no file update is done
         change_descriptor entry;
+        memset(&entry, 0, sizeof(entry));
         entry.fidstr = fidstr;
         entry.parent_fidstr = parent_fidstr;
         entry.object_name = object_name;
@@ -77,28 +74,31 @@ void lustre_close(const lustre_irods_connector_cfg_t *config_struct_ptr, const c
             entry.file_size = st.st_size;
 
         // todo is this getting deleted
-        get_change_map_instance()->push_back(entry);
+        change_map->push_back(entry);
     }
 
 }
 
 void lustre_mkdir(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
-        const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) {
+        const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr, void *change_map_void_ptr) {
 
-    boost::unique_lock<boost::shared_mutex> lock(change_table_mutex);
+    change_map_t *change_map = static_cast<change_map_t*>(change_map_void_ptr);
+
+    std::lock_guard<std::mutex> lock(change_table_mutex);
 
     // get change map with hashed index of fidstr
-    auto &change_map = get_change_map_instance()->get<1>();
+    auto &change_map_fidstr = change_map->get<1>();
     std::string fidstr(fidstr_cstr);
     std::string lustre_path(lustre_path_cstr);
 
-    auto iter = change_map.find(fidstr);
-    if(iter != change_map.end()) {
-        change_map.modify(iter, [](change_descriptor &cd){ cd.oper_complete = true; });
-        change_map.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
-        change_map.modify(iter, [](change_descriptor &cd){ cd.last_event = ChangeDescriptor::EventTypeEnum::MKDIR; });
+    auto iter = change_map_fidstr.find(fidstr);
+    if(iter != change_map_fidstr.end()) {
+        change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.oper_complete = true; });
+        change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
+        change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.last_event = ChangeDescriptor::EventTypeEnum::MKDIR; });
     } else {
         change_descriptor entry;
+        memset(&entry, 0, sizeof(entry));
         entry.fidstr = fidstr;
         entry.parent_fidstr = parent_fidstr;
         entry.object_name = object_name;
@@ -107,32 +107,35 @@ void lustre_mkdir(const lustre_irods_connector_cfg_t *config_struct_ptr, const c
         entry.last_event = ChangeDescriptor::EventTypeEnum::MKDIR;
         entry.timestamp = time(NULL);
         entry.object_type = ChangeDescriptor::ObjectTypeEnum::DIR;
-        get_change_map_instance()->push_back(entry);
+        change_map->push_back(entry);
     }
 
 }
 
 void lustre_rmdir(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
-        const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) {
+        const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr, void *change_map_void_ptr) {
 
-    boost::unique_lock<boost::shared_mutex> lock(change_table_mutex);
+    change_map_t *change_map = static_cast<change_map_t*>(change_map_void_ptr);
+
+    std::lock_guard<std::mutex> lock(change_table_mutex);
 
     // get change map with hashed index of fidstr
-    auto &change_map = get_change_map_instance()->get<1>();
+    auto &change_map_fidstr = change_map->get<1>();
 
     std::string fidstr(fidstr_cstr);
     std::string lustre_path(lustre_path_cstr);
 
-    auto iter = change_map.find(fidstr);
-    if(iter != change_map.end()) {
-        change_map.modify(iter, [parent_fidstr](change_descriptor &cd){ cd.parent_fidstr = parent_fidstr; });
-        change_map.modify(iter, [object_name](change_descriptor &cd){ cd.object_name = object_name; });
-        change_map.modify(iter, [lustre_path](change_descriptor &cd){ cd.lustre_path = lustre_path; });
-        change_map.modify(iter, [](change_descriptor &cd){ cd.oper_complete = true; });
-        change_map.modify(iter, [](change_descriptor &cd){ cd.last_event = ChangeDescriptor::EventTypeEnum::RMDIR; });
-        change_map.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
+    auto iter = change_map_fidstr.find(fidstr);
+    if(iter != change_map_fidstr.end()) {
+        change_map_fidstr.modify(iter, [parent_fidstr](change_descriptor &cd){ cd.parent_fidstr = parent_fidstr; });
+        change_map_fidstr.modify(iter, [object_name](change_descriptor &cd){ cd.object_name = object_name; });
+        change_map_fidstr.modify(iter, [lustre_path](change_descriptor &cd){ cd.lustre_path = lustre_path; });
+        change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.oper_complete = true; });
+        change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.last_event = ChangeDescriptor::EventTypeEnum::RMDIR; });
+        change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
     } else {
         change_descriptor entry;
+        memset(&entry, 0, sizeof(entry));
         entry.fidstr = fidstr;
         entry.oper_complete = true;
         entry.last_event = ChangeDescriptor::EventTypeEnum::RMDIR;
@@ -140,35 +143,38 @@ void lustre_rmdir(const lustre_irods_connector_cfg_t *config_struct_ptr, const c
         entry.object_type = ChangeDescriptor::ObjectTypeEnum::DIR;
         entry.parent_fidstr = parent_fidstr;
         entry.object_name = object_name;
-        get_change_map_instance()->push_back(entry);
+        change_map->push_back(entry);
     }
 
 }
 
 void lustre_unlink(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
-        const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) {
+        const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr, void *change_map_void_ptr) {
 
-    boost::unique_lock<boost::shared_mutex> lock(change_table_mutex);
+    change_map_t *change_map = static_cast<change_map_t*>(change_map_void_ptr);
+
+    std::lock_guard<std::mutex> lock(change_table_mutex);
 
     // get change map with hashed index of fidstr
-    auto &change_map = get_change_map_instance()->get<1>();
+    auto &change_map_fidstr = change_map->get<1>();
 
     std::string fidstr(fidstr_cstr);
     std::string lustre_path(lustre_path_cstr);
 
-    auto iter = change_map.find(fidstr);
-    if(iter != change_map.end()) {   
+    auto iter = change_map_fidstr.find(fidstr);
+    if(iter != change_map_fidstr.end()) {   
 
         // If an add and a delete occur in the same transactional unit, just delete the transaction
         if (iter->last_event == ChangeDescriptor::EventTypeEnum::CREATE) {
-            change_map.erase(iter);
+            change_map_fidstr.erase(iter);
         } else {
-            change_map.modify(iter, [](change_descriptor &cd){ cd.oper_complete = true; });
-            change_map.modify(iter, [](change_descriptor &cd){ cd.last_event = ChangeDescriptor::EventTypeEnum::UNLINK; });
-            change_map.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
+            change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.oper_complete = true; });
+            change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.last_event = ChangeDescriptor::EventTypeEnum::UNLINK; });
+            change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
        }
     } else {
         change_descriptor entry;
+        memset(&entry, 0, sizeof(entry));
         entry.fidstr = fidstr;
         //entry.parent_fidstr = parent_fidstr;
         //entry.lustre_path = lustre_path;
@@ -177,25 +183,28 @@ void lustre_unlink(const lustre_irods_connector_cfg_t *config_struct_ptr, const 
         entry.timestamp = time(NULL);
         entry.object_type = ChangeDescriptor::ObjectTypeEnum::FILE;
         entry.object_name = object_name;
-        get_change_map_instance()->push_back(entry);
+        change_map->push_back(entry);
     }
 
 
 }
 
 void lustre_rename(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
-        const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr, const char *old_lustre_path_cstr) {
+        const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr, 
+        const char *old_lustre_path_cstr, void *change_map_void_ptr) {
 
-    boost::unique_lock<boost::shared_mutex> lock(change_table_mutex);
+    change_map_t *change_map = static_cast<change_map_t*>(change_map_void_ptr);
+
+    std::lock_guard<std::mutex> lock(change_table_mutex);
 
     // get change map with hashed index of fidstr
-    auto &change_map = get_change_map_instance()->get<1>();
+    auto &change_map_fidstr = change_map->get<1>();
 
     std::string fidstr(fidstr_cstr);
     std::string lustre_path(lustre_path_cstr);
     std::string old_lustre_path(old_lustre_path_cstr);
 
-    auto iter = change_map.find(fidstr);
+    auto iter = change_map_fidstr.find(fidstr);
     std::string original_path;
 
     struct stat statbuf;
@@ -203,12 +212,13 @@ void lustre_rename(const lustre_irods_connector_cfg_t *config_struct_ptr, const 
 
     // if there is a previous entry, just update the lustre_path to the new path
     // otherwise, add a new entry
-    if(iter != change_map.end()) {
-        change_map.modify(iter, [parent_fidstr](change_descriptor &cd){ cd.parent_fidstr = parent_fidstr; });
-        change_map.modify(iter, [object_name](change_descriptor &cd){ cd.object_name = object_name; });
-        change_map.modify(iter, [lustre_path](change_descriptor &cd){ cd.lustre_path = lustre_path; });
+    if(iter != change_map_fidstr.end()) {
+        change_map_fidstr.modify(iter, [parent_fidstr](change_descriptor &cd){ cd.parent_fidstr = parent_fidstr; });
+        change_map_fidstr.modify(iter, [object_name](change_descriptor &cd){ cd.object_name = object_name; });
+        change_map_fidstr.modify(iter, [lustre_path](change_descriptor &cd){ cd.lustre_path = lustre_path; });
     } else {
         change_descriptor entry;
+        memset(&entry, 0, sizeof(entry));
         entry.fidstr = fidstr;
         entry.parent_fidstr = parent_fidstr;
         entry.object_name = object_name;
@@ -222,11 +232,11 @@ void lustre_rename(const lustre_irods_connector_cfg_t *config_struct_ptr, const 
             entry.object_type = ChangeDescriptor::ObjectTypeEnum::FILE;
         }
         /*if (is_dir) {
-            change_map.modify(iter, [](change_descriptor &cd){ cd.object_type = ChangeDescriptor::ObjectTypeEnum::DIR; });
+            change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.object_type = ChangeDescriptor::ObjectTypeEnum::DIR; });
         } else {
-            change_map.modify(iter, [](change_descriptor &cd){ cd.object_type = ChangeDescriptor::ObjectTypeEnum::FILE; });
+            change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.object_type = ChangeDescriptor::ObjectTypeEnum::FILE; });
         }*/
-        get_change_map_instance()->push_back(entry);
+        change_map->push_back(entry);
     }
 
     LOG(LOG_DBG, "rename:  old_lustre_path = %s\n", old_lustre_path.c_str());
@@ -234,11 +244,11 @@ void lustre_rename(const lustre_irods_connector_cfg_t *config_struct_ptr, const 
     if (is_dir) {
 
         // search through and update all references in table
-        for (auto iter = change_map.begin(); iter != change_map.end(); ++iter) {
+        for (auto iter = change_map_fidstr.begin(); iter != change_map_fidstr.end(); ++iter) {
             std::string p = iter->lustre_path;
             if (p.length() > 0 && p.length() != old_lustre_path.length() && boost::starts_with(p, old_lustre_path)) {
                 //TODO test
-                change_map.modify(iter, [old_lustre_path, lustre_path](change_descriptor &cd){ cd.lustre_path.replace(0, old_lustre_path.length(), lustre_path); });
+                change_map_fidstr.modify(iter, [old_lustre_path, lustre_path](change_descriptor &cd){ cd.lustre_path.replace(0, old_lustre_path.length(), lustre_path); });
                 //iter->lustre_path.replace(0, old_lustre_path.length(), lustre_path);
             }
         }
@@ -247,26 +257,29 @@ void lustre_rename(const lustre_irods_connector_cfg_t *config_struct_ptr, const 
 }
 
 void lustre_create(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
-        const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) {
+        const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr, void *change_map_void_ptr) {
 
-    boost::unique_lock<boost::shared_mutex> lock(change_table_mutex);
+    change_map_t *change_map = static_cast<change_map_t*>(change_map_void_ptr);
+
+    std::lock_guard<std::mutex> lock(change_table_mutex);
 
     // get change map with hashed index of fidstr
-    auto &change_map = get_change_map_instance()->get<1>();
+    auto &change_map_fidstr = change_map->get<1>();
 
     std::string fidstr(fidstr_cstr);
     std::string lustre_path(lustre_path_cstr);
 
-    auto iter = change_map.find(fidstr);
-    if(iter != change_map.end()) {
-        change_map.modify(iter, [parent_fidstr](change_descriptor &cd){ cd.parent_fidstr = parent_fidstr; });
-        change_map.modify(iter, [object_name](change_descriptor &cd){ cd.object_name = object_name; });
-        change_map.modify(iter, [lustre_path](change_descriptor &cd){ cd.lustre_path = lustre_path; });
-        change_map.modify(iter, [](change_descriptor &cd){ cd.oper_complete = false; });
-        change_map.modify(iter, [](change_descriptor &cd){ cd.last_event = ChangeDescriptor::EventTypeEnum::CREATE; });
-        change_map.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
+    auto iter = change_map_fidstr.find(fidstr);
+    if(iter != change_map_fidstr.end()) {
+        change_map_fidstr.modify(iter, [parent_fidstr](change_descriptor &cd){ cd.parent_fidstr = parent_fidstr; });
+        change_map_fidstr.modify(iter, [object_name](change_descriptor &cd){ cd.object_name = object_name; });
+        change_map_fidstr.modify(iter, [lustre_path](change_descriptor &cd){ cd.lustre_path = lustre_path; });
+        change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.oper_complete = false; });
+        change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.last_event = ChangeDescriptor::EventTypeEnum::CREATE; });
+        change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
     } else {
         change_descriptor entry;
+        memset(&entry, 0, sizeof(entry));
         entry.fidstr = fidstr;
         entry.parent_fidstr = parent_fidstr;
         entry.object_name = object_name;
@@ -275,28 +288,31 @@ void lustre_create(const lustre_irods_connector_cfg_t *config_struct_ptr, const 
         entry.last_event = ChangeDescriptor::EventTypeEnum::CREATE;
         entry.timestamp = time(NULL);
         entry.object_type = ChangeDescriptor::ObjectTypeEnum::FILE;
-        get_change_map_instance()->push_back(entry);
+        change_map->push_back(entry);
     }
 
 }
 
 void lustre_mtime(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
-        const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) {
+        const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr, void *change_map_void_ptr) {
 
-    boost::unique_lock<boost::shared_mutex> lock(change_table_mutex);
+    change_map_t *change_map = static_cast<change_map_t*>(change_map_void_ptr);
+
+    std::lock_guard<std::mutex> lock(change_table_mutex);
 
     // get change map with hashed index of fidstr
-    auto &change_map = get_change_map_instance()->get<1>();
+    auto &change_map_fidstr = change_map->get<1>();
 
     std::string fidstr(fidstr_cstr);
     std::string lustre_path(lustre_path_cstr);
 
-    auto iter = change_map.find(fidstr);
-    if(iter != change_map.end()) {   
-        change_map.modify(iter, [](change_descriptor &cd){ cd.oper_complete = false; });
-        change_map.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
+    auto iter = change_map_fidstr.find(fidstr);
+    if(iter != change_map_fidstr.end()) {   
+        change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.oper_complete = false; });
+        change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
     } else {
         change_descriptor entry;
+        memset(&entry, 0, sizeof(entry));
         entry.fidstr = fidstr;
         //entry.parent_fidstr = parent_fidstr;
         //entry.lustre_path = lustre_path;
@@ -304,19 +320,21 @@ void lustre_mtime(const lustre_irods_connector_cfg_t *config_struct_ptr, const c
         entry.last_event = ChangeDescriptor::EventTypeEnum::OTHER;
         entry.oper_complete = false;
         entry.timestamp = time(NULL);
-        get_change_map_instance()->push_back(entry);
+        change_map->push_back(entry);
     }
 
 
 }
 
 void lustre_trunc(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
-        const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr) { 
+        const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr, void *change_map_void_ptr) { 
 
-    boost::unique_lock<boost::shared_mutex> lock(change_table_mutex);
+    change_map_t *change_map = static_cast<change_map_t*>(change_map_void_ptr);
+
+    std::lock_guard<std::mutex> lock(change_table_mutex);
 
     // get change map with hashed index of fidstr
-    auto &change_map = get_change_map_instance()->get<1>();
+    auto &change_map_fidstr = change_map->get<1>();
 
     std::string fidstr(fidstr_cstr);
     std::string lustre_path(lustre_path_cstr);
@@ -326,14 +344,15 @@ void lustre_trunc(const lustre_irods_connector_cfg_t *config_struct_ptr, const c
 
     LOG(LOG_DBG, "handle_trunc:  stat_result = %i, file_size = %ld\n", result, st.st_size);
 
-    auto iter = change_map.find(fidstr);
-    if(iter != change_map.end()) {
-        change_map.modify(iter, [](change_descriptor &cd){ cd.oper_complete = false; });
-        change_map.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
+    auto iter = change_map_fidstr.find(fidstr);
+    if(iter != change_map_fidstr.end()) {
+        change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.oper_complete = false; });
+        change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
         if (result == 0)
-            change_map.modify(iter, [st](change_descriptor &cd){ cd.file_size = st.st_size; });
+            change_map_fidstr.modify(iter, [st](change_descriptor &cd){ cd.file_size = st.st_size; });
     } else {
         change_descriptor entry;
+        memset(&entry, 0, sizeof(entry));
         entry.fidstr = fidstr;
         //entry.parent_fidstr = parent_fidstr;
         //entry.lustre_path = lustre_path;
@@ -342,18 +361,49 @@ void lustre_trunc(const lustre_irods_connector_cfg_t *config_struct_ptr, const c
         entry.timestamp = time(NULL);
         if (result == 0)
             entry.file_size = st.st_size;
-        get_change_map_instance()->push_back(entry);
+        change_map->push_back(entry);
     }
-
-
 }
 
-void lustre_write_change_table_to_str(char *buffer, const size_t buffer_size) {
+void remove_fidstr_from_table(const char *fidstr_cstr, void *change_map_void_ptr) {
 
-    boost::shared_lock<boost::shared_mutex> lock(change_table_mutex);
+    change_map_t *change_map = static_cast<change_map_t*>(change_map_void_ptr); 
+    
+    std::string fidstr(fidstr_cstr);
+
+    // get change map with index of fidstr 
+    auto &change_map_fidstr = change_map->get<1>();
+
+    change_map_fidstr.erase(fidstr);
+}
+
+// precondition:  p3 has buffer_size reserved
+int concatenate_paths_with_boost(const char *p1, const char *p2, char *result, size_t buffer_size) {
+ 
+    if (p1 == nullptr || p2 == nullptr) {
+        return -1;
+    }
+
+    boost::filesystem::path path_obj_1{p1};
+    boost::filesystem::path path_obj_2{p2};
+    boost::filesystem::path path_result(path_obj_1/path_obj_2);
+
+    snprintf(result, buffer_size, "%s", path_result.string().c_str());
+
+    return 0;
+}
+
+
+
+} // end extern "C"
+
+void lustre_write_change_table_to_str(char *buffer, const size_t buffer_size, const change_map_t *change_map) {
+
+    //boost::shared_lock<boost::shared_mutex> lock(change_table_mutex);
+    std::lock_guard<std::mutex> lock(change_table_mutex);
 
     // get change map with sequenced index  
-    auto &change_map = get_change_map_instance()->get<0>();
+    auto &change_map_seq = change_map->get<0>();
 
     char time_str[18];
     char temp_buffer[buffer_size];
@@ -366,7 +416,7 @@ void lustre_write_change_table_to_str(char *buffer, const size_t buffer_size) {
     snprintf(temp_buffer, buffer_size, "%-30s %-30s %-12s %-20s %-30s %-17s %-11s %-15s %-10s\n", "------", 
             "-------------", "-----------", "-----------", "-----------", "----", "----------", "--------------", "---------");
     strncat(buffer, temp_buffer, buffer_size-strlen(buffer)-1);
-    for (auto iter = change_map.begin(); iter != change_map.end(); ++iter) {
+    for (auto iter = change_map_seq.begin(); iter != change_map_seq.end(); ++iter) {
          std::string fidstr = iter->fidstr;
 
          struct tm *timeinfo;
@@ -385,22 +435,23 @@ void lustre_write_change_table_to_str(char *buffer, const size_t buffer_size) {
 
 }
 
-void lustre_print_change_table() {
+void lustre_print_change_table(change_map_t *change_map) {
     char buffer[5012];
-    lustre_write_change_table_to_str(buffer, 5012);
+    lustre_write_change_table_to_str(buffer, 5012, change_map);
     LOG(LOG_DBG, "%s", buffer);
 }
 
 
 // processes change table by writing records ready to be sent to iRODS into 
 // irodsLustreApiInp_t structure formatted by capnproto.
-// Note:  The irodsLustreApiInp_t::buf is malloced and must be freed by callerrodsLustreApiInp_t.
-void write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *config_struct_ptr, irodsLustreApiInp_t *inp) {
+// Note:  The irodsLustreApiInp_t::buf is malloced and must be freed by caller.
+void write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *config_struct_ptr, irodsLustreApiInp_t *inp, change_map_t *change_map) {
 
-    boost::shared_lock<boost::shared_mutex> lock(change_table_mutex);
+    //boost::shared_lock<boost::shared_mutex> lock(change_table_mutex);
+    std::lock_guard<std::mutex> lock(change_table_mutex);
 
     // get change map with sequenced index  
-    auto &change_map = get_change_map_instance()->get<0>();
+    auto &change_map_seq = change_map->get<0>();
 
     //initialize capnproto message
     capnp::MallocMessageBuilder message;
@@ -410,15 +461,15 @@ void write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *con
     changeMap.setResourceId(config_struct_ptr->irods_resource_id);
     changeMap.setRegisterPath(config_struct_ptr->irods_register_path);
 
-    size_t write_count = change_map.size();
+    size_t write_count = change_map_seq.size();
     capnp::List<ChangeDescriptor>::Builder entries = changeMap.initEntries(write_count);
 
     unsigned long cnt = 0;
-    for (auto iter = change_map.begin(); iter != change_map.end();) {
+    for (auto iter = change_map_seq.begin(); iter != change_map_seq.end();) {
 
         LOG(LOG_DBG, "fidstr=%s oper_complete=%i\n", iter->fidstr.c_str(), iter->oper_complete);
 
-        LOG(LOG_DBG, "change_map size = %lu\n", change_map.size()); 
+        LOG(LOG_DBG, "change_map size = %lu\n", change_map_seq.size()); 
 
         if (iter->oper_complete) {
             entries[cnt].setFidstr(iter->fidstr);
@@ -430,11 +481,11 @@ void write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *con
             entries[cnt].setFileSize(iter->file_size);
 
             // delete entry from table 
-            iter = change_map.erase(iter);
+            iter = change_map_seq.erase(iter);
 
             ++cnt;
 
-            LOG(LOG_DBG, "after erase change_map size = %lu\n", change_map.size());
+            LOG(LOG_DBG, "after erase change_map size = %lu\n", change_map_seq.size());
 
         } else {
             ++iter;
@@ -450,16 +501,6 @@ void write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *con
     memcpy(inp->buf, std::begin(array), message_size);
 }
     
-
-}
-
-change_map_t *change_map = NULL;
-change_map_t *get_change_map_instance() {
-    if (!change_map)
-        change_map = new change_map_t();
-    return change_map;
-}
-
 std::string event_type_to_str(ChangeDescriptor::EventTypeEnum type) {
     switch (type) {
         case ChangeDescriptor::EventTypeEnum::OTHER:
@@ -496,20 +537,15 @@ std::string object_type_to_str(ChangeDescriptor::ObjectTypeEnum type) {
     return "";
 }
 
+bool entries_ready_to_process(change_map_t *change_map) {
 
-void remove_fidstr_from_table(const char *fidstr_cstr) {
-    std::string fidstr(fidstr_cstr);
+    if (change_map == nullptr) {
+        LOG(LOG_DBG, "change map null pointer received\n");
+    }
 
-    // get change map with index of fidstr 
-    auto &change_map = get_change_map_instance()->get<1>();
-
-    change_map.erase(fidstr);
-}
-
-bool entries_ready_to_process() {
     // get change map with size index
-    auto &change_map = get_change_map_instance()->get<2>();
-    bool ready = change_map.count(true) > 0;
+    auto &change_map_size = change_map->get<2>();
+    bool ready = change_map_size.count(true) > 0;
     LOG(LOG_INFO, "entries_ready_to_process = %i\n", ready);
     return ready; 
 }

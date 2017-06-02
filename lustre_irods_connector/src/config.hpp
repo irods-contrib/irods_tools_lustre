@@ -14,14 +14,6 @@ typedef struct lustre_irods_connector_cfg {
 } lustre_irods_connector_cfg_t;
 
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 int read_config_file(const char *filename, lustre_irods_connector_cfg_t *config_struct);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif

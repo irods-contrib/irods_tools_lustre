@@ -37,6 +37,7 @@ set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -stdlib=libc++")
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -stdlib=libc++")
 add_compile_options(-nostdinc++ -Wall -Wextra -Werror -Wno-unused-parameter)
 
+
 link_libraries(c++abi
     pthread
     dl
@@ -49,6 +50,8 @@ link_libraries(c++abi
     lcap
     kj
     zmq
+    ${IRODS_EXTERNALS_FULLPATH_BOOST}/lib/libboost_filesystem.so
+    ${IRODS_EXTERNALS_FULLPATH_BOOST}/lib/libboost_program_options.so
     ${IRODS_EXTERNALS_FULLPATH_BOOST}/lib/libboost_thread.so
     ${IRODS_EXTERNALS_FULLPATH_ZMQ}/lib/libzmq.so
     ${IRODS_EXTERNALS_FULLPATH_BOOST}/lib/libboost_filesystem.so

@@ -37,8 +37,6 @@ void set_log_level(std::string log_level_str) {
         log_level = LOG_DBG;
 }    
 
-extern "C" {
-
 int read_config_file(const char *filename, lustre_irods_connector_cfg_t *config_struct) {
 
     if (filename == NULL) {
@@ -119,4 +117,3 @@ int read_config_file(const char *filename, lustre_irods_connector_cfg_t *config_
 
 }
 
-}

@@ -35,11 +35,13 @@
 #define LCAP_CL_BLOCK   (0x01 << 1)
 #endif
 
+namespace po = boost::program_options;
+
 struct lcap_cl_ctx;
 
 extern "C" {
     int start_lcap_changelog(const lustre_irods_connector_cfg_t*);
-    int poll_change_log_and_process(const lustre_irods_connector_cfg_t*);
+    int poll_change_log_and_process(const lustre_irods_connector_cfg_t*, void *change_map);
     int finish_lcap_changelog();
 }
 
@@ -47,7 +49,7 @@ static char * s_recv_noblock(void *socket) {
     char buffer [256];
     int size = zmq_recv (socket, buffer, 255, ZMQ_NOBLOCK);
     if (size == -1)
-        return NULL;
+        return nullptr;
     buffer[size] = '\0';
     return strndup (buffer, sizeof(buffer) - 1);
 }
@@ -64,7 +66,6 @@ static int s_sendmore (void *socket, const char *string) {
     return size;
 }
 
-
 std::atomic<bool> keep_running(true);
 
 void interrupt_handler(int dummy) {
@@ -73,21 +74,21 @@ void interrupt_handler(int dummy) {
 
 // irods api client thread main routine
 // this is the main loop that reads the change entries in memory and sends them to iRODS via the API.
-void irods_api_client_main(std::shared_ptr<lustre_irods_connection> conn, const lustre_irods_connector_cfg_t *config_struct_ptr) {
+void irods_api_client_main(std::shared_ptr<lustre_irods_connection> conn, const lustre_irods_connector_cfg_t *config_struct_ptr,
+        change_map_t *change_map) {
 
     void *context = zmq_ctx_new ();
     void *subscriber = zmq_socket (context, ZMQ_SUB);
     zmq_connect (subscriber, "tcp://localhost:5563");
     zmq_setsockopt (subscriber, ZMQ_SUBSCRIBE, "changetable_readers", 1);
 
-    //while (keep_running.load()) {
     while (true) {
 
         bool quit = false;
-        while (entries_ready_to_process()) {
+        while (entries_ready_to_process(change_map)) {
             irodsLustreApiInp_t inp;
             memset( &inp, 0, sizeof( inp ) );
-            write_change_table_to_capnproto_buf(config_struct_ptr, &inp);
+            write_change_table_to_capnproto_buf(config_struct_ptr, &inp, change_map);
             conn->send_change_map_to_irods(&inp);
             free(inp.buf);
         }
@@ -95,7 +96,6 @@ void irods_api_client_main(std::shared_ptr<lustre_irods_connection> conn, const 
         // see if there is a quit message, if so terminate
         char *address = s_recv_noblock(subscriber);
         char *contents = s_recv_noblock(subscriber);
-        printf("address and contents: %p %p\n", (void*)address, (void*)contents);
         if (address && contents && strcmp(contents, "terminate") == 0) {
             LOG(LOG_DBG, "irods client received a terminate message\n");
             quit = true;
@@ -110,17 +110,17 @@ void irods_api_client_main(std::shared_ptr<lustre_irods_connection> conn, const 
         sleep(config_struct_ptr->update_irods_interval_seconds);
     }
 
-    zmq_close (subscriber);
-    zmq_ctx_destroy (context);
+    zmq_close(subscriber);
+    zmq_ctx_destroy(context);
 
     LOG(LOG_DBG,"irods_client_exiting\n");
 }
 
 
-int main(int argc, char **argv) {
+int main(int argc, char *argv[]) {
 
     const char *config_file = "lustre_irods_connector_config.json";
-    char c;
+    char *log_file = nullptr;
 
     signal(SIGPIPE, SIG_IGN);
     
@@ -130,27 +130,48 @@ int main(int argc, char **argv) {
     sigfillset(&sa.sa_mask);
     sigaction(SIGINT,&sa,NULL);
 
+    po::options_description desc("Allowed options");
 
-    while ((c = getopt (argc, argv, "c:l:h")) != -1) {
-        switch (c) {
-            case 'c':
-                LOG(LOG_DBG,"setting configuration file to %s\n", optarg);
-                config_file = optarg;
-                break;
-            case 'l':
-                dbgstream = fopen(optarg, "a");
-                if (dbgstream == NULL) {
-                    dbgstream = stdout;
-                    LOG(LOG_ERR, "could not open log file %s... using stdout instead.\n", optarg);
-                } else {
-                    LOG(LOG_DBG, "setting log file to %s\n", optarg);
-                }
-                break;
-           case 'h':
-           case '?':
-                fprintf(stdout, "Usage: lustre_irods_connector [-c <configuration_file>] [-l <log_file>] [-h]\n");
-                return 0;
-        } 
+    desc.add_options()
+        ("help,h", "produce help message")
+        ("config-file,c", po::value<std::string>(), "configuration file")
+        ("log-file,l", po::value<std::string>(), "log file");
+                                                                                            ;
+    po::positional_options_description p;
+    p.add("input-file", -1);
+    
+    po::variables_map vm;
+
+    // read the command line arguments
+    try {
+        po::store(po::command_line_parser(argc, argv).options(desc).positional(p).run(), vm);
+        po::notify(vm);
+
+        if (vm.count("help")) {
+            std::cout << "Usage:  lustre_irods_connector [options]" << std::endl;
+            std::cout << desc << std::endl;
+            return 0;
+        }
+
+        if (vm.count("config-file")) {
+            LOG(LOG_DBG,"setting configuration file to %s\n", vm["config-file"].as<std::string>().c_str());
+            config_file = vm["config-file"].as<std::string>().c_str();
+        }
+
+        if (vm.count("log-file")) {
+            log_file = strdup(vm["log-file"].as<std::string>().c_str());
+            dbgstream = fopen(log_file, "a");
+            if (dbgstream == nullptr) {
+                dbgstream = stdout;
+                LOG(LOG_ERR, "could not open log file %s... using stdout instead.\n", optarg);
+            } else {
+                LOG(LOG_DBG, "setting log file to %s\n", vm["log-file"].as<std::string>().c_str());
+            }
+        }
+    } catch (std::exception& e) {
+        std::cerr << e.what() << std::endl;
+        std::cerr << desc << std::endl;
+        return 1;
     }
  
     int  rc;
@@ -182,8 +203,11 @@ int main(int argc, char **argv) {
     void *publisher = zmq_socket (context, ZMQ_PUB);
     zmq_bind (publisher, "tcp://*:5563");
 
+    // create the changemap in memory
+    change_map_t change_map;
+
     // start the thread that sends changes to iRODS
-    std::thread irods_api_client_thread(irods_api_client_main, conn, &config_struct);
+    std::thread irods_api_client_thread(irods_api_client_main, conn, &config_struct, &change_map);
 
     rc = start_lcap_changelog(&config_struct);
     if (rc < 0) {
@@ -194,7 +218,7 @@ int main(int argc, char **argv) {
     while (keep_running.load()) {
 
         LOG(LOG_INFO,"changelog client polling changelog\n");
-        poll_change_log_and_process(&config_struct);
+        poll_change_log_and_process(&config_struct, &change_map);
         sleep(config_struct.changelog_poll_interval_seconds);
     }
 
@@ -205,6 +229,7 @@ int main(int argc, char **argv) {
     irods_api_client_thread.join();
 
     zmq_close(publisher);
+    zmq_ctx_destroy(context);
 
     rc = finish_lcap_changelog();
     if (rc) {
@@ -213,11 +238,14 @@ int main(int argc, char **argv) {
     }
     LOG(LOG_ERR, "finish_lcap_changelog exited normally\n");
 
+    LOG(LOG_DBG,"changelog client exiting\n");
     if (dbgstream != stdout) {
         fclose(dbgstream);
     }
 
-    LOG(LOG_DBG,"changelog client exiting\n");
-     
+    if (log_file) {
+        free(log_file);
+    }
+
     return 0;
 }

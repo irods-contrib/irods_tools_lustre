@@ -5,52 +5,17 @@
 #include "config.hpp"
 
 #ifdef __cplusplus
-#include "change_table.capnp.h"
-extern "C" {
-#endif
-
-void lustre_close(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr, const char *parent_fidstr, 
-        const char *object_name, const char *lustre_path);
-void lustre_mkdir(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr, const char *parent_fidstr, 
-        const char *object_name, const char *lustre_path);
-
-void lustre_rmdir(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr, const char *parent_fidstr, 
-        const char *object_name, const char *lustre_path);
-void lustre_unlink(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr, const char *parent_fidstr, 
-        const char *object_name, const char *lustre_path);
-void lustre_rename(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr, const char *parent_fidstr, 
-        const char *object_name, const char *lustre_path, const char *old_lustre_path);
-void lustre_create(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr, const char *parent_fidstr, 
-        const char *object_name, const char *lustre_path);
-void lustre_mtime(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr, const char *parent_fidstr, 
-        const char *object_name, const char *lustre_path);
-void lustre_trunc(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr, const char *parent_fidstr, 
-        const char *object_name, const char *lustre_path);
-void remove_fidstr_from_table(const char *fidstr);
-void lustre_print_change_table();
-void lustre_write_change_table_to_str(char *buffer, const size_t buffer_size);
-void write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *config_struct_ptr, irodsLustreApiInp_t *inp);
-bool entries_ready_to_process();
-
-
-#ifdef __cplusplus
-}
-#endif
-
-
-#ifdef __cplusplus
 
 #include <string>
 #include <ctime>
+
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/sequenced_index.hpp>
 #include <boost/multi_index/member.hpp>
 #include <boost/multi_index/hashed_index.hpp>
+#include <boost/filesystem.hpp>
 
-
-//enum create_delete_event_type_enum { OTHER, CREATE, UNLINK, RMDIR, MKDIR, RENAME };
-//enum object_type_enum { _FILE, _DIR };
-//
+#include "change_table.capnp.h"
 
 struct change_descriptor {
     std::string                   fidstr;
@@ -60,11 +25,9 @@ struct change_descriptor {
                                                    // however, if a parent is moved after calculating the lustre_path, we 
                                                    // may have to look up the path using iRODS metadata
     ChangeDescriptor::EventTypeEnum last_event; 
-    //create_delete_event_type_enum last_event;
     time_t                        timestamp;
     bool                          oper_complete;
     ChangeDescriptor::ObjectTypeEnum object_type;
-    //object_type_enum              object_type;
     off_t                         file_size;
 };
 
@@ -86,9 +49,45 @@ typedef boost::multi_index::multi_index_container<
   >
 > change_map_t;
 
-change_map_t *get_change_map_instance();
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+    void lustre_close(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr, const char *parent_fidstr,
+                    const char *object_name, const char *lustre_path, void *change_map);
+    void lustre_mkdir(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr, const char *parent_fidstr,
+                    const char *object_name, const char *lustre_path, void *change_map);
+
+    void lustre_rmdir(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr, const char *parent_fidstr,
+                    const char *object_name, const char *lustre_path, void *change_map);
+    void lustre_unlink(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr, const char *parent_fidstr,
+                    const char *object_name, const char *lustre_path, void *change_map);
+    void lustre_rename(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr, const char *parent_fidstr,
+                    const char *object_name, const char *lustre_path, const char *old_lustre_path, void *change_map);
+    void lustre_create(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr, const char *parent_fidstr,
+                    const char *object_name, const char *lustre_path, void *change_map);
+    void lustre_mtime(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr, const char *parent_fidstr,
+                    const char *object_name, const char *lustre_path, void *change_map);
+    void lustre_trunc(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr, const char *parent_fidstr,
+                    const char *object_name, const char *lustre_path, void *change_map);
+
+    void remove_fidstr_from_table(const char *fidstr, void *change_map);
+
+    int concatenate_paths_with_boost(const char *p1, const char *p2, char *result, size_t buffer_size);
+
+#ifdef __cplusplus
+}
+
+void lustre_print_change_table(const change_map_t *change_map);
+void lustre_write_change_table_to_str(char *buffer, const size_t buffer_size, const change_map_t *change_map);
+void write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *config_struct_ptr, irodsLustreApiInp_t *inp, change_map_t *change_map);
+bool entries_ready_to_process(change_map_t *change_map);
 
 #endif
 
+
 #endif
+
 

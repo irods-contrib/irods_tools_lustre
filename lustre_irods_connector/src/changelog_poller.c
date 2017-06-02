@@ -103,18 +103,22 @@ int get_full_path_from_record(const char *root_path, struct changelog_rec *rec, 
 
     // add root path to lustre_full_path
     char temp[MAX_NAME_LEN];
-    snprintf(temp, MAX_NAME_LEN, "%s%s%s", root_path, "/", lustre_full_path);
+    concatenate_paths_with_boost(root_path, lustre_full_path, temp, MAX_NAME_LEN);
     snprintf(lustre_full_path, MAX_NAME_LEN, "%s", temp);
 
     return 0;
 }
 
-void not_implemented(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr, const char *parent_fidstr, const char *object_path, const char *lustre_path) {
+void not_implemented(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr, const char *parent_fidstr, const char *object_path, 
+        const char *lustre_path, void *change_map) {
     LOG(LOG_DBG, "OPERATION NOT YET IMPLEMENTED\n");
 }
 
 
-void (*lustre_operators[CL_LAST])(const lustre_irods_connector_cfg_t*, const char *, const char *, const char *, const char *) =
+typedef void (*lustre_operation)(const lustre_irods_connector_cfg_t*, const char *, const char *, const char *, const char *, void *);
+
+lustre_operation lustre_operators[CL_LAST] = 
+//void (*lustre_operators[CL_LAST])(const lustre_irods_connector_cfg_t*, const char *, const char *, const char *, const char *, void *) =
 {   &not_implemented,           // CL_MARK
     &lustre_create,             // CL_CREATE
     &lustre_mkdir,              // CL_MKDIR
@@ -137,7 +141,7 @@ void (*lustre_operators[CL_LAST])(const lustre_irods_connector_cfg_t*, const cha
     &not_implemented            // CL_ATIME - irods does not have an access time
 };
 
-void handle_record(const lustre_irods_connector_cfg_t *config_struct_ptr, struct changelog_rec *rec) {
+void handle_record(const lustre_irods_connector_cfg_t *config_struct_ptr, struct changelog_rec *rec, void *change_map) {
 
     if (rec->cr_type >= CL_LAST) {
         LOG(LOG_ERR, "Invalid cr_type - %i", rec->cr_type);
@@ -160,7 +164,7 @@ void handle_record(const lustre_irods_connector_cfg_t *config_struct_ptr, struct
         // remove any entries in table 
         char overwritten_fidstr[MAX_NAME_LEN] = "";
         get_overwritten_fidstr_from_record(rec, overwritten_fidstr); 
-        remove_fidstr_from_table(overwritten_fidstr);
+        remove_fidstr_from_table(overwritten_fidstr, change_map);
 
         long long recno = -1;
         int linkno = 0;
@@ -186,9 +190,9 @@ void handle_record(const lustre_irods_connector_cfg_t *config_struct_ptr, struct
         }
         snprintf(old_lustre_path, MAX_NAME_LEN, "%s%s%s", config_struct_ptr->lustre_root_path, old_parent_path, old_filename);
 
-        lustre_rename(config_struct_ptr, fidstr, parent_fidstr, object_name, lustre_full_path, old_lustre_path);
+        lustre_rename(config_struct_ptr, fidstr, parent_fidstr, object_name, lustre_full_path, old_lustre_path, change_map);
     } else {
-        (*lustre_operators[rec->cr_type])(config_struct_ptr, fidstr, parent_fidstr, object_name, lustre_full_path);
+        (*lustre_operators[rec->cr_type])(config_struct_ptr, fidstr, parent_fidstr, object_name, lustre_full_path, change_map);
     }
 }
 
@@ -207,7 +211,7 @@ int finish_lcap_changelog() {
     return lcap_changelog_fini(ctx);
 }
 
-int poll_change_log_and_process(const lustre_irods_connector_cfg_t *config_struct_ptr) {
+int poll_change_log_and_process(const lustre_irods_connector_cfg_t *config_struct_ptr, void *change_map) {
 
     int                    rc;
     char                   clid[64] = {0};
@@ -246,7 +250,7 @@ int poll_change_log_and_process(const lustre_irods_connector_cfg_t *config_struc
 
         LOG(LOG_INFO, "\n");
 
-        handle_record(config_struct_ptr, rec);
+        handle_record(config_struct_ptr, rec, change_map);
         //lustre_print_change_table();
 
         rc = lcap_changelog_clear(ctx, config_struct_ptr->mdtname, clid, rec->cr_index);
