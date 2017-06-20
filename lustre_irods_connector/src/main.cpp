@@ -19,6 +19,7 @@
 #include "irods_ops.hpp"
 #include "lustre_change_table.hpp"
 #include "config.hpp"
+#include "lustre_irods_errors.hpp"
 
 #include "rodsDef.h"
 #include "inout_structs.h"
@@ -88,7 +89,10 @@ void irods_api_client_main(std::shared_ptr<lustre_irods_connection> conn, const 
         while (entries_ready_to_process(change_map)) {
             irodsLustreApiInp_t inp;
             memset( &inp, 0, sizeof( inp ) );
-            write_change_table_to_capnproto_buf(config_struct_ptr, &inp, change_map);
+            if (write_change_table_to_capnproto_buf(config_struct_ptr, &inp, change_map) < 0) {
+                LOG(LOG_ERROR, "Could not execute write_change_table_to_capnproto_buf\n");
+                continue;
+            }
             conn->send_change_map_to_irods(&inp);
             free(inp.buf);
         }

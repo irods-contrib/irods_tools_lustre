@@ -18,14 +18,12 @@
 #include "irods_ops.hpp"
 #include "logging.hpp"
 #include "config.hpp"
+#include "lustre_irods_errors.hpp"
 
 // other includes
 #include <string>
 #include <stdio.h>
 #include <boost/filesystem.hpp>
-
-// TODO change for multithreaded
-//rcComm_t *irods_conn;
 
 lustre_irods_connection::~lustre_irods_connection() {
     printf("disconnecting irods\n");
@@ -36,11 +34,18 @@ lustre_irods_connection::~lustre_irods_connection() {
 
 int lustre_irods_connection::send_change_map_to_irods(irodsLustreApiInp_t *inp) const {
 
-    LOG(LOG_INFO,"calling send_change_map_to_irods\n");
+
+    LOG(LOG_DBG,"calling send_change_map_to_irods\n");
+
+    if (inp == nullptr) {
+        LOG(LOG_ERR, "Null inp sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return lustre_irods::INVALID_OPERAND_ERROR;
+    }    
+
 
     if (!irods_conn) {
         LOG(LOG_ERR,"Error:  Called send_change_map_to_irods() without an active irods_conn\n");
-        return -1;
+        return lustre_irods::IRODS_CONNECTION_ERROR;
     }
 
     irods::pack_entry_table& pk_tbl = irods::get_pack_table();
@@ -56,8 +61,8 @@ int lustre_irods_connection::send_change_map_to_irods(irodsLustreApiInp_t *inp) 
     int returnVal;
 
     if ( status < 0 ) {
-        LOG(LOG_ERR, "\n\nERROR - failed to call our api\n\n\n" );
-        returnVal = status;
+        LOG(LOG_ERR, "\nERROR - failed to call our api - %i\n", status);
+        returnVal = lustre_irods::IRODS_ERROR;
     } else {
         irodsLustreApiOut_t* out = static_cast<irodsLustreApiOut_t*>( tmp_out );
         LOG(LOG_INFO,"status is %i\n", out->status);
@@ -70,9 +75,14 @@ int lustre_irods_connection::send_change_map_to_irods(irodsLustreApiInp_t *inp) 
 
 int lustre_irods_connection::populate_irods_resc_id(lustre_irods_connector_cfg_t *config_struct_ptr) {
 
+    if (config_struct_ptr == nullptr) {
+        LOG(LOG_ERR, "Null config_struct_ptr sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return lustre_irods::INVALID_OPERAND_ERROR;
+    }
+
     if (!irods_conn) {
         LOG(LOG_ERR,"Error:  Called populate_irods_resc_id() without an active irods_conn\n");
-        return -1;
+        return lustre_irods::IRODS_CONNECTION_ERROR;
     }
 
     genQueryInp_t  gen_inp;
@@ -90,11 +100,10 @@ int lustre_irods_connection::populate_irods_resc_id(lustre_irods_connector_cfg_t
     if ( status < 0 || gen_out->rowCnt < 1) {
         if ( status == CAT_NO_ROWS_FOUND ) {
             LOG(LOG_ERR, "No resource found in iRODS for resc_name %s\n", config_struct_ptr->irods_resource_name);
+            return lustre_irods::RESOURCE_NOT_FOUND_ERROR;
         }
-        else {
-            LOG(LOG_ERR, "Lookup resource id for resource %s returned error\n", config_struct_ptr->irods_resource_name);
-        }
-        return -1;
+        LOG(LOG_ERR, "Lookup resource id for resource %s returned error\n", config_struct_ptr->irods_resource_name);
+        return lustre_irods::IRODS_ERROR;
     }
 
     sqlResult_t* resource_ids = getSqlResultByInx(gen_out, COL_R_RESC_ID);
@@ -103,7 +112,7 @@ int lustre_irods_connection::populate_irods_resc_id(lustre_irods_connector_cfg_t
         clearGenQueryInp(&gen_inp);
         freeGenQueryOut(&gen_out);
         LOG(LOG_ERR, "Error while translating resource name to resource id\n");
-        return -1;
+        return lustre_irods::RESOURCE_NOT_FOUND_ERROR;
     }
 
     try {
@@ -112,7 +121,7 @@ int lustre_irods_connection::populate_irods_resc_id(lustre_irods_connector_cfg_t
         clearGenQueryInp(&gen_inp);
         freeGenQueryOut(&gen_out);
         LOG(LOG_ERR, "Error translating resource id returned from iRODS to an integer.\n");
-        return -1;
+        return lustre_irods::INVALID_RESOURCE_ID_ERROR;
     }
 
     clearGenQueryInp(&gen_inp);
@@ -128,7 +137,7 @@ int lustre_irods_connection::instantiate_irods_connection() {
 
     status = getRodsEnv( &myEnv );
     if (status < 0) {
-        return status;
+        return lustre_irods::IRODS_ENVIRONMENT_ERROR;
     }
 
     LOG(LOG_ERR, "rcConnect being called.\n");
@@ -136,14 +145,15 @@ int lustre_irods_connection::instantiate_irods_connection() {
     LOG(LOG_ERR, "irods_conn is %i\n", irods_conn != nullptr);
 
     if (irods_conn == NULL) {
-        return -1;
+        return lustre_irods::IRODS_CONNECTION_ERROR;
     }
 
     status = clientLogin(irods_conn);
     if (status != 0) {
         rcDisconnect(irods_conn);
         irods_conn = nullptr;
-        return -1;
+        LOG(LOG_ERR, "Error on clientLogin() - %i\n", status);
+        return lustre_irods::IRODS_ERROR;
     }
 
     return 0;

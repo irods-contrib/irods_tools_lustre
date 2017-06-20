@@ -13,10 +13,10 @@
 #include <boost/lexical_cast.hpp>
 
 #include "lustre_change_table.hpp"
-//#include "../../irods_lustre_api/src/inout_structs.h"
 #include "inout_structs.h"
 #include "logging.hpp"
 #include "config.hpp"
+#include "lustre_irods_errors.hpp"
 
 // capnproto
 #include "change_table.capnp.h"
@@ -32,10 +32,53 @@ std::string object_type_to_str(ChangeDescriptor::ObjectTypeEnum type);
 //static boost::shared_mutex change_table_mutex;
 std::mutex change_table_mutex;
 
+int validate_operands(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr,
+            const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr, void *change_map_void_ptr) {
+
+    if (config_struct_ptr == nullptr) {
+        LOG(LOG_ERR, "Null config_struct_ptr sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return lustre_irods::INVALID_OPERAND_ERROR;
+    }
+
+    if (fidstr_cstr == nullptr) {
+        LOG(LOG_ERR, "Null fidstr_cstr sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return lustre_irods::INVALID_OPERAND_ERROR;
+    }
+
+    if (parent_fidstr == nullptr) {
+        LOG(LOG_ERR, "Null parent_fidstr sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return lustre_irods::INVALID_OPERAND_ERROR;
+    }
+
+    if (object_name == nullptr) {
+        LOG(LOG_ERR, "Null object_name sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return lustre_irods::INVALID_OPERAND_ERROR;
+    }
+
+    if (lustre_path_cstr == nullptr) {
+        LOG(LOG_ERR, "Null lustre_path_cstr sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return lustre_irods::INVALID_OPERAND_ERROR;
+    }
+
+    if (change_map_void_ptr == nullptr) {
+        LOG(LOG_ERR, "Null change_map_void_ptr sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return lustre_irods::INVALID_OPERAND_ERROR;
+    }
+
+    return lustre_irods::SUCCESS;
+
+}
+
+
 extern "C" {
 
-void lustre_close(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
+int lustre_close(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
         const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr, void *change_map_void_ptr) {
+
+    int rc;
+    if ((rc = validate_operands(config_struct_ptr, fidstr_cstr, parent_fidstr, object_name, lustre_path_cstr,change_map_void_ptr)) < 0) {
+        return rc;
+    }
 
     change_map_t *change_map = static_cast<change_map_t*>(change_map_void_ptr);
 
@@ -76,11 +119,17 @@ void lustre_close(const lustre_irods_connector_cfg_t *config_struct_ptr, const c
         // todo is this getting deleted
         change_map->push_back(entry);
     }
+    return lustre_irods::SUCCESS;
 
 }
 
-void lustre_mkdir(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
+int lustre_mkdir(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
         const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr, void *change_map_void_ptr) {
+
+    int rc;
+    if ((rc = validate_operands(config_struct_ptr, fidstr_cstr, parent_fidstr, object_name, lustre_path_cstr,change_map_void_ptr)) < 0) {
+        return rc;
+    }
 
     change_map_t *change_map = static_cast<change_map_t*>(change_map_void_ptr);
 
@@ -109,13 +158,19 @@ void lustre_mkdir(const lustre_irods_connector_cfg_t *config_struct_ptr, const c
         entry.object_type = ChangeDescriptor::ObjectTypeEnum::DIR;
         change_map->push_back(entry);
     }
+    return lustre_irods::SUCCESS; 
 
 }
 
-void lustre_rmdir(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
+int lustre_rmdir(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
         const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr, void *change_map_void_ptr) {
 
-    change_map_t *change_map = static_cast<change_map_t*>(change_map_void_ptr);
+    int rc;
+    if ((rc = validate_operands(config_struct_ptr, fidstr_cstr, parent_fidstr, object_name, lustre_path_cstr,change_map_void_ptr)) < 0) {
+        return rc;
+    }
+
+   change_map_t *change_map = static_cast<change_map_t*>(change_map_void_ptr);
 
     std::lock_guard<std::mutex> lock(change_table_mutex);
 
@@ -145,11 +200,18 @@ void lustre_rmdir(const lustre_irods_connector_cfg_t *config_struct_ptr, const c
         entry.object_name = object_name;
         change_map->push_back(entry);
     }
+    return lustre_irods::SUCCESS; 
+
 
 }
 
-void lustre_unlink(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
+int lustre_unlink(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
         const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr, void *change_map_void_ptr) {
+  
+    int rc;
+    if ((rc = validate_operands(config_struct_ptr, fidstr_cstr, parent_fidstr, object_name, lustre_path_cstr,change_map_void_ptr)) < 0) {
+        return rc;
+    }
 
     change_map_t *change_map = static_cast<change_map_t*>(change_map_void_ptr);
 
@@ -186,13 +248,18 @@ void lustre_unlink(const lustre_irods_connector_cfg_t *config_struct_ptr, const 
         change_map->push_back(entry);
     }
 
-
+    return lustre_irods::SUCCESS; 
 }
 
-void lustre_rename(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
+int lustre_rename(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
         const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr, 
         const char *old_lustre_path_cstr, void *change_map_void_ptr) {
 
+    int rc;
+    if ((rc = validate_operands(config_struct_ptr, fidstr_cstr, parent_fidstr, object_name, lustre_path_cstr,change_map_void_ptr)) < 0) {
+        return rc;
+    }
+    
     change_map_t *change_map = static_cast<change_map_t*>(change_map_void_ptr);
 
     std::lock_guard<std::mutex> lock(change_table_mutex);
@@ -253,11 +320,18 @@ void lustre_rename(const lustre_irods_connector_cfg_t *config_struct_ptr, const 
             }
         }
     }
+    return lustre_irods::SUCCESS; 
+
 
 }
 
-void lustre_create(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
+int lustre_create(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
         const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr, void *change_map_void_ptr) {
+
+    int rc;
+    if ((rc = validate_operands(config_struct_ptr, fidstr_cstr, parent_fidstr, object_name, lustre_path_cstr,change_map_void_ptr)) < 0) {
+        return rc;
+    }
 
     change_map_t *change_map = static_cast<change_map_t*>(change_map_void_ptr);
 
@@ -291,10 +365,19 @@ void lustre_create(const lustre_irods_connector_cfg_t *config_struct_ptr, const 
         change_map->push_back(entry);
     }
 
+    return lustre_irods::SUCCESS; 
+
 }
 
-void lustre_mtime(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
+int lustre_mtime(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
         const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr, void *change_map_void_ptr) {
+
+
+
+    int rc;
+    if ((rc = validate_operands(config_struct_ptr, fidstr_cstr, parent_fidstr, object_name, lustre_path_cstr,change_map_void_ptr)) < 0) {
+        return rc;
+    }  
 
     change_map_t *change_map = static_cast<change_map_t*>(change_map_void_ptr);
 
@@ -323,11 +406,17 @@ void lustre_mtime(const lustre_irods_connector_cfg_t *config_struct_ptr, const c
         change_map->push_back(entry);
     }
 
+    return lustre_irods::SUCCESS; 
 
 }
 
-void lustre_trunc(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
+int lustre_trunc(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr, 
         const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr, void *change_map_void_ptr) { 
+
+    int rc;
+    if ((rc = validate_operands(config_struct_ptr, fidstr_cstr, parent_fidstr, object_name, lustre_path_cstr,change_map_void_ptr)) < 0) {
+        return rc;
+    }
 
     change_map_t *change_map = static_cast<change_map_t*>(change_map_void_ptr);
 
@@ -363,9 +452,23 @@ void lustre_trunc(const lustre_irods_connector_cfg_t *config_struct_ptr, const c
             entry.file_size = st.st_size;
         change_map->push_back(entry);
     }
+
+    return lustre_irods::SUCCESS; 
+
+
 }
 
-void remove_fidstr_from_table(const char *fidstr_cstr, void *change_map_void_ptr) {
+int remove_fidstr_from_table(const char *fidstr_cstr, void *change_map_void_ptr) {
+
+    if (fidstr_cstr == nullptr) {
+        LOG(LOG_ERR, "Null fidstr_cstr sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return lustre_irods::INVALID_OPERAND_ERROR;
+    }
+
+    if (change_map_void_ptr == nullptr) {
+        LOG(LOG_ERR, "Null change_map_void_ptr sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return lustre_irods::INVALID_OPERAND_ERROR;
+    }
 
     change_map_t *change_map = static_cast<change_map_t*>(change_map_void_ptr); 
     
@@ -375,14 +478,28 @@ void remove_fidstr_from_table(const char *fidstr_cstr, void *change_map_void_ptr
     auto &change_map_fidstr = change_map->get<1>();
 
     change_map_fidstr.erase(fidstr);
+
+    return lustre_irods::SUCCESS;
 }
 
-// precondition:  p3 has buffer_size reserved
+// precondition:  result has buffer_size reserved
 int concatenate_paths_with_boost(const char *p1, const char *p2, char *result, size_t buffer_size) {
  
-    if (p1 == nullptr || p2 == nullptr) {
-        return -1;
+    if (p1 == nullptr) {
+        LOG(LOG_ERR, "Null p1 in %s - %d\n", __FUNCTION__, __LINE__);    
+        return lustre_irods::INVALID_OPERAND_ERROR;
     }
+
+    if (p2 == nullptr) {
+        LOG(LOG_ERR, "Null p2 in %s - %d\n", __FUNCTION__, __LINE__); 
+        return lustre_irods::INVALID_OPERAND_ERROR;
+    }
+
+    if (result == nullptr) {
+        LOG(LOG_ERR, "Null result in %s - %d\n", __FUNCTION__, __LINE__); 
+        return lustre_irods::INVALID_OPERAND_ERROR;
+    }
+
 
     boost::filesystem::path path_obj_1{p1};
     boost::filesystem::path path_obj_2{p2};
@@ -390,14 +507,18 @@ int concatenate_paths_with_boost(const char *p1, const char *p2, char *result, s
 
     snprintf(result, buffer_size, "%s", path_result.string().c_str());
 
-    return 0;
+    return lustre_irods::SUCCESS;
 }
 
 
 
 } // end extern "C"
 
+// This is just a debugging function
 void lustre_write_change_table_to_str(char *buffer, const size_t buffer_size, const change_map_t *change_map) {
+
+    if (buffer == nullptr || change_map == nullptr)
+        return;
 
     //boost::shared_lock<boost::shared_mutex> lock(change_table_mutex);
     std::lock_guard<std::mutex> lock(change_table_mutex);
@@ -435,7 +556,12 @@ void lustre_write_change_table_to_str(char *buffer, const size_t buffer_size, co
 
 }
 
+// This is just a debugging function
 void lustre_print_change_table(change_map_t *change_map) {
+    
+    if (change_map == nullptr)
+        return;
+
     char buffer[5012];
     lustre_write_change_table_to_str(buffer, 5012, change_map);
     LOG(LOG_DBG, "%s", buffer);
@@ -445,7 +571,23 @@ void lustre_print_change_table(change_map_t *change_map) {
 // processes change table by writing records ready to be sent to iRODS into 
 // irodsLustreApiInp_t structure formatted by capnproto.
 // Note:  The irodsLustreApiInp_t::buf is malloced and must be freed by caller.
-void write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *config_struct_ptr, irodsLustreApiInp_t *inp, change_map_t *change_map) {
+int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *config_struct_ptr, irodsLustreApiInp_t *inp, 
+        change_map_t *change_map) {
+
+    if (config_struct_ptr == nullptr) {
+        LOG(LOG_ERR, "Null config_struct_ptr sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return lustre_irods::INVALID_OPERAND_ERROR;
+    }
+
+    if (inp == nullptr) {
+        LOG(LOG_ERR, "Null inp sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return lustre_irods::INVALID_OPERAND_ERROR;
+    }
+
+    if (change_map == nullptr) {
+        LOG(LOG_ERR, "Null change_map sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return lustre_irods::INVALID_OPERAND_ERROR;
+    }
 
     //boost::shared_lock<boost::shared_mutex> lock(change_table_mutex);
     std::lock_guard<std::mutex> lock(change_table_mutex);
@@ -499,6 +641,8 @@ void write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *con
     inp->buf = (unsigned char*)malloc(message_size);
     inp->buflen = message_size;
     memcpy(inp->buf, std::begin(array), message_size);
+
+    return lustre_irods::SUCCESS;
 }
     
 std::string event_type_to_str(ChangeDescriptor::EventTypeEnum type) {
@@ -541,6 +685,7 @@ bool entries_ready_to_process(change_map_t *change_map) {
 
     if (change_map == nullptr) {
         LOG(LOG_DBG, "change map null pointer received\n");
+        return false;
     }
 
     // get change map with size index

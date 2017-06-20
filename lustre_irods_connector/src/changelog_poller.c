@@ -19,12 +19,15 @@
 #include "rodsDef.h"
 #include "config.hpp"
 #include "lustre_change_table.hpp"
+#include "lustre_irods_errors.hpp"
 
 #include "logging.hpp"
 
 #ifndef LPX64
 #define LPX64   "%#llx"
 static inline bool fid_is_zero(const lustre_fid *fid) {
+    if (fid == NULL) 
+        return true;
     return fid->f_seq == 0 && fid->f_oid == 0;
 }
 #endif
@@ -37,7 +40,19 @@ void get_overwritten_fidstr_from_record(struct changelog_rec *rec, char *fidstr)
     snprintf(fidstr, MAX_NAME_LEN, DFID_NOBRACE, PFID(&rec->cr_tfid));
 }
 
-void get_fidstr_from_record(struct changelog_rec *rec, char *fidstr) {
+// precondition:  fidstr has MAX_NAME_LEN memory allocated
+int get_fidstr_from_record(struct changelog_rec *rec, char *fidstr) {
+
+    if (rec == NULL) {
+        LOG(LOG_ERR, "Null rec sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return INVALID_OPERAND_ERROR;
+    }
+
+    if (fidstr == NULL) {
+        LOG(LOG_ERR, "Null fidstr sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return INVALID_OPERAND_ERROR;
+    }
+
 
     struct changelog_ext_rename *rnm;
 
@@ -52,11 +67,23 @@ void get_fidstr_from_record(struct changelog_rec *rec, char *fidstr) {
             break;
     }
 
+    return SUCCESS;
+
 }
 
 
 // Determines if the object (file, dir) from the changelog record still exists in Lustre.
 bool object_exists_in_lustre(const char *root_path, struct changelog_rec *rec) {
+
+    if (root_path == NULL) {
+        LOG(LOG_ERR, "Null root_path sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return false;
+    }
+
+    if (rec == NULL) {
+        LOG(LOG_ERR, "Null rec sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return INVALID_OPERAND_ERROR;
+    }
 
     char fidstr[MAX_NAME_LEN] = "";
     char lustre_full_path[MAX_NAME_LEN] = "";
@@ -80,8 +107,25 @@ bool object_exists_in_lustre(const char *root_path, struct changelog_rec *rec) {
 // Precondition:  lustre_full_path is a buffer of MAX_NAME_LEN length
 int get_full_path_from_record(const char *root_path, struct changelog_rec *rec, char *lustre_full_path) {
 
+    if (root_path == NULL) {
+        LOG(LOG_ERR, "Null root_path sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return INVALID_OPERAND_ERROR;
+    }
+
+    if (rec == NULL) {
+        LOG(LOG_ERR, "Null rec sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return INVALID_OPERAND_ERROR;
+    }
+
+    if (lustre_full_path == NULL) {
+        LOG(LOG_ERR, "Null lustre_full_path sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return INVALID_OPERAND_ERROR;
+    }
+
+    // this is not necessarily an error.  on a rename or delete the object will
+    // no longer exist in lustre
     if (!object_exists_in_lustre(root_path, rec)) {
-        return -1;        
+        return LUSTRE_OBJECT_DNE_ERROR;        
     }
 
     char fidstr[MAX_NAME_LEN] = "";
@@ -93,32 +137,38 @@ int get_full_path_from_record(const char *root_path, struct changelog_rec *rec, 
 
     // use fidstr to get path
 
-    get_fidstr_from_record(rec, fidstr);
+    rc = get_fidstr_from_record(rec, fidstr);
+    if (rc < 0) {
+        return rc;
+    }
+
     rc = llapi_fid2path(root_path, fidstr, lustre_full_path, MAX_NAME_LEN, &recno, &linkno);
 
     if (rc < 0) {
         LOG(LOG_ERR, "llapi_fid2path in get_full_path_from_record() returned an error.");
-        return -1;
+        return LLAPI_FID2PATH_ERROR;
     }
 
     // add root path to lustre_full_path
     char temp[MAX_NAME_LEN];
-    concatenate_paths_with_boost(root_path, lustre_full_path, temp, MAX_NAME_LEN);
+    if ((rc = concatenate_paths_with_boost(root_path, lustre_full_path, temp, MAX_NAME_LEN)) != 0) {
+        return rc;
+    }
     snprintf(lustre_full_path, MAX_NAME_LEN, "%s", temp);
 
-    return 0;
+    return SUCCESS;
 }
 
-void not_implemented(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr, const char *parent_fidstr, const char *object_path, 
-        const char *lustre_path, void *change_map) {
-    LOG(LOG_DBG, "OPERATION NOT YET IMPLEMENTED\n");
+int not_implemented(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr, const char *parent_fidstr, 
+        const char *object_path, const char *lustre_path, void *change_map) {
+    LOG(LOG_DBG, "OPERATION NOT IMPLEMENTED\n");
+    return SUCCESS;
 }
 
 
-typedef void (*lustre_operation)(const lustre_irods_connector_cfg_t*, const char *, const char *, const char *, const char *, void *);
+typedef int (*lustre_operation)(const lustre_irods_connector_cfg_t*, const char *, const char *, const char *, const char *, void *);
 
 lustre_operation lustre_operators[CL_LAST] = 
-//void (*lustre_operators[CL_LAST])(const lustre_irods_connector_cfg_t*, const char *, const char *, const char *, const char *, void *) =
 {   &not_implemented,           // CL_MARK
     &lustre_create,             // CL_CREATE
     &lustre_mkdir,              // CL_MKDIR
@@ -141,11 +191,26 @@ lustre_operation lustre_operators[CL_LAST] =
     &not_implemented            // CL_ATIME - irods does not have an access time
 };
 
-void handle_record(const lustre_irods_connector_cfg_t *config_struct_ptr, struct changelog_rec *rec, void *change_map) {
+int handle_record(const lustre_irods_connector_cfg_t *config_struct_ptr, struct changelog_rec *rec, void *change_map) {
+
+    if (config_struct_ptr == NULL) {
+        LOG(LOG_ERR, "Null config_struct_ptr sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return INVALID_OPERAND_ERROR;
+    }
+
+    if (rec == NULL) {
+        LOG(LOG_ERR, "Null rec sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return INVALID_OPERAND_ERROR;
+    }
+
+    if (change_map == NULL) {
+        LOG(LOG_ERR, "Null change_map sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return INVALID_OPERAND_ERROR;
+    }
 
     if (rec->cr_type >= CL_LAST) {
         LOG(LOG_ERR, "Invalid cr_type - %i", rec->cr_type);
-        return;
+        return INVALID_CR_TYPE_ERROR;
     }
 
     char lustre_full_path[MAX_NAME_LEN] = "";
@@ -154,7 +219,11 @@ void handle_record(const lustre_irods_connector_cfg_t *config_struct_ptr, struct
     char object_name[MAX_NAME_LEN] = "";
 
     get_fidstr_from_record(rec, fidstr);
-    get_full_path_from_record(config_struct_ptr->lustre_root_path, rec, lustre_full_path);
+    int rc = get_full_path_from_record(config_struct_ptr->lustre_root_path, rec, lustre_full_path);
+    if (rc != SUCCESS && rc != LUSTRE_OBJECT_DNE_ERROR) {
+        return rc;
+    }
+
     snprintf(parent_fidstr, MAX_NAME_LEN, DFID_NOBRACE, PFID(&rec->cr_pfid));
     snprintf(object_name, MAX_NAME_LEN, "%.*s", rec->cr_namelen, changelog_rec_name(rec));
 
@@ -190,20 +259,26 @@ void handle_record(const lustre_irods_connector_cfg_t *config_struct_ptr, struct
         }
         snprintf(old_lustre_path, MAX_NAME_LEN, "%s%s%s", config_struct_ptr->lustre_root_path, old_parent_path, old_filename);
 
-        lustre_rename(config_struct_ptr, fidstr, parent_fidstr, object_name, lustre_full_path, old_lustre_path, change_map);
+        return lustre_rename(config_struct_ptr, fidstr, parent_fidstr, object_name, lustre_full_path, old_lustre_path, change_map);
     } else {
-        (*lustre_operators[rec->cr_type])(config_struct_ptr, fidstr, parent_fidstr, object_name, lustre_full_path, change_map);
+        return (*lustre_operators[rec->cr_type])(config_struct_ptr, fidstr, parent_fidstr, object_name, lustre_full_path, change_map);
     }
 }
 
-void get_time_str(time_t time, char *time_str) {
-
-        struct tm * timeinfo;
-        timeinfo = localtime(&time);
-        strftime(time_str, sizeof(char[20]), "%b %d %H:%M", timeinfo);
-}
+/*int get_time_str(time_t time, char *time_str) {
+ 
+    struct tm * timeinfo;
+    timeinfo = localtime(&time);
+    strftime(time_str, sizeof(char[20]), "%b %d %H:%M", timeinfo);
+}*/
 
 int start_lcap_changelog(const lustre_irods_connector_cfg_t *config_struct_ptr) {
+
+    if (config_struct_ptr == NULL) {
+        LOG(LOG_ERR, "Null config_struct_ptr sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return INVALID_OPERAND_ERROR;
+    }
+
     return lcap_changelog_start(&ctx, flags, config_struct_ptr->mdtname, 0LL);
 }
 
@@ -212,6 +287,17 @@ int finish_lcap_changelog() {
 }
 
 int poll_change_log_and_process(const lustre_irods_connector_cfg_t *config_struct_ptr, void *change_map) {
+
+    if (config_struct_ptr == NULL) {
+        LOG(LOG_ERR, "Null config_struct_ptr sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return INVALID_OPERAND_ERROR;
+    }
+
+    if (change_map == NULL) {
+        LOG(LOG_ERR, "Null change_map sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return INVALID_OPERAND_ERROR;
+    }
+
 
     int                    rc;
     char                   clid[64] = {0};
@@ -250,24 +336,22 @@ int poll_change_log_and_process(const lustre_irods_connector_cfg_t *config_struc
 
         LOG(LOG_INFO, "\n");
 
-        handle_record(config_struct_ptr, rec, change_map);
-        //lustre_print_change_table();
+        if ((rc = handle_record(config_struct_ptr, rec, change_map)) < 0) {
+            LOG(LOG_ERR, "handle record failed for %s "DFID" rc = %i\n", changelog_type2str(rec->cr_type), PFID(&rec->cr_tfid), rc);
+        }
 
         rc = lcap_changelog_clear(ctx, config_struct_ptr->mdtname, clid, rec->cr_index);
         if (rc < 0) {
             LOG(LOG_ERR, "lcap_changelog_clear: %s\n", zmq_strerror(-rc));
-            //disconnect_irods_connection();
-            return 1;
+            return rc;
         }
-
 
         rc = lcap_changelog_free(ctx, &rec);
         if (rc < 0) {
             LOG(LOG_ERR, "lcap_changelog_free: %s\n", zmq_strerror(-rc));
-            //disconnect_irods_connection();
-            return 1;
+            return rc;
         }
     }
 
-    return 0;
+    return SUCCESS;
 }
