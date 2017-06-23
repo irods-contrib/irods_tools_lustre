@@ -83,17 +83,53 @@ void irods_api_client_main(std::shared_ptr<lustre_irods_connection> conn, const 
     zmq_connect (subscriber, "tcp://localhost:5563");
     zmq_setsockopt (subscriber, ZMQ_SUBSCRIBE, "changetable_readers", 1);
 
-    while (true) {
+    // if we get an error sending data to irods, use a backoff_timer
+    unsigned int error_backoff_timer = config_struct_ptr->update_irods_interval_seconds;
 
+    bool irods_error_detected = false;
+
+    while (true) {
+        
         bool quit = false;
-        while (entries_ready_to_process(change_map)) {
+
+        LOG(LOG_INFO,"irods client reading change map\n");
+
+        if (irods_error_detected) {
+            LOG(LOG_INFO, "irods error detected.  try to reinstantiate the connection\n");
+
+            if (conn->instantiate_irods_connection() == 0) {
+               irods_error_detected = false;
+            }
+        } 
+
+        while (!irods_error_detected && entries_ready_to_process(change_map)) {
+            
             irodsLustreApiInp_t inp;
             memset( &inp, 0, sizeof( inp ) );
-            if (write_change_table_to_capnproto_buf(config_struct_ptr, &inp, change_map) < 0) {
+
+            std::shared_ptr<change_map_t> removed_entries = std::make_shared<change_map_t>(); 
+
+            if (write_change_table_to_capnproto_buf(config_struct_ptr, &inp, change_map, removed_entries) < 0) {
                 LOG(LOG_ERROR, "Could not execute write_change_table_to_capnproto_buf\n");
                 continue;
             }
-            conn->send_change_map_to_irods(&inp);
+            if (conn->send_change_map_to_irods(&inp) == lustre_irods::IRODS_ERROR) {
+
+                irods_error_detected = true;
+
+                // error occurred - add removed_entries rows back into table 
+                auto &change_map_seq = removed_entries->get<0>(); 
+                for (auto iter = change_map_seq.begin(); iter != change_map_seq.end(); ++iter) {
+                    change_map->push_back(*iter);
+                }
+
+                // next sleep will be twice the last sleep 
+                if (error_backoff_timer < 256*config_struct_ptr->update_irods_interval_seconds) {
+                    error_backoff_timer = error_backoff_timer << 1;
+                }
+            } else {
+               error_backoff_timer = config_struct_ptr->update_irods_interval_seconds;
+            }
             free(inp.buf);
         }
 
@@ -111,7 +147,7 @@ void irods_api_client_main(std::shared_ptr<lustre_irods_connection> conn, const 
         if (quit) 
             break;
 
-        sleep(config_struct_ptr->update_irods_interval_seconds);
+        sleep(error_backoff_timer);
     }
 
     zmq_close(subscriber);

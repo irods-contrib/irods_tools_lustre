@@ -572,7 +572,7 @@ void lustre_print_change_table(change_map_t *change_map) {
 // irodsLustreApiInp_t structure formatted by capnproto.
 // Note:  The irodsLustreApiInp_t::buf is malloced and must be freed by caller.
 int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *config_struct_ptr, irodsLustreApiInp_t *inp, 
-        change_map_t *change_map) {
+        change_map_t *change_map, std::shared_ptr<change_map_t>& removed_entries) {
 
     if (config_struct_ptr == nullptr) {
         LOG(LOG_ERR, "Null config_struct_ptr sent to %s - %d\n", __FUNCTION__, __LINE__);
@@ -621,6 +621,9 @@ int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *conf
             entries[cnt].setLustrePath(iter->lustre_path);
             entries[cnt].setEventType(iter->last_event);
             entries[cnt].setFileSize(iter->file_size);
+
+            // before deleting write the entry to removed_entries 
+            removed_entries->push_back(*iter);
 
             // delete entry from table 
             iter = change_map_seq.erase(iter);
