@@ -16,6 +16,7 @@ const int IRODS_ENVIRONMENT_ERROR = -7;
 const int LUSTRE_OBJECT_DNE_ERROR = -8;
 const int LLAPI_FID2PATH_ERROR = -9;
 const int INVALID_CR_TYPE_ERROR = -10;
+const int SQLITE_DB_ERROR = -11;
 
 #ifdef __cplusplus
 }

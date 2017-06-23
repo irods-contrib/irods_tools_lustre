@@ -23,6 +23,9 @@
 #include <capnp/message.h>
 #include <capnp/serialize-packed.h>
 
+// sqlite
+#include <sqlite3.h>
+
 std::string event_type_to_str(ChangeDescriptor::EventTypeEnum type);
 std::string object_type_to_str(ChangeDescriptor::ObjectTypeEnum type);
 
@@ -116,7 +119,6 @@ int lustre_close(const lustre_irods_connector_cfg_t *config_struct_ptr, const ch
         if (result == 0)
             entry.file_size = st.st_size;
 
-        // todo is this getting deleted
         change_map->push_back(entry);
     }
     return lustre_irods::SUCCESS;
@@ -472,6 +474,8 @@ int remove_fidstr_from_table(const char *fidstr_cstr, void *change_map_void_ptr)
 
     change_map_t *change_map = static_cast<change_map_t*>(change_map_void_ptr); 
     
+    std::lock_guard<std::mutex> lock(change_table_mutex);
+
     std::string fidstr(fidstr_cstr);
 
     // get change map with index of fidstr 
@@ -520,7 +524,6 @@ void lustre_write_change_table_to_str(char *buffer, const size_t buffer_size, co
     if (buffer == nullptr || change_map == nullptr)
         return;
 
-    //boost::shared_lock<boost::shared_mutex> lock(change_table_mutex);
     std::lock_guard<std::mutex> lock(change_table_mutex);
 
     // get change map with sequenced index  
@@ -589,7 +592,6 @@ int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *conf
         return lustre_irods::INVALID_OPERAND_ERROR;
     }
 
-    //boost::shared_lock<boost::shared_mutex> lock(change_table_mutex);
     std::lock_guard<std::mutex> lock(change_table_mutex);
 
     // get change map with sequenced index  
@@ -672,6 +674,20 @@ std::string event_type_to_str(ChangeDescriptor::EventTypeEnum type) {
     return "";
 }
 
+ChangeDescriptor::EventTypeEnum str_to_event_type(const std::string& str) {
+    if (str == "CREATE") 
+        return ChangeDescriptor::EventTypeEnum::CREATE;
+    if (str == "UNLINK")
+        return ChangeDescriptor::EventTypeEnum::UNLINK;
+    if (str == "RMDIR")
+        return ChangeDescriptor::EventTypeEnum::RMDIR;
+    if (str == "MKDIR")
+        return ChangeDescriptor::EventTypeEnum::MKDIR;
+    if (str == "RENAME")
+        return ChangeDescriptor::EventTypeEnum::RENAME;
+    return ChangeDescriptor::EventTypeEnum::OTHER;
+}
+
 std::string object_type_to_str(ChangeDescriptor::ObjectTypeEnum type) {
     switch (type) {
         case ChangeDescriptor::ObjectTypeEnum::FILE: 
@@ -684,7 +700,15 @@ std::string object_type_to_str(ChangeDescriptor::ObjectTypeEnum type) {
     return "";
 }
 
+ChangeDescriptor::ObjectTypeEnum str_to_object_type(const std::string& str) {
+    if (str == "DIR") 
+        return ChangeDescriptor::ObjectTypeEnum::DIR;
+   return ChangeDescriptor::ObjectTypeEnum::FILE;
+} 
+
 bool entries_ready_to_process(change_map_t *change_map) {
+
+    std::lock_guard<std::mutex> lock(change_table_mutex);
 
     if (change_map == nullptr) {
         LOG(LOG_DBG, "change map null pointer received\n");
@@ -698,3 +722,177 @@ bool entries_ready_to_process(change_map_t *change_map) {
     return ready; 
 }
 
+int serialize_change_map_to_sqlite(change_map_t *change_map) {
+
+    if (change_map == nullptr) {
+        LOG(LOG_ERR, "Null change_map %s - %d\n", __FUNCTION__, __LINE__);
+        return lustre_irods::INVALID_OPERAND_ERROR;
+    }
+
+    std::lock_guard<std::mutex> lock(change_table_mutex);
+
+    sqlite3 *db;
+    int rc;
+
+    rc = sqlite3_open("change_map.db", &db);
+
+    if (rc) {
+        LOG(LOG_ERR, "Can't open change_map.db for serialization.\n");
+        return lustre_irods::SQLITE_DB_ERROR;
+    }
+
+    // get change map with sequenced index  
+    auto &change_map_seq = change_map->get<0>();
+
+    for (auto iter = change_map_seq.begin(); iter != change_map_seq.end(); ++iter) {  
+
+        sqlite3_stmt *stmt;     
+        sqlite3_prepare_v2(db, "insert into change_map (fidstr, parent_fidstr, object_name, lustre_path, last_event, "
+                               "timestamp, oper_complete, object_type, file_size) values (?1, ?2, ?3, ?4, "
+                               "?5, ?6, ?7, ?8, ?9);", -1, &stmt, NULL);       
+        sqlite3_bind_text(stmt, 1, iter->fidstr.c_str(), -1, SQLITE_STATIC); 
+        sqlite3_bind_text(stmt, 2, iter->parent_fidstr.c_str(), -1, SQLITE_STATIC); 
+        sqlite3_bind_text(stmt, 3, iter->object_name.c_str(), -1, SQLITE_STATIC); 
+        sqlite3_bind_text(stmt, 4, iter->lustre_path.c_str(), -1, SQLITE_STATIC); 
+        sqlite3_bind_text(stmt, 5, event_type_to_str(iter->last_event).c_str(), -1, SQLITE_STATIC); 
+        sqlite3_bind_int(stmt, 6, iter->timestamp); 
+        sqlite3_bind_int(stmt, 7, iter->oper_complete ? 1 : 0);
+        sqlite3_bind_text(stmt, 8, object_type_to_str(iter->object_type).c_str(), -1, SQLITE_STATIC); 
+        sqlite3_bind_int(stmt, 9, iter->file_size); 
+
+        rc = sqlite3_step(stmt); 
+        if (rc != SQLITE_DONE) {
+            LOG(LOG_ERR, "ERROR inserting data: %s\n", sqlite3_errmsg(db));
+        }
+
+        sqlite3_finalize(stmt);
+    }
+
+    sqlite3_close(db);
+
+    return lustre_irods::SUCCESS;
+}
+
+static int query_callback(void* change_map_void_pointer, int argc, char** argv, char** columnNames) {
+
+    if (change_map_void_pointer  == nullptr) {
+        LOG(LOG_ERR, "Null change_map_void_pointer %s - %d\n", __FUNCTION__, __LINE__);
+        return lustre_irods::INVALID_OPERAND_ERROR;
+    }
+
+    change_map_t *change_map = static_cast<change_map_t*>(change_map_void_pointer);
+
+    if (argc != 9) {
+        LOG(LOG_ERR, "Invalid number of columns returned from change_map query in database.\n");
+        return  lustre_irods::SQLITE_DB_ERROR;
+    }
+
+    change_descriptor entry;
+    memset(&entry, 0, sizeof(entry));
+    entry.fidstr = argv[0];
+    entry.parent_fidstr = argv[1];
+    entry.object_name = argv[2];
+    entry.object_type = str_to_object_type(argv[3]);
+    entry.lustre_path = argv[4]; 
+
+    int oper_complete;
+    int timestamp;
+    int file_size;
+
+    try {
+        oper_complete = boost::lexical_cast<int>(argv[5]);
+        timestamp = boost::lexical_cast<time_t>(argv[6]);
+        file_size = boost::lexical_cast<off_t>(argv[8]);
+    } catch( boost::bad_lexical_cast const& ) {
+        LOG(LOG_ERR, "Could not convert the string to int returned from change_map query in database.\n");
+        return  lustre_irods::SQLITE_DB_ERROR;
+    }
+
+    entry.oper_complete = (oper_complete == 1);
+    entry.timestamp = timestamp;
+    entry.last_event = str_to_event_type(argv[7]);
+    entry.file_size = file_size;
+
+    std::lock_guard<std::mutex> lock(change_table_mutex);
+    change_map->push_back(entry);
+
+    return lustre_irods::SUCCESS;
+}
+
+int deserialize_change_map_from_sqlite(change_map_t *change_map) {
+
+    if (change_map == nullptr) {
+        LOG(LOG_ERR, "Null change_map %s - %d\n", __FUNCTION__, __LINE__);
+        return lustre_irods::INVALID_OPERAND_ERROR;
+    }
+
+    sqlite3 *db;
+    char *zErrMsg = 0;
+    int rc;
+
+    rc = sqlite3_open("change_map.db", &db);
+
+    if (rc) {
+        LOG(LOG_ERR, "Can't open change_map.db for de-serialization.\n");
+        return lustre_irods::SQLITE_DB_ERROR;
+    }
+
+    rc = sqlite3_exec(db, "select fidstr, parent_fidstr, object_name, object_type, lustre_path, oper_complete, "
+                          "timestamp, last_event, file_size from change_map", query_callback, change_map, &zErrMsg);
+
+    if (rc) {
+        LOG(LOG_ERR, "Error querying change_map from db during de-serialization: %s\n", zErrMsg);
+        sqlite3_close(db);
+        return lustre_irods::SQLITE_DB_ERROR;
+    }
+
+    // delete contents of table using sqlite truncate optimizer
+    rc = sqlite3_exec(db, "delete from change_map", NULL, NULL, &zErrMsg);
+    
+    if (rc) {
+        LOG(LOG_ERR, "Error clearing out change_map from db during de-serialization: %s\n", zErrMsg);
+        sqlite3_close(db);
+        return lustre_irods::SQLITE_DB_ERROR;
+    }
+
+    sqlite3_close(db);
+
+    return lustre_irods::SUCCESS;
+}
+
+int initiate_change_map_serialization_database() {
+
+    sqlite3 *db;
+    char *zErrMsg = 0;
+    int rc;
+
+    const char *create_table_str = "create table if not exists change_map ("
+       "fidstr char(256) primary key, "
+       "parent_fidstr char(256), "
+       "object_name char(256), "
+       "lustre_path char(256), "
+       "last_event char(256), "
+       "timestamp integer, "
+       "oper_complete integer, "
+       "object_type char(256), "
+       "file_size integer)";
+ 
+    rc = sqlite3_open("change_map.db", &db);
+
+    if (rc) {
+        LOG(LOG_ERR, "Can't create or open change_map.db.\n");
+        return lustre_irods::SQLITE_DB_ERROR;
+    }
+
+    rc = sqlite3_exec(db, create_table_str,  NULL, NULL, &zErrMsg);
+    
+    if (rc) {
+        LOG(LOG_ERR, "Error creating change_map table: %s\n", zErrMsg);
+        sqlite3_close(db);
+        return lustre_irods::SQLITE_DB_ERROR;
+    }
+
+    sqlite3_close(db);
+
+    return lustre_irods::SUCCESS;
+}

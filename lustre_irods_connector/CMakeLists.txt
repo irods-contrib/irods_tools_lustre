@@ -50,6 +50,7 @@ link_libraries(c++abi
     lcap
     kj
     zmq
+    sqlite3
     ${IRODS_EXTERNALS_FULLPATH_BOOST}/lib/libboost_filesystem.so
     ${IRODS_EXTERNALS_FULLPATH_BOOST}/lib/libboost_program_options.so
     ${IRODS_EXTERNALS_FULLPATH_BOOST}/lib/libboost_thread.so

@@ -73,6 +73,26 @@ void interrupt_handler(int dummy) {
     keep_running.store(false);
 }
 
+bool received_terminate_message(void * subscriber) {
+
+    bool return_val = false;
+
+    char *address = s_recv_noblock(subscriber);
+    char *contents = s_recv_noblock(subscriber);
+
+    if (address && contents && strcmp(contents, "terminate") == 0) {
+        return_val = true;
+    }
+
+    if (address) 
+        free(address);
+    if (contents)
+        free(contents);
+
+    return return_val;
+}
+
+
 // irods api client thread main routine
 // this is the main loop that reads the change entries in memory and sends them to iRODS via the API.
 void irods_api_client_main(std::shared_ptr<lustre_irods_connection> conn, const lustre_irods_connector_cfg_t *config_struct_ptr,
@@ -113,6 +133,7 @@ void irods_api_client_main(std::shared_ptr<lustre_irods_connection> conn, const 
                 LOG(LOG_ERROR, "Could not execute write_change_table_to_capnproto_buf\n");
                 continue;
             }
+
             if (conn->send_change_map_to_irods(&inp) == lustre_irods::IRODS_ERROR) {
 
                 irods_error_detected = true;
@@ -127,27 +148,35 @@ void irods_api_client_main(std::shared_ptr<lustre_irods_connection> conn, const 
                 if (error_backoff_timer < 256*config_struct_ptr->update_irods_interval_seconds) {
                     error_backoff_timer = error_backoff_timer << 1;
                 }
+
             } else {
                error_backoff_timer = config_struct_ptr->update_irods_interval_seconds;
             }
             free(inp.buf);
+
+            // see if there is a quit message, if so terminate
+            if (received_terminate_message(subscriber)) {
+                quit = true;
+                break;
+            }
+        }
+
+        // doing this in a loop so that we can catch a terminate more quickly
+        // not sure how to interrupt the sleep with zmq
+        for (unsigned int i = 0; i < error_backoff_timer; ++i) {
+            if (quit || received_terminate_message(subscriber)) {
+                quit = true;
+                break;
+            }
+
+            sleep(1);
         }
 
         // see if there is a quit message, if so terminate
-        char *address = s_recv_noblock(subscriber);
-        char *contents = s_recv_noblock(subscriber);
-        if (address && contents && strcmp(contents, "terminate") == 0) {
+        if (quit) {
             LOG(LOG_DBG, "irods client received a terminate message\n");
-            quit = true;
-        }
-        if (address) 
-            free(address);
-        if (contents)
-            free(contents);
-        if (quit) 
             break;
-
-        sleep(error_backoff_timer);
+        }
     }
 
     zmq_close(subscriber);
@@ -161,6 +190,7 @@ int main(int argc, char *argv[]) {
 
     const char *config_file = "lustre_irods_connector_config.json";
     char *log_file = nullptr;
+    bool fatal_error_detected = false;
 
     signal(SIGPIPE, SIG_IGN);
     
@@ -222,6 +252,20 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    LOG(LOG_DBG, "initializing change_map serialized database\n");
+    if (initiate_change_map_serialization_database() < 0) {
+        LOG(LOG_ERR, "failed to initialize serialization database\n");
+        return 1;
+    }
+
+    // create the changemap in memory and read from serialized DB
+    change_map_t change_map;
+
+    LOG(LOG_DBG, "reading change_map from serialized database\n");
+    if (deserialize_change_map_from_sqlite(&change_map) < 0) {
+        LOG(LOG_ERR, "failed to deserialize change map on startup\n");
+        return 1;
+    }
   
     std::shared_ptr<lustre_irods_connection> conn = std::make_shared<lustre_irods_connection>();
 
@@ -243,8 +287,6 @@ int main(int argc, char *argv[]) {
     void *publisher = zmq_socket (context, ZMQ_PUB);
     zmq_bind (publisher, "tcp://*:5563");
 
-    // create the changemap in memory
-    change_map_t change_map;
 
     // start the thread that sends changes to iRODS
     std::thread irods_api_client_thread(irods_api_client_main, conn, &config_struct, &change_map);
@@ -252,10 +294,10 @@ int main(int argc, char *argv[]) {
     rc = start_lcap_changelog(&config_struct);
     if (rc < 0) {
         LOG(LOG_ERR, "lcap_changelog_start: %s\n", zmq_strerror(-rc));
-        return 1;
+        fatal_error_detected = true;
     }
 
-    while (keep_running.load()) {
+    while (!fatal_error_detected && keep_running.load()) {
 
         LOG(LOG_INFO,"changelog client polling changelog\n");
         poll_change_log_and_process(&config_struct, &change_map);
@@ -263,10 +305,18 @@ int main(int argc, char *argv[]) {
     }
 
     // send message to threads to terminate
+    LOG(LOG_DBG, "sending terminate message to client\n");
     s_sendmore(publisher, "changetable_readers");
     s_send(publisher, "terminate");
 
     irods_api_client_thread.join();
+
+
+    LOG(LOG_DBG, "serializing change_map to database\n");
+    if (serialize_change_map_to_sqlite(&change_map) < 0) {
+        LOG(LOG_ERR, "failed to serialize change_map upon exit\n");
+        fatal_error_detected = true;
+    }
 
     zmq_close(publisher);
     zmq_ctx_destroy(context);
@@ -274,9 +324,10 @@ int main(int argc, char *argv[]) {
     rc = finish_lcap_changelog();
     if (rc) {
         LOG(LOG_ERR, "lcap_changelog_fini: %s\n", zmq_strerror(-rc));
-        return 1;
+        fatal_error_detected = true;
+    } else {
+        LOG(LOG_ERR, "finish_lcap_changelog exited normally\n");
     }
-    LOG(LOG_ERR, "finish_lcap_changelog exited normally\n");
 
     LOG(LOG_DBG,"changelog client exiting\n");
     if (dbgstream != stdout) {
@@ -286,6 +337,9 @@ int main(int argc, char *argv[]) {
     if (log_file) {
         free(log_file);
     }
+
+    if (fatal_error_detected)
+        return 1;
 
     return 0;
 }

@@ -85,6 +85,9 @@ void lustre_write_change_table_to_str(char *buffer, const size_t buffer_size, co
 int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *config_struct_ptr, irodsLustreApiInp_t *inp, 
         change_map_t *change_map, std::shared_ptr<change_map_t>& removed_entries);
 bool entries_ready_to_process(change_map_t *change_map);
+int serialize_change_map_to_sqlite(change_map_t *change_map);
+int deserialize_change_map_from_sqlite(change_map_t *change_map);
+int initiate_change_map_serialization_database();
 
 #endif
 
