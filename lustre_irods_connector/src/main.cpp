@@ -92,16 +92,40 @@ bool received_terminate_message(void * subscriber) {
     return return_val;
 }
 
+// Perform a no-block message receive.  If no message is available return std::string("").
+std::string receive_message(void * subscriber) {
+
+    char *address = s_recv_noblock(subscriber);
+    char *contents = s_recv_noblock(subscriber);
+
+    std::string return_msg = "";
+
+    if (address && contents) {
+        return_msg = contents;
+    }
+
+    if (address)
+        free(address);
+    if (contents)
+        free(contents);
+
+    return return_msg;
+
+}
 
 // irods api client thread main routine
 // this is the main loop that reads the change entries in memory and sends them to iRODS via the API.
 void irods_api_client_main(std::shared_ptr<lustre_irods_connection> conn, const lustre_irods_connector_cfg_t *config_struct_ptr,
         change_map_t *change_map) {
 
-    void *context = zmq_ctx_new ();
-    void *subscriber = zmq_socket (context, ZMQ_SUB);
-    zmq_connect (subscriber, "tcp://localhost:5563");
-    zmq_setsockopt (subscriber, ZMQ_SUBSCRIBE, "changetable_readers", 1);
+    void *context = zmq_ctx_new();
+    void *subscriber = zmq_socket(context, ZMQ_SUB);
+    zmq_connect(subscriber, "tcp://localhost:5563");
+    zmq_setsockopt(subscriber, ZMQ_SUBSCRIBE, "changetable_readers", 1);
+
+    void *context2 = zmq_ctx_new();
+    void *publisher = zmq_socket(context2, ZMQ_PUB);
+    zmq_connect(publisher, "tcp://localhost:5564");
 
     // if we get an error sending data to irods, use a backoff_timer
     unsigned int error_backoff_timer = config_struct_ptr->update_irods_interval_seconds;
@@ -118,7 +142,13 @@ void irods_api_client_main(std::shared_ptr<lustre_irods_connection> conn, const 
             LOG(LOG_INFO, "irods error detected.  try to reinstantiate the connection\n");
 
             if (conn->instantiate_irods_connection() == 0) {
-               irods_error_detected = false;
+
+                irods_error_detected = false;
+
+                // send message to changelog reader to continue reading changelog
+                LOG(LOG_DBG, "sending continue message to changelog reader\n");
+                s_sendmore(publisher, "changelog_reader");
+                s_send(publisher, "continue");
             }
         } 
 
@@ -137,6 +167,12 @@ void irods_api_client_main(std::shared_ptr<lustre_irods_connection> conn, const 
             if (conn->send_change_map_to_irods(&inp) == lustre_irods::IRODS_ERROR) {
 
                 irods_error_detected = true;
+
+                // send message to changelog reader to pause reading changelog
+                LOG(LOG_DBG, "sending pause message to changelog_reader\n");
+                s_sendmore(publisher, "changelog_reader");
+                s_send(publisher, "pause");
+
 
                 // error occurred - add removed_entries rows back into table 
                 auto &change_map_seq = removed_entries->get<0>(); 
@@ -282,11 +318,19 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    // TODO change these ports to configuration
+    
     // start a pub/sub publisher which is used to terminate threads
-    void *context = zmq_ctx_new ();
-    void *publisher = zmq_socket (context, ZMQ_PUB);
-    zmq_bind (publisher, "tcp://*:5563");
+    void *context = zmq_ctx_new();
+    void *publisher = zmq_socket(context, ZMQ_PUB);
+    zmq_bind(publisher, "tcp://*:5563");
 
+    // start another pub/sub which is used for clients to send a stop reading
+    // events message if iRODS is down
+    void *context2 = zmq_ctx_new();
+    void *subscriber = zmq_socket(context2, ZMQ_SUB);
+    zmq_bind(subscriber, "tcp://*:5564");
+    zmq_setsockopt(subscriber, ZMQ_SUBSCRIBE, "changelog_reader", 1);
 
     // start the thread that sends changes to iRODS
     std::thread irods_api_client_thread(irods_api_client_main, conn, &config_struct, &change_map);
@@ -297,10 +341,24 @@ int main(int argc, char *argv[]) {
         fatal_error_detected = true;
     }
 
+    bool pause_reading = false;
+
     while (!fatal_error_detected && keep_running.load()) {
 
-        LOG(LOG_INFO,"changelog client polling changelog\n");
-        poll_change_log_and_process(&config_struct, &change_map);
+        // check for a pause/continue message
+        std::string msg = receive_message(subscriber);
+
+        if (msg == "continue") 
+            pause_reading = false;
+        else if (msg == "pause")
+            pause_reading = true;
+
+        if (!pause_reading) {
+            LOG(LOG_INFO,"changelog client polling changelog\n");
+            poll_change_log_and_process(&config_struct, &change_map);
+        } else {
+            LOG(LOG_DBG, "in a paused state.  not reading changelog...\n");
+        }
         sleep(config_struct.changelog_poll_interval_seconds);
     }
 
