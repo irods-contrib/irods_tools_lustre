@@ -58,6 +58,8 @@ int read_config_file(const char *filename, lustre_irods_connector_cfg_t *config_
     std::string log_level_str;
     std::string changelog_poll_interval_seconds_str;
     std::string update_irods_interval_seconds_str;
+    std::string changelog_reader_recv_port_str;
+    std::string irods_client_recv_port_str;
 
     try {
         json_map config_map{ json_file{ filename } };
@@ -86,6 +88,16 @@ int read_config_file(const char *filename, lustre_irods_connector_cfg_t *config_
             LOG(LOG_ERR, "Key update_irods_interval_seconds missing from %s\n", filename);
             return lustre_irods::CONFIGURATION_ERROR;
         }
+        if (read_key_from_map(config_map, "changelog_reader_recv_port", changelog_reader_recv_port_str) != 0) {
+            LOG(LOG_ERR, "Key changelog_reader_recv_port missing from %s\n", filename);
+            return lustre_irods::CONFIGURATION_ERROR;
+        }
+        if (read_key_from_map(config_map, "irods_client_recv_port", irods_client_recv_port_str) != 0) {
+            LOG(LOG_ERR, "Key update_irods_interval_seconds missing from %s\n", filename);
+            return lustre_irods::CONFIGURATION_ERROR;
+        }
+
+
 
         // populate config variables
         snprintf(config_struct->mdtname, MAX_CONFIG_VALUE_SIZE, "%s", mdtname_str.c_str());
@@ -115,6 +127,19 @@ int read_config_file(const char *filename, lustre_irods_connector_cfg_t *config_
             return lustre_irods::CONFIGURATION_ERROR;
         }
 
+        try {
+            config_struct->changelog_reader_recv_port = std::stoi(changelog_reader_recv_port_str);
+        } catch (std::invalid_argument& e) {
+            LOG(LOG_ERR, "Could not parse changelog_reader_recv_port as an integer.\n");
+            return lustre_irods::CONFIGURATION_ERROR;
+        }
+
+        try {
+            config_struct->irods_client_recv_port = std::stoi(irods_client_recv_port_str);
+        } catch (std::invalid_argument& e) {
+            LOG(LOG_ERR, "Could not parse irods_client_recv_port as an integer.\n");
+            return lustre_irods::CONFIGURATION_ERROR;
+        }
 
     } catch (std::exception& e) {
         LOG(LOG_ERR, "Could not read %s - %s\n", filename, e.what());

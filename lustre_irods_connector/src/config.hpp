@@ -11,6 +11,8 @@ typedef struct lustre_irods_connector_cfg {
     int64_t irods_resource_id;
     unsigned int changelog_poll_interval_seconds;
     unsigned int update_irods_interval_seconds;
+    unsigned int changelog_reader_recv_port;
+    unsigned int irods_client_recv_port;
 } lustre_irods_connector_cfg_t;
 
 

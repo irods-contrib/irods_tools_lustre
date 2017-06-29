@@ -120,12 +120,19 @@ void irods_api_client_main(std::shared_ptr<lustre_irods_connection> conn, const 
 
     void *context = zmq_ctx_new();
     void *subscriber = zmq_socket(context, ZMQ_SUB);
-    zmq_connect(subscriber, "tcp://localhost:5563");
+    std::stringstream tcp_ss;
+    tcp_ss << "tcp://localhost:" << config_struct_ptr->irods_client_recv_port;
+    LOG(LOG_DBG, "client subscriber tcp_ss = %s\n", tcp_ss.str().c_str());
+    zmq_connect(subscriber, tcp_ss.str().c_str());
     zmq_setsockopt(subscriber, ZMQ_SUBSCRIBE, "changetable_readers", 1);
 
     void *context2 = zmq_ctx_new();
     void *publisher = zmq_socket(context2, ZMQ_PUB);
-    zmq_connect(publisher, "tcp://localhost:5564");
+    tcp_ss.str("");
+    tcp_ss.clear();
+    tcp_ss << "tcp://localhost:" << config_struct_ptr->changelog_reader_recv_port;
+    LOG(LOG_DBG, "client publisher tcp_ss = %s\n", tcp_ss.str().c_str());
+    zmq_connect(publisher, tcp_ss.str().c_str());
 
     // if we get an error sending data to irods, use a backoff_timer
     unsigned int error_backoff_timer = config_struct_ptr->update_irods_interval_seconds;
@@ -323,13 +330,20 @@ int main(int argc, char *argv[]) {
     // start a pub/sub publisher which is used to terminate threads
     void *context = zmq_ctx_new();
     void *publisher = zmq_socket(context, ZMQ_PUB);
-    zmq_bind(publisher, "tcp://*:5563");
+    std::stringstream tcp_ss;
+    tcp_ss << "tcp://*:" << config_struct.irods_client_recv_port;
+    LOG(LOG_DBG, "main publisher tcp_ss = %s\n", tcp_ss.str().c_str());
+    zmq_bind(publisher, tcp_ss.str().c_str());
 
     // start another pub/sub which is used for clients to send a stop reading
     // events message if iRODS is down
     void *context2 = zmq_ctx_new();
     void *subscriber = zmq_socket(context2, ZMQ_SUB);
-    zmq_bind(subscriber, "tcp://*:5564");
+    tcp_ss.str("");
+    tcp_ss.clear();
+    tcp_ss << "tcp://*:" << config_struct.changelog_reader_recv_port;
+    LOG(LOG_DBG, "main subscriber tcp_ss = %s\n", tcp_ss.str().c_str());
+    zmq_bind(subscriber, tcp_ss.str().c_str());
     zmq_setsockopt(subscriber, ZMQ_SUBSCRIBE, "changelog_reader", 1);
 
     // start the thread that sends changes to iRODS

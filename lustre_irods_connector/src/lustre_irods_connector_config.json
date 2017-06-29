@@ -5,6 +5,8 @@
         "irods_resource_name": "demoResc",
         "log_level": "LOG_DBG",
         "changelog_poll_interval_seconds": 5,
-        "update_irods_interval_seconds": 7
+        "update_irods_interval_seconds": 7,
+        "changelog_reader_recv_port": 5563,
+        "irods_client_recv_port": 5564
 }
 
