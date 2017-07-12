@@ -9,7 +9,7 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <string.h>
-#include <zmq.h>
+#include <zmq.hpp>
 
 #include <signal.h>
 #include <thread>
@@ -46,26 +46,37 @@ extern "C" {
     int finish_lcap_changelog();
 }
 
-static char * s_recv_noblock(void *socket) {
-    char buffer [256];
-    int size = zmq_recv (socket, buffer, 255, ZMQ_NOBLOCK);
-    if (size == -1)
-        return nullptr;
-    buffer[size] = '\0';
-    return strndup (buffer, sizeof(buffer) - 1);
+
+//  Sends string as 0MQ string, as multipart non-terminal 
+static bool s_sendmore (zmq::socket_t & socket, const std::string & string) {
+
+    zmq::message_t message(string.size());
+    memcpy (message.data(), string.data(), string.size());
+
+    bool rc = socket.send (message, ZMQ_SNDMORE);
+    return (rc);
 }
 
-//  Convert C string to 0MQ string and send to socket
-static int s_send (void *socket, const char *string) {
-    int size = zmq_send (socket, string, strlen (string), 0);
-    return size;
+//  Receive 0MQ string from socket and convert into string
+static std::string s_recv (zmq::socket_t & socket) {
+
+    zmq::message_t message;
+
+    socket.recv(&message, ZMQ_NOBLOCK);
+
+    return std::string(static_cast<char*>(message.data()), message.size());
 }
 
-//  Sends string as 0MQ string, as multipart non-terminal
-static int s_sendmore (void *socket, const char *string) {
-    int size = zmq_send (socket, string, strlen (string), ZMQ_SNDMORE);
-    return size;
+//  Convert string to 0MQ string and send to socket
+static bool s_send (zmq::socket_t & socket, const std::string & string) {
+
+    zmq::message_t message(string.size());
+    memcpy (message.data(), string.data(), string.size());
+
+    bool rc = socket.send (message);
+    return (rc);
 }
+
 
 std::atomic<bool> keep_running(true);
 
