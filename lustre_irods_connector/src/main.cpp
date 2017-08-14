@@ -26,6 +26,7 @@
 #include "logging.hpp"
 
 #include <boost/program_options.hpp>
+#include <boost/format.hpp>
 
 
 #ifndef LPX64
@@ -41,14 +42,19 @@ namespace po = boost::program_options;
 struct lcap_cl_ctx;
 
 extern "C" {
-    int start_lcap_changelog(const lustre_irods_connector_cfg_t*);
-    int poll_change_log_and_process(const lustre_irods_connector_cfg_t*, void *change_map);
-    int finish_lcap_changelog();
+    int start_lcap_changelog(const lustre_irods_connector_cfg_t*, struct lcap_cl_ctx**);
+    int poll_change_log_and_process(const lustre_irods_connector_cfg_t*, void *change_map, struct lcap_cl_ctx*);
+    int finish_lcap_changelog(struct lcap_cl_ctx *);
 }
 
+std::atomic<bool> keep_running(true);
+
+void interrupt_handler(int dummy) {
+    keep_running.store(false);
+}
 
 //  Sends string as 0MQ string, as multipart non-terminal 
-static bool s_sendmore (zmq::socket_t & socket, const std::string & string) {
+static bool s_sendmore (zmq::socket_t& socket, const std::string& string) {
 
     zmq::message_t message(string.size());
     memcpy (message.data(), string.data(), string.size());
@@ -57,18 +63,8 @@ static bool s_sendmore (zmq::socket_t & socket, const std::string & string) {
     return (rc);
 }
 
-//  Receive 0MQ string from socket and convert into string
-static std::string s_recv (zmq::socket_t & socket) {
-
-    zmq::message_t message;
-
-    socket.recv(&message, ZMQ_NOBLOCK);
-
-    return std::string(static_cast<char*>(message.data()), message.size());
-}
-
 //  Convert string to 0MQ string and send to socket
-static bool s_send (zmq::socket_t & socket, const std::string & string) {
+static bool s_send(zmq::socket_t& socket, const std::string& string) {
 
     zmq::message_t message(string.size());
     memcpy (message.data(), string.data(), string.size());
@@ -77,51 +73,32 @@ static bool s_send (zmq::socket_t & socket, const std::string & string) {
     return (rc);
 }
 
+//  Receive 0MQ string from socket and convert into string
+static std::string s_recv_noblock(zmq::socket_t& socket) {
 
-std::atomic<bool> keep_running(true);
+    zmq::message_t message;
 
-void interrupt_handler(int dummy) {
-    keep_running.store(false);
+    socket.recv(&message, ZMQ_NOBLOCK);
+
+    return std::string(static_cast<char*>(message.data()), message.size());
 }
 
-bool received_terminate_message(void * subscriber) {
+bool received_terminate_message(zmq::socket_t& subscriber) {
 
-    bool return_val = false;
+    std::string address = s_recv_noblock(subscriber);
+    std::string contents = s_recv_noblock(subscriber);
 
-    char *address = s_recv_noblock(subscriber);
-    char *contents = s_recv_noblock(subscriber);
+    return contents == "terminate";
 
-    if (address && contents && strcmp(contents, "terminate") == 0) {
-        return_val = true;
-    }
-
-    if (address) 
-        free(address);
-    if (contents)
-        free(contents);
-
-    return return_val;
 }
 
 // Perform a no-block message receive.  If no message is available return std::string("").
-std::string receive_message(void * subscriber) {
+std::string receive_message(zmq::socket_t& subscriber) {
 
-    char *address = s_recv_noblock(subscriber);
-    char *contents = s_recv_noblock(subscriber);
+    std::string address = s_recv_noblock(subscriber);
+    std::string contents = s_recv_noblock(subscriber);
 
-    std::string return_msg = "";
-
-    if (address && contents) {
-        return_msg = contents;
-    }
-
-    if (address)
-        free(address);
-    if (contents)
-        free(contents);
-
-    return return_msg;
-
+    return contents;
 }
 
 // irods api client thread main routine
@@ -129,30 +106,25 @@ std::string receive_message(void * subscriber) {
 void irods_api_client_main(std::shared_ptr<lustre_irods_connection> conn, const lustre_irods_connector_cfg_t *config_struct_ptr,
         change_map_t *change_map) {
 
-    void *context = zmq_ctx_new();
-    void *subscriber = zmq_socket(context, ZMQ_SUB);
-    std::stringstream tcp_ss;
-    tcp_ss << "tcp://localhost:" << config_struct_ptr->irods_client_recv_port;
-    LOG(LOG_DBG, "client subscriber tcp_ss = %s\n", tcp_ss.str().c_str());
-    zmq_connect(subscriber, tcp_ss.str().c_str());
-    zmq_setsockopt(subscriber, ZMQ_SUBSCRIBE, "changetable_readers", 1);
+    zmq::context_t context(1);  // 1 I/O thread
+    zmq::socket_t subscriber(context, ZMQ_SUB);
+    LOG(LOG_DBG, "client subscriber conn_str = %s\n", config_struct_ptr->irods_client_ipc_address);
+    subscriber.connect(config_struct_ptr->irods_client_ipc_address);
+    std::string identity("changetable_readers");
+    subscriber.setsockopt(ZMQ_SUBSCRIBE, identity.c_str(), identity.length());
 
-    void *context2 = zmq_ctx_new();
-    void *publisher = zmq_socket(context2, ZMQ_PUB);
-    tcp_ss.str("");
-    tcp_ss.clear();
-    tcp_ss << "tcp://localhost:" << config_struct_ptr->changelog_reader_recv_port;
-    LOG(LOG_DBG, "client publisher tcp_ss = %s\n", tcp_ss.str().c_str());
-    zmq_connect(publisher, tcp_ss.str().c_str());
+    zmq::context_t context2(1);
+    zmq::socket_t publisher(context, ZMQ_PUB);
+    LOG(LOG_DBG, "client publisher conn_str = %s\n", config_struct_ptr->changelog_reader_ipc_address);
+    publisher.connect(config_struct_ptr->changelog_reader_ipc_address);
 
     // if we get an error sending data to irods, use a backoff_timer
     unsigned int error_backoff_timer = config_struct_ptr->update_irods_interval_seconds;
 
     bool irods_error_detected = false;
+    bool quit = false;
 
-    while (true) {
-        
-        bool quit = false;
+    while (!quit) {
 
         LOG(LOG_INFO,"irods client reading change map\n");
 
@@ -170,10 +142,10 @@ void irods_api_client_main(std::shared_ptr<lustre_irods_connection> conn, const 
             }
         } 
 
+        // loop through and process entries
         while (!irods_error_detected && entries_ready_to_process(change_map)) {
             
-            irodsLustreApiInp_t inp;
-            memset( &inp, 0, sizeof( inp ) );
+            irodsLustreApiInp_t inp{ };
 
             std::shared_ptr<change_map_t> removed_entries = std::make_shared<change_map_t>(); 
 
@@ -210,6 +182,7 @@ void irods_api_client_main(std::shared_ptr<lustre_irods_connection> conn, const 
 
             // see if there is a quit message, if so terminate
             if (received_terminate_message(subscriber)) {
+                LOG(LOG_DBG, "irods client received a terminate message\n");
                 quit = true;
                 break;
             }
@@ -217,8 +190,9 @@ void irods_api_client_main(std::shared_ptr<lustre_irods_connection> conn, const 
 
         // doing this in a loop so that we can catch a terminate more quickly
         // not sure how to interrupt the sleep with zmq
-        for (unsigned int i = 0; i < error_backoff_timer; ++i) {
-            if (quit || received_terminate_message(subscriber)) {
+        for (unsigned int i = 0; !quit && i < error_backoff_timer; ++i) {
+            if (received_terminate_message(subscriber)) {
+                LOG(LOG_DBG, "irods client received a terminate message\n");
                 quit = true;
                 break;
             }
@@ -226,15 +200,7 @@ void irods_api_client_main(std::shared_ptr<lustre_irods_connection> conn, const 
             sleep(1);
         }
 
-        // see if there is a quit message, if so terminate
-        if (quit) {
-            LOG(LOG_DBG, "irods client received a terminate message\n");
-            break;
-        }
     }
-
-    zmq_close(subscriber);
-    zmq_ctx_destroy(context);
 
     LOG(LOG_DBG,"irods_client_exiting\n");
 }
@@ -245,6 +211,7 @@ int main(int argc, char *argv[]) {
     const char *config_file = "lustre_irods_connector_config.json";
     char *log_file = nullptr;
     bool fatal_error_detected = false;
+    struct lcap_cl_ctx *ctx = nullptr;
 
     signal(SIGPIPE, SIG_IGN);
     
@@ -336,31 +303,25 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // TODO change these ports to configuration
-    
     // start a pub/sub publisher which is used to terminate threads
-    void *context = zmq_ctx_new();
-    void *publisher = zmq_socket(context, ZMQ_PUB);
-    std::stringstream tcp_ss;
-    tcp_ss << "tcp://*:" << config_struct.irods_client_recv_port;
-    LOG(LOG_DBG, "main publisher tcp_ss = %s\n", tcp_ss.str().c_str());
-    zmq_bind(publisher, tcp_ss.str().c_str());
+    zmq::context_t context(1);
+    zmq::socket_t publisher(context, ZMQ_PUB);
+    LOG(LOG_DBG, "main publisher conn_str = %s\n", config_struct.irods_client_ipc_address);
+    publisher.bind(config_struct.irods_client_ipc_address);
 
     // start another pub/sub which is used for clients to send a stop reading
     // events message if iRODS is down
-    void *context2 = zmq_ctx_new();
-    void *subscriber = zmq_socket(context2, ZMQ_SUB);
-    tcp_ss.str("");
-    tcp_ss.clear();
-    tcp_ss << "tcp://*:" << config_struct.changelog_reader_recv_port;
-    LOG(LOG_DBG, "main subscriber tcp_ss = %s\n", tcp_ss.str().c_str());
-    zmq_bind(subscriber, tcp_ss.str().c_str());
-    zmq_setsockopt(subscriber, ZMQ_SUBSCRIBE, "changelog_reader", 1);
+    zmq::context_t context2(1);
+    zmq::socket_t subscriber(context2, ZMQ_SUB);
+    LOG(LOG_DBG, "main subscriber conn_str = %s\n", config_struct.changelog_reader_ipc_address);
+    subscriber.bind(config_struct.changelog_reader_ipc_address);
+    std::string identity("changelog_reader");
+    subscriber.setsockopt(ZMQ_SUBSCRIBE, identity.c_str(), identity.length());
 
     // start the thread that sends changes to iRODS
     std::thread irods_api_client_thread(irods_api_client_main, conn, &config_struct, &change_map);
 
-    rc = start_lcap_changelog(&config_struct);
+    rc = start_lcap_changelog(&config_struct, &ctx);
     if (rc < 0) {
         LOG(LOG_ERR, "lcap_changelog_start: %s\n", zmq_strerror(-rc));
         fatal_error_detected = true;
@@ -373,14 +334,15 @@ int main(int argc, char *argv[]) {
         // check for a pause/continue message
         std::string msg = receive_message(subscriber);
 
-        if (msg == "continue") 
+        if (msg == "continue") {
             pause_reading = false;
-        else if (msg == "pause")
+        } else if (msg == "pause") {
             pause_reading = true;
+        }
 
         if (!pause_reading) {
             LOG(LOG_INFO,"changelog client polling changelog\n");
-            poll_change_log_and_process(&config_struct, &change_map);
+            poll_change_log_and_process(&config_struct, &change_map, ctx);
         } else {
             LOG(LOG_DBG, "in a paused state.  not reading changelog...\n");
         }
@@ -401,10 +363,7 @@ int main(int argc, char *argv[]) {
         fatal_error_detected = true;
     }
 
-    zmq_close(publisher);
-    zmq_ctx_destroy(context);
-
-    rc = finish_lcap_changelog();
+    rc = finish_lcap_changelog(ctx);
     if (rc) {
         LOG(LOG_ERR, "lcap_changelog_fini: %s\n", zmq_strerror(-rc));
         fatal_error_detected = true;
@@ -421,8 +380,9 @@ int main(int argc, char *argv[]) {
         free(log_file);
     }
 
-    if (fatal_error_detected)
+    if (fatal_error_detected) {
         return 1;
+    }
 
     return 0;
 }

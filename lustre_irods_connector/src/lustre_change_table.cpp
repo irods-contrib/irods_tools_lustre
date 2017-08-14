@@ -99,15 +99,15 @@ int lustre_close(const lustre_irods_connector_cfg_t *config_struct_ptr, const ch
     LOG(LOG_DBG, "handle_close:  stat_result = %i, file_size = %ld\n", result, st.st_size);
 
     auto iter = change_map_fidstr.find(fidstr);
-    if(iter != change_map_fidstr.end()) {
+    if (iter != change_map_fidstr.end()) {
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.oper_complete = true; });
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
-        if (result == 0)
+        if (result == 0) {
             change_map_fidstr.modify(iter, [st](change_descriptor &cd){ cd.file_size = st.st_size; });
+        }
     } else {
         // this is probably an append so no file update is done
-        change_descriptor entry;
-        memset(&entry, 0, sizeof(entry));
+        change_descriptor entry{};
         entry.fidstr = fidstr;
         entry.parent_fidstr = parent_fidstr;
         entry.object_name = object_name;
@@ -116,8 +116,9 @@ int lustre_close(const lustre_irods_connector_cfg_t *config_struct_ptr, const ch
         entry.oper_complete = true;
         entry.timestamp = time(NULL);
         entry.last_event = ChangeDescriptor::EventTypeEnum::OTHER;
-        if (result == 0)
+        if (result == 0) {
             entry.file_size = st.st_size;
+        }
 
         change_map->push_back(entry);
     }
@@ -148,8 +149,7 @@ int lustre_mkdir(const lustre_irods_connector_cfg_t *config_struct_ptr, const ch
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.last_event = ChangeDescriptor::EventTypeEnum::MKDIR; });
     } else {
-        change_descriptor entry;
-        memset(&entry, 0, sizeof(entry));
+        change_descriptor entry{};
         entry.fidstr = fidstr;
         entry.parent_fidstr = parent_fidstr;
         entry.object_name = object_name;
@@ -191,8 +191,7 @@ int lustre_rmdir(const lustre_irods_connector_cfg_t *config_struct_ptr, const ch
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.last_event = ChangeDescriptor::EventTypeEnum::RMDIR; });
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
     } else {
-        change_descriptor entry;
-        memset(&entry, 0, sizeof(entry));
+        change_descriptor entry{};
         entry.fidstr = fidstr;
         entry.oper_complete = true;
         entry.last_event = ChangeDescriptor::EventTypeEnum::RMDIR;
@@ -237,8 +236,7 @@ int lustre_unlink(const lustre_irods_connector_cfg_t *config_struct_ptr, const c
             change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
        }
     } else {
-        change_descriptor entry;
-        memset(&entry, 0, sizeof(entry));
+        change_descriptor entry{};
         entry.fidstr = fidstr;
         //entry.parent_fidstr = parent_fidstr;
         //entry.lustre_path = lustre_path;
@@ -286,8 +284,7 @@ int lustre_rename(const lustre_irods_connector_cfg_t *config_struct_ptr, const c
         change_map_fidstr.modify(iter, [object_name](change_descriptor &cd){ cd.object_name = object_name; });
         change_map_fidstr.modify(iter, [lustre_path](change_descriptor &cd){ cd.lustre_path = lustre_path; });
     } else {
-        change_descriptor entry;
-        memset(&entry, 0, sizeof(entry));
+        change_descriptor entry{};
         entry.fidstr = fidstr;
         entry.parent_fidstr = parent_fidstr;
         entry.object_name = object_name;
@@ -354,8 +351,7 @@ int lustre_create(const lustre_irods_connector_cfg_t *config_struct_ptr, const c
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.last_event = ChangeDescriptor::EventTypeEnum::CREATE; });
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
     } else {
-        change_descriptor entry;
-        memset(&entry, 0, sizeof(entry));
+        change_descriptor entry{};
         entry.fidstr = fidstr;
         entry.parent_fidstr = parent_fidstr;
         entry.object_name = object_name;
@@ -396,8 +392,7 @@ int lustre_mtime(const lustre_irods_connector_cfg_t *config_struct_ptr, const ch
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.oper_complete = false; });
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
     } else {
-        change_descriptor entry;
-        memset(&entry, 0, sizeof(entry));
+        change_descriptor entry{};
         entry.fidstr = fidstr;
         //entry.parent_fidstr = parent_fidstr;
         //entry.lustre_path = lustre_path;
@@ -439,19 +434,20 @@ int lustre_trunc(const lustre_irods_connector_cfg_t *config_struct_ptr, const ch
     if(iter != change_map_fidstr.end()) {
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.oper_complete = false; });
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
-        if (result == 0)
+        if (result == 0) {
             change_map_fidstr.modify(iter, [st](change_descriptor &cd){ cd.file_size = st.st_size; });
+        }
     } else {
-        change_descriptor entry;
-        memset(&entry, 0, sizeof(entry));
+        change_descriptor entry{};
         entry.fidstr = fidstr;
         //entry.parent_fidstr = parent_fidstr;
         //entry.lustre_path = lustre_path;
         //entry.object_name = object_name;
         entry.oper_complete = false;
         entry.timestamp = time(NULL);
-        if (result == 0)
+        if (result == 0) {
             entry.file_size = st.st_size;
+        }
         change_map->push_back(entry);
     }
 
@@ -521,8 +517,9 @@ int concatenate_paths_with_boost(const char *p1, const char *p2, char *result, s
 // This is just a debugging function
 void lustre_write_change_table_to_str(char *buffer, const size_t buffer_size, const change_map_t *change_map) {
 
-    if (buffer == nullptr || change_map == nullptr)
+    if (buffer == nullptr || change_map == nullptr) {
         return;
+    }
 
     std::lock_guard<std::mutex> lock(change_table_mutex);
 
@@ -562,8 +559,9 @@ void lustre_write_change_table_to_str(char *buffer, const size_t buffer_size, co
 // This is just a debugging function
 void lustre_print_change_table(change_map_t *change_map) {
     
-    if (change_map == nullptr)
+    if (change_map == nullptr) {
         return;
+    } 
 
     char buffer[5012];
     lustre_write_change_table_to_str(buffer, 5012, change_map);
@@ -675,16 +673,17 @@ std::string event_type_to_str(ChangeDescriptor::EventTypeEnum type) {
 }
 
 ChangeDescriptor::EventTypeEnum str_to_event_type(const std::string& str) {
-    if (str == "CREATE") 
+    if (str == "CREATE") {
         return ChangeDescriptor::EventTypeEnum::CREATE;
-    if (str == "UNLINK")
+    } else if (str == "UNLINK") {
         return ChangeDescriptor::EventTypeEnum::UNLINK;
-    if (str == "RMDIR")
+    } else if (str == "RMDIR") {
         return ChangeDescriptor::EventTypeEnum::RMDIR;
-    if (str == "MKDIR")
+    } else if (str == "MKDIR") {
         return ChangeDescriptor::EventTypeEnum::MKDIR;
-    if (str == "RENAME")
+    } else if (str == "RENAME") {
         return ChangeDescriptor::EventTypeEnum::RENAME;
+    }
     return ChangeDescriptor::EventTypeEnum::OTHER;
 }
 
@@ -701,8 +700,9 @@ std::string object_type_to_str(ChangeDescriptor::ObjectTypeEnum type) {
 }
 
 ChangeDescriptor::ObjectTypeEnum str_to_object_type(const std::string& str) {
-    if (str == "DIR") 
+    if (str == "DIR")  {
         return ChangeDescriptor::ObjectTypeEnum::DIR;
+   }
    return ChangeDescriptor::ObjectTypeEnum::FILE;
 } 
 
@@ -787,8 +787,7 @@ static int query_callback(void* change_map_void_pointer, int argc, char** argv, 
         return  lustre_irods::SQLITE_DB_ERROR;
     }
 
-    change_descriptor entry;
-    memset(&entry, 0, sizeof(entry));
+    change_descriptor entry{};
     entry.fidstr = argv[0];
     entry.parent_fidstr = argv[1];
     entry.object_name = argv[2];

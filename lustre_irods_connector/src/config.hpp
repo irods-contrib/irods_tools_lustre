@@ -11,8 +11,10 @@ typedef struct lustre_irods_connector_cfg {
     int64_t irods_resource_id;
     unsigned int changelog_poll_interval_seconds;
     unsigned int update_irods_interval_seconds;
-    unsigned int changelog_reader_recv_port;
-    unsigned int irods_client_recv_port;
+    char irods_client_ipc_address[MAX_CONFIG_VALUE_SIZE];
+    char changelog_reader_ipc_address[MAX_CONFIG_VALUE_SIZE];
+    //unsigned int changelog_reader_recv_port;
+    //unsigned int irods_client_recv_port;
 } lustre_irods_connector_cfg_t;
 
 

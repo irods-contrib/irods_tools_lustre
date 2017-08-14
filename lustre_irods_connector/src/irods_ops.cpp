@@ -27,8 +27,9 @@
 
 lustre_irods_connection::~lustre_irods_connection() {
     printf("disconnecting irods\n");
-    if (irods_conn)
+    if (irods_conn) {
         rcDisconnect(irods_conn);
+    }
     irods_conn = nullptr;    
 }
 

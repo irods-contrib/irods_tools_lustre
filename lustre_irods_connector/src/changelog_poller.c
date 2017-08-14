@@ -26,14 +26,14 @@
 #ifndef LPX64
 #define LPX64   "%#llx"
 static inline bool fid_is_zero(const lustre_fid *fid) {
-    if (fid == NULL) 
+    if (fid == NULL) {
         return true;
+    }
     return fid->f_seq == 0 && fid->f_oid == 0;
 }
 #endif
 
-struct lcap_cl_ctx      *ctx = NULL;
-int                     flags = LCAP_CL_BLOCK;
+//struct lcap_cl_ctx      *ctx = NULL;
 
 // for rename - the overwritten file's fidstr
 void get_overwritten_fidstr_from_record(struct changelog_rec *rec, char *fidstr) {
@@ -97,8 +97,9 @@ bool object_exists_in_lustre(const char *root_path, struct changelog_rec *rec) {
 
     rc = llapi_fid2path(root_path, fidstr, lustre_full_path, MAX_NAME_LEN, &recno, &linkno);
 
-    if (rc < 0)
+    if (rc < 0) {
         return false;
+    }
 
     return true;
 }
@@ -272,21 +273,22 @@ int handle_record(const lustre_irods_connector_cfg_t *config_struct_ptr, struct 
     strftime(time_str, sizeof(char[20]), "%b %d %H:%M", timeinfo);
 }*/
 
-int start_lcap_changelog(const lustre_irods_connector_cfg_t *config_struct_ptr) {
+int start_lcap_changelog(const lustre_irods_connector_cfg_t *config_struct_ptr, struct lcap_cl_ctx **ctx) {
 
     if (config_struct_ptr == NULL) {
         LOG(LOG_ERR, "Null config_struct_ptr sent to %s - %d\n", __FUNCTION__, __LINE__);
         return INVALID_OPERAND_ERROR;
     }
 
-    return lcap_changelog_start(&ctx, flags, config_struct_ptr->mdtname, 0LL);
+    return lcap_changelog_start(ctx, LCAP_CL_BLOCK, config_struct_ptr->mdtname, 0LL);
 }
 
-int finish_lcap_changelog() {
+int finish_lcap_changelog(struct lcap_cl_ctx *ctx) {
     return lcap_changelog_fini(ctx);
 }
 
-int poll_change_log_and_process(const lustre_irods_connector_cfg_t *config_struct_ptr, void *change_map) {
+int poll_change_log_and_process(const lustre_irods_connector_cfg_t *config_struct_ptr, void *change_map, struct lcap_cl_ctx *ctx) {
+
 
     if (config_struct_ptr == NULL) {
         LOG(LOG_ERR, "Null config_struct_ptr sent to %s - %d\n", __FUNCTION__, __LINE__);
@@ -317,22 +319,25 @@ int poll_change_log_and_process(const lustre_irods_connector_cfg_t *config_struc
                ts.tm_year + 1900, ts.tm_mon + 1, ts.tm_mday,
                rec->cr_flags & CLF_FLAGMASK, PFID(&rec->cr_tfid));
 
-        if (rec->cr_flags & CLF_JOBID)
+        if (rec->cr_flags & CLF_JOBID) {
             LOG(LOG_INFO, " j=%s", (const char *)changelog_rec_jobid(rec));
+        }
 
-        if (rec->cr_flags & CLF_RENAME) {
+        if (rec->cr_flags & CLF_RENAME) { 
             struct changelog_ext_rename *rnm;
 
             rnm = changelog_rec_rename(rec);
-            if (!fid_is_zero(&rnm->cr_sfid))
+            if (!fid_is_zero(&rnm->cr_sfid)) {
                 LOG(LOG_DBG, " s="DFID" sp="DFID" %.*s", PFID(&rnm->cr_sfid),
                        PFID(&rnm->cr_spfid), (int)changelog_rec_snamelen(rec),
                        changelog_rec_sname(rec));
+            }
         }
 
-        if (rec->cr_namelen)
+        if (rec->cr_namelen) {
             LOG(LOG_DBG, " p="DFID" %.*s", PFID(&rec->cr_pfid), rec->cr_namelen,
                    changelog_rec_name(rec));
+        }
 
         LOG(LOG_INFO, "\n");
 

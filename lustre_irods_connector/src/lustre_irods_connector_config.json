@@ -6,7 +6,7 @@
         "log_level": "LOG_DBG",
         "changelog_poll_interval_seconds": 5,
         "update_irods_interval_seconds": 7,
-        "changelog_reader_recv_port": 5563,
-        "irods_client_recv_port": 5564
+        "irods_client_ipc_address": "ipc:///terminate_threads",
+        "changelog_reader_ipc_address": "ipc:///stop_reading_events"
 }
 

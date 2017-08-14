@@ -63,7 +63,8 @@ include_directories(/usr/include/irods
     ${IRODS_EXTERNALS_FULLPATH_CLANG}/include/c++/v1 
     ${IRODS_EXTERNALS_FULLPATH_BOOST}/include
     ${CMAKE_SOURCE_DIR}/src/
-    ${LCAP_ROOT}/src/include)
+    ${LCAP_ROOT}/src/include
+    /opt/irods-externals/cppzmq4.1-0/include)
 
 set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-z,defs")
 

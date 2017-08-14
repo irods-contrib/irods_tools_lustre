@@ -27,16 +27,17 @@ int read_key_from_map(const json_map& config_map, const std::string &key, std::s
 }
 
 void set_log_level(std::string log_level_str) {
-    if (log_level_str == "LOG_FATAL") 
+    if (log_level_str == "LOG_FATAL") {
         log_level = LOG_FATAL; 
-    else if (log_level_str == "LOG_ERR")
+    } else if (log_level_str == "LOG_ERR") {
         log_level = LOG_ERR;
-    else if (log_level_str == "LOG_WARN")
+    } else if (log_level_str == "LOG_WARN") {
         log_level = LOG_WARN;
-    else if (log_level_str == "LOG_INFO")
+    } else if (log_level_str == "LOG_INFO") {
         log_level = LOG_INFO;
-    else if (log_level_str == "LOG_DBG")
+    } else if (log_level_str == "LOG_DBG") {
         log_level = LOG_DBG;
+    }
 }    
 
 int read_config_file(const char *filename, lustre_irods_connector_cfg_t *config_struct) {
@@ -58,8 +59,8 @@ int read_config_file(const char *filename, lustre_irods_connector_cfg_t *config_
     std::string log_level_str;
     std::string changelog_poll_interval_seconds_str;
     std::string update_irods_interval_seconds_str;
-    std::string changelog_reader_recv_port_str;
-    std::string irods_client_recv_port_str;
+    std::string irods_client_ipc_address_str;
+    std::string changelog_reader_ipc_address_str;
 
     try {
         json_map config_map{ json_file{ filename } };
@@ -88,11 +89,11 @@ int read_config_file(const char *filename, lustre_irods_connector_cfg_t *config_
             LOG(LOG_ERR, "Key update_irods_interval_seconds missing from %s\n", filename);
             return lustre_irods::CONFIGURATION_ERROR;
         }
-        if (read_key_from_map(config_map, "changelog_reader_recv_port", changelog_reader_recv_port_str) != 0) {
+        if (read_key_from_map(config_map, "irods_client_ipc_address", irods_client_ipc_address_str) != 0) {
             LOG(LOG_ERR, "Key changelog_reader_recv_port missing from %s\n", filename);
             return lustre_irods::CONFIGURATION_ERROR;
         }
-        if (read_key_from_map(config_map, "irods_client_recv_port", irods_client_recv_port_str) != 0) {
+        if (read_key_from_map(config_map, "changelog_reader_ipc_address", changelog_reader_ipc_address_str) != 0) {
             LOG(LOG_ERR, "Key update_irods_interval_seconds missing from %s\n", filename);
             return lustre_irods::CONFIGURATION_ERROR;
         }
@@ -127,8 +128,13 @@ int read_config_file(const char *filename, lustre_irods_connector_cfg_t *config_
             return lustre_irods::CONFIGURATION_ERROR;
         }
 
-        try {
-            config_struct->changelog_reader_recv_port = std::stoi(changelog_reader_recv_port_str);
+        snprintf(config_struct->irods_client_ipc_address, MAX_CONFIG_VALUE_SIZE, "%s", irods_client_ipc_address_str.c_str());
+        snprintf(config_struct->changelog_reader_ipc_address, MAX_CONFIG_VALUE_SIZE, "%s", changelog_reader_ipc_address_str.c_str());
+
+
+
+        /*try {
+            config_struct->changelog_reader_connection = std::stoi(changelog_reader_recv_port_str);
         } catch (std::invalid_argument& e) {
             LOG(LOG_ERR, "Could not parse changelog_reader_recv_port as an integer.\n");
             return lustre_irods::CONFIGURATION_ERROR;
@@ -139,7 +145,7 @@ int read_config_file(const char *filename, lustre_irods_connector_cfg_t *config_
         } catch (std::invalid_argument& e) {
             LOG(LOG_ERR, "Could not parse irods_client_recv_port as an integer.\n");
             return lustre_irods::CONFIGURATION_ERROR;
-        }
+        }*/
 
     } catch (std::exception& e) {
         LOG(LOG_ERR, "Could not read %s - %s\n", filename, e.what());
