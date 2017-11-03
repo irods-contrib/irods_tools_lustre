@@ -7,6 +7,7 @@
         "changelog_poll_interval_seconds": 5,
         "update_irods_interval_seconds": 7,
         "irods_client_ipc_address": "ipc:///terminate_threads",
-        "changelog_reader_ipc_address": "ipc:///stop_reading_events"
+        "changelog_reader_ipc_address": "ipc:///stop_reading_events",
+        "irods_updater_threads": 4
 }
 

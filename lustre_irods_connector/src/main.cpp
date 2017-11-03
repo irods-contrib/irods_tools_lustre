@@ -28,7 +28,6 @@
 #include <boost/program_options.hpp>
 #include <boost/format.hpp>
 
-
 #ifndef LPX64
 #define LPX64   "%#llx"
 #endif
@@ -46,6 +45,7 @@ extern "C" {
     int poll_change_log_and_process(const lustre_irods_connector_cfg_t*, void *change_map, struct lcap_cl_ctx*);
     int finish_lcap_changelog(struct lcap_cl_ctx *);
 }
+
 
 std::atomic<bool> keep_running(true);
 

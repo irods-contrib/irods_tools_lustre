@@ -360,3 +360,4 @@ int poll_change_log_and_process(const lustre_irods_connector_cfg_t *config_struc
 
     return SUCCESS;
 }
+

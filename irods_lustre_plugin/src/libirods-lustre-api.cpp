@@ -9,6 +9,7 @@
 #include "irods_virtual_path.hpp"
 
 #include "boost/lexical_cast.hpp"
+#include "boost/filesystem.hpp"
 
 #include "database_routines.hpp"
 
@@ -39,8 +40,8 @@
 #include "inout_structs.h"
 #include "database_routines.hpp"
 
-int cmlExecuteNoAnswerSql( const char *sql, icatSessionStruct *icss );
-int cmlGetStringValueFromSql( const char *sql, char *cVal, int cValSize, std::vector<std::string> &bindVars, icatSessionStruct *icss );
+//int cmlExecuteNoAnswerSql( const char *sql, icatSessionStruct *icss );
+//int cmlGetStringValueFromSql( const char *sql, char *cVal, int cValSize, std::vector<std::string> &bindVars, icatSessionStruct *icss );
 
 
 #define MAX_BIND_VARS 32000
@@ -95,6 +96,17 @@ const char *rmdir_sql = "delete from R_COLL_MAIN where coll_id = ("
                    "inner join R_OBJT_METAMAP on R_COLL_MAIN.coll_id = R_OBJT_METAMAP.object_id "
                    "inner join R_META_MAIN on R_META_MAIN.meta_id = R_OBJT_METAMAP.meta_id "
                    "where R_META_MAIN.meta_attr_name = 'fidstr' and R_META_MAIN.meta_attr_value = ?)";
+
+const char *get_collection_id_sql = "select coll_id from r_coll_main where coll_name = ?";
+
+
+const char *insert_data_obj_sql = "insert into R_DATA_MAIN (data_id, coll_id, data_name, data_repl_num, data_type_name, "
+                   "data_size, resc_name, data_path, data_owner_name, data_owner_zone, data_is_dirty, data_map_id, resc_id) "
+                   "values (?, ?, ?, 0, 'generic', ?, 'EMPTY_RESC_NAME', ?, ?, ?, 0, 0, ?)";
+
+const char *insert_user_ownership_data_object_sql = "insert into R_OBJT_ACCESS (object_id, user_id, access_type_id) values (?, ?, 1200)";
+
+const char *get_user_id_sql = "select user_id from R_USER_MAIN where user_name = ?";
 
 
 // Returns the path in irods for a file in lustre.  
@@ -214,7 +226,16 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
 
     ChangeMap::Reader changeMap = message.getRoot<ChangeMap>();
 
-     
+    // get user_id from user_name
+    rodsLong_t user_id;
+    std::vector<std::string> bindVars;
+    bindVars.push_back(_comm->clientUser.userName);
+    status = cmlGetIntegerValueFromSql(get_user_id_sql, &user_id, bindVars, icss );
+    if (status != 0) {
+       rodsLog(LOG_ERROR, "Error getting user_id for user %s.  Error is %i", _comm->clientUser.userName, status);
+       return SYS_USER_RETRIEVE_ERR;
+    }
+
     std::string lustre_root_path(changeMap.getLustreRootPath().cStr()); 
     std::string register_path(changeMap.getRegisterPath().cStr()); 
     int64_t resource_id = changeMap.getResourceId();
@@ -231,7 +252,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
 
         // Handle changes in iRODS.  For efficiency many use lower level DB routines and do not trigger dynamic PEPs.
 
-        if (event_type == ChangeDescriptor::EventTypeEnum::CREAT) {
+        if (event_type == ChangeDescriptor::EventTypeEnum::CREATE) {
             char irods_path[MAX_NAME_LEN];
             if (lustre_path_to_irods_path(lustre_path.c_str(), lustre_root_path.c_str(), register_path.c_str(), irods_path) < 0) {
                 rodsLog(LOG_NOTICE, "Skipping entry because lustre_path [%s] is not within lustre_root_path [%s].",
@@ -239,7 +260,69 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
                 continue;
             }
 
-            dataObjInfo_t data_obj_info;
+            // register object
+            // TODO change to direct access 
+            
+            // ----- Updates here -------
+            int seq_no = cmlGetCurrentSeqVal(icss);
+            std::string username = _comm->clientUser.userName;
+            std::string zone = _comm->clientUser.rodsZone;
+            rodsLog(LOG_NOTICE, "seq_no=%i username=%s zone=%s", seq_no, username.c_str(), zone.c_str());
+            rodsLog(LOG_NOTICE, "object_name = %s", object_name.c_str());
+
+            boost::filesystem::path p(irods_path);
+
+            // get collection id
+            rodsLong_t coll_id;
+            std::vector<std::string> bindVars;
+            bindVars.push_back(p.parent_path().string());
+            status = cmlGetIntegerValueFromSql(get_collection_id_sql, &coll_id, bindVars, icss );
+            if (status != 0) {
+                rodsLog(LOG_ERROR, "Error during registration object %s.  Error getting collection id for collection %s.  Error is %i", 
+                        fidstr.c_str(), p.parent_path().string().c_str(),  status);
+                continue;
+            }
+
+            // insert data object
+            cllBindVars[0] = std::to_string(seq_no).c_str();
+            cllBindVars[1] = std::to_string(coll_id).c_str();
+            cllBindVars[2] = object_name.c_str();
+            cllBindVars[3] = std::to_string(file_size).c_str();  
+            cllBindVars[4] = lustre_path.c_str(); 
+            cllBindVars[5] = _comm->clientUser.userName;
+            cllBindVars[6] = _comm->clientUser.rodsZone;
+            cllBindVars[7] = std::to_string(resource_id).c_str(); 
+            cllBindVarCount = 8;
+            status = cmlExecuteNoAnswerSql(insert_data_obj_sql, icss);
+            if (status != 0) {
+                rodsLog(LOG_ERROR, "Error registering object %s.  Error is %i", fidstr.c_str(), status);
+                continue;
+            }
+
+            status =  cmlExecuteNoAnswerSql("commit", icss);
+            if (status != 0) {
+                rodsLog(LOG_ERROR, "Error committing insertion of new data_object %s.  Error is %i", fidstr.c_str(), status);
+                continue;
+            } 
+
+            // insert user ownership
+            cllBindVars[0] = std::to_string(seq_no).c_str();
+            cllBindVars[1] = std::to_string(user_id).c_str();
+            cllBindVarCount = 2;
+            status = cmlExecuteNoAnswerSql(insert_user_ownership_data_object_sql, icss);
+            if (status != 0) {
+                rodsLog(LOG_ERROR, "Error adding onwership to object %s.  Error is %i", fidstr.c_str(), status);
+                continue;
+            }
+
+            status =  cmlExecuteNoAnswerSql("commit", icss);
+            if (status != 0) {
+                rodsLog(LOG_ERROR, "Error committing ownership of new data_object %s.  Error is %i", fidstr.c_str(), status);
+                continue;
+            }
+            // --------------------------
+            
+            /*dataObjInfo_t data_obj_info;
             memset(&data_obj_info, 0, sizeof(data_obj_info));
             strncpy(data_obj_info.objPath, irods_path, MAX_NAME_LEN);
             strncpy(data_obj_info.dataType, "generic", NAME_LEN);
@@ -247,13 +330,12 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
             data_obj_info.rescId = resource_id;
             data_obj_info.dataSize = file_size;
 
-            // register object
             status = chlRegDataObj(_comm, &data_obj_info);
             rodsLog(LOG_NOTICE, "Return value from chlRegDataObj = %i", status);
             if (status < 0) {
                 rodsLog(LOG_ERROR, "Error registering object %s.  Error is %i", fidstr.c_str(), status);
                 continue;
-            }
+            }*/
 
             // add fidstr metadata
             keyValPair_t reg_param;

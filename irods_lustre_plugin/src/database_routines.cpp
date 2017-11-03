@@ -636,3 +636,49 @@ int cmlGetStringValueFromSql( const char *sql,
 
 }
 
+int cmlGetIntegerValueFromSql( const char *sql,
+                               rodsLong_t *iVal,
+                               std::vector<std::string> &bindVars,
+                               icatSessionStruct *icss ) {
+    int i, cValSize;
+    char *cVal[2];
+    char cValStr[MAX_INTEGER_SIZE + 10];
+
+    cVal[0] = cValStr;
+    cValSize = MAX_INTEGER_SIZE;
+
+    i = cmlGetOneRowFromSqlBV( sql, cVal, &cValSize, 1,
+                               bindVars, icss );
+    if ( i == 1 ) {
+        if ( *cVal[0] == '\0' ) {
+            return CAT_NO_ROWS_FOUND;
+        }
+        *iVal = strtoll( *cVal, NULL, 0 );
+        return 0;
+    }
+    return i;
+}
+
+
+rodsLong_t cmlGetCurrentSeqVal( icatSessionStruct *icss ) {
+
+    int status;
+    rodsLong_t seq_no;
+
+#ifdef ORA_ICAT
+    std::string sql = "select r_objectid.nextval from dual";
+#elif MY_ICAT
+    std::string sql = "select r_objectid.nextval()";
+#else
+    std::string sql = "select nextval('r_objectid')";
+#endif
+
+    std::vector<std::string> emptyBindVars;
+    status = cmlGetIntegerValueFromSql(sql.c_str(), &seq_no, emptyBindVars, icss);
+    if ( status < 0 ) {
+        rodsLog(LOG_NOTICE, "cmlGetCurrentSeqVal cmlGetIntegerValueFromSql failure %d", status);
+        return status;
+    }
+    return seq_no;
+}
+
