@@ -88,7 +88,7 @@ int lustre_close(const lustre_irods_connector_cfg_t *config_struct_ptr, const ch
     std::lock_guard<std::mutex> lock(change_table_mutex);
  
     // get change map with hashed index of fidstr
-    auto &change_map_fidstr = change_map->get<1>();
+    auto &change_map_fidstr = change_map->get<change_descriptor_fidstr_idx>();
     std::string fidstr(fidstr_cstr);
     std::string lustre_path(lustre_path_cstr);
 
@@ -139,7 +139,7 @@ int lustre_mkdir(const lustre_irods_connector_cfg_t *config_struct_ptr, const ch
     std::lock_guard<std::mutex> lock(change_table_mutex);
 
     // get change map with hashed index of fidstr
-    auto &change_map_fidstr = change_map->get<1>();
+    auto &change_map_fidstr = change_map->get<change_descriptor_fidstr_idx>();
     std::string fidstr(fidstr_cstr);
     std::string lustre_path(lustre_path_cstr);
 
@@ -177,7 +177,7 @@ int lustre_rmdir(const lustre_irods_connector_cfg_t *config_struct_ptr, const ch
     std::lock_guard<std::mutex> lock(change_table_mutex);
 
     // get change map with hashed index of fidstr
-    auto &change_map_fidstr = change_map->get<1>();
+    auto &change_map_fidstr = change_map->get<change_descriptor_fidstr_idx>();
 
     std::string fidstr(fidstr_cstr);
     std::string lustre_path(lustre_path_cstr);
@@ -219,7 +219,7 @@ int lustre_unlink(const lustre_irods_connector_cfg_t *config_struct_ptr, const c
     std::lock_guard<std::mutex> lock(change_table_mutex);
 
     // get change map with hashed index of fidstr
-    auto &change_map_fidstr = change_map->get<1>();
+    auto &change_map_fidstr = change_map->get<change_descriptor_fidstr_idx>();
 
     std::string fidstr(fidstr_cstr);
     std::string lustre_path(lustre_path_cstr);
@@ -265,7 +265,7 @@ int lustre_rename(const lustre_irods_connector_cfg_t *config_struct_ptr, const c
     std::lock_guard<std::mutex> lock(change_table_mutex);
 
     // get change map with hashed index of fidstr
-    auto &change_map_fidstr = change_map->get<1>();
+    auto &change_map_fidstr = change_map->get<change_descriptor_fidstr_idx>();
 
     std::string fidstr(fidstr_cstr);
     std::string lustre_path(lustre_path_cstr);
@@ -337,7 +337,7 @@ int lustre_create(const lustre_irods_connector_cfg_t *config_struct_ptr, const c
     std::lock_guard<std::mutex> lock(change_table_mutex);
 
     // get change map with hashed index of fidstr
-    auto &change_map_fidstr = change_map->get<1>();
+    auto &change_map_fidstr = change_map->get<change_descriptor_fidstr_idx>();
 
     std::string fidstr(fidstr_cstr);
     std::string lustre_path(lustre_path_cstr);
@@ -382,7 +382,7 @@ int lustre_mtime(const lustre_irods_connector_cfg_t *config_struct_ptr, const ch
     std::lock_guard<std::mutex> lock(change_table_mutex);
 
     // get change map with hashed index of fidstr
-    auto &change_map_fidstr = change_map->get<1>();
+    auto &change_map_fidstr = change_map->get<change_descriptor_fidstr_idx>();
 
     std::string fidstr(fidstr_cstr);
     std::string lustre_path(lustre_path_cstr);
@@ -420,7 +420,7 @@ int lustre_trunc(const lustre_irods_connector_cfg_t *config_struct_ptr, const ch
     std::lock_guard<std::mutex> lock(change_table_mutex);
 
     // get change map with hashed index of fidstr
-    auto &change_map_fidstr = change_map->get<1>();
+    auto &change_map_fidstr = change_map->get<change_descriptor_fidstr_idx>();
 
     std::string fidstr(fidstr_cstr);
     std::string lustre_path(lustre_path_cstr);
@@ -475,7 +475,7 @@ int remove_fidstr_from_table(const char *fidstr_cstr, void *change_map_void_ptr)
     std::string fidstr(fidstr_cstr);
 
     // get change map with index of fidstr 
-    auto &change_map_fidstr = change_map->get<1>();
+    auto &change_map_fidstr = change_map->get<change_descriptor_fidstr_idx>();
 
     change_map_fidstr.erase(fidstr);
 
@@ -524,7 +524,7 @@ void lustre_write_change_table_to_str(char *buffer, const size_t buffer_size, co
     std::lock_guard<std::mutex> lock(change_table_mutex);
 
     // get change map with sequenced index  
-    auto &change_map_seq = change_map->get<0>();
+    auto &change_map_seq = change_map->get<change_descriptor_seq_idx>();
 
     char time_str[18];
     char temp_buffer[buffer_size];
@@ -593,7 +593,7 @@ int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *conf
     std::lock_guard<std::mutex> lock(change_table_mutex);
 
     // get change map with sequenced index  
-    auto &change_map_seq = change_map->get<0>();
+    auto &change_map_seq = change_map->get<change_descriptor_seq_idx>();
 
     //initialize capnproto message
     capnp::MallocMessageBuilder message;
@@ -603,11 +603,13 @@ int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *conf
     changeMap.setResourceId(config_struct_ptr->irods_resource_id);
     changeMap.setRegisterPath(config_struct_ptr->irods_register_path);
 
-    size_t write_count = change_map_seq.size();
+    // TODO look at this
+    size_t write_count = change_map_seq.size() >= 5 ? 5 : change_map_seq.size() ;
+    //size_t write_count = change_map_seq.size();
     capnp::List<ChangeDescriptor>::Builder entries = changeMap.initEntries(write_count);
 
     unsigned long cnt = 0;
-    for (auto iter = change_map_seq.begin(); iter != change_map_seq.end();) {
+    for (auto iter = change_map_seq.begin(); iter != change_map_seq.end() && cnt < write_count;) {   // && cnt < 5;) {
 
         LOG(LOG_DBG, "fidstr=%s oper_complete=%i\n", iter->fidstr.c_str(), iter->oper_complete);
 
@@ -637,6 +639,9 @@ int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *conf
         }
         
     }
+
+
+    LOG(LOG_DBG, "write_count=%lu cnt=%lu\n", write_count, cnt);
 
     kj::Array<capnp::word> array = capnp::messageToFlatArray(message);
     size_t message_size = array.size() * sizeof(capnp::word);
@@ -715,9 +720,9 @@ bool entries_ready_to_process(change_map_t *change_map) {
         return false;
     }
 
-    // get change map with size index
-    auto &change_map_size = change_map->get<2>();
-    bool ready = change_map_size.count(true) > 0;
+    // get change map indexed on oper_complete 
+    auto &change_map_oper_complete = change_map->get<change_descriptor_oper_complete_idx>();
+    bool ready = change_map_oper_complete.count(true) > 0;
     LOG(LOG_INFO, "entries_ready_to_process = %i\n", ready);
     return ready; 
 }
@@ -742,7 +747,7 @@ int serialize_change_map_to_sqlite(change_map_t *change_map) {
     }
 
     // get change map with sequenced index  
-    auto &change_map_seq = change_map->get<0>();
+    auto &change_map_seq = change_map->get<change_descriptor_seq_idx>();
 
     for (auto iter = change_map_seq.begin(); iter != change_map_seq.end(); ++iter) {  
 

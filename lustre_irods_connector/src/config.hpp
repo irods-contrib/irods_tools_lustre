@@ -13,6 +13,7 @@ typedef struct lustre_irods_connector_cfg {
     unsigned int update_irods_interval_seconds;
     char irods_client_ipc_address[MAX_CONFIG_VALUE_SIZE];
     char changelog_reader_ipc_address[MAX_CONFIG_VALUE_SIZE];
+    unsigned int irods_updater_thread_count;
     //unsigned int changelog_reader_recv_port;
     //unsigned int irods_client_recv_port;
 } lustre_irods_connector_cfg_t;

@@ -31,16 +31,24 @@ struct change_descriptor {
     off_t                         file_size;
 };
 
+struct change_descriptor_seq_idx {};
+struct change_descriptor_fidstr_idx {};
+struct change_descriptor_oper_complete_idx {};
+
 typedef boost::multi_index::multi_index_container<
   change_descriptor,
   boost::multi_index::indexed_by<
-    boost::multi_index::sequenced<>,
+    boost::multi_index::sequenced<
+      boost::multi_index::tag<change_descriptor_seq_idx>
+    >,
     boost::multi_index::hashed_unique<
+      boost::multi_index::tag<change_descriptor_fidstr_idx>,
       boost::multi_index::member<
         change_descriptor, std::string, &change_descriptor::fidstr
       >
     >,
     boost::multi_index::hashed_non_unique<
+      boost::multi_index::tag<change_descriptor_oper_complete_idx>,
       boost::multi_index::member<
         change_descriptor, bool, &change_descriptor::oper_complete
       >

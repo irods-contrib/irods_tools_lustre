@@ -1,4 +1,5 @@
 #include <jeayeson/jeayeson.hpp>
+#include <boost/lexical_cast.hpp>
 #include <iostream>
 #include <sstream>
 #include <typeinfo>
@@ -61,6 +62,7 @@ int read_config_file(const char *filename, lustre_irods_connector_cfg_t *config_
     std::string update_irods_interval_seconds_str;
     std::string irods_client_ipc_address_str;
     std::string changelog_reader_ipc_address_str;
+    std::string irods_updater_thread_count_str;
 
     try {
         json_map config_map{ json_file{ filename } };
@@ -97,7 +99,11 @@ int read_config_file(const char *filename, lustre_irods_connector_cfg_t *config_
             LOG(LOG_ERR, "Key update_irods_interval_seconds missing from %s\n", filename);
             return lustre_irods::CONFIGURATION_ERROR;
         }
-
+        if (read_key_from_map(config_map, "irods_updater_thread_count", irods_updater_thread_count_str) != 0) {
+            LOG(LOG_ERR, "Key irods_updater_thread_count missing from %s\n", filename);
+            return lustre_irods::CONFIGURATION_ERROR;
+        }
+ 
 
 
         // populate config variables
@@ -115,15 +121,15 @@ int read_config_file(const char *filename, lustre_irods_connector_cfg_t *config_
 
 
         try {
-            config_struct->changelog_poll_interval_seconds = std::stoi(changelog_poll_interval_seconds_str);
-        } catch (std::invalid_argument& e) {
+            config_struct->changelog_poll_interval_seconds = boost::lexical_cast<unsigned int>(changelog_poll_interval_seconds_str);
+        } catch (boost::bad_lexical_cast& e) {
             LOG(LOG_ERR, "Could not parse changelog_poll_interval_seconds as an integer.\n");
             return lustre_irods::CONFIGURATION_ERROR;
         }
 
         try {
-            config_struct->update_irods_interval_seconds = std::stoi(update_irods_interval_seconds_str);
-        } catch (std::invalid_argument& e) {
+            config_struct->update_irods_interval_seconds = boost::lexical_cast<unsigned int>(update_irods_interval_seconds_str);
+        } catch (boost::bad_lexical_cast& e) {
             LOG(LOG_ERR, "Could not parse update_irods_interval_seconds as an integer.\n");
             return lustre_irods::CONFIGURATION_ERROR;
         }
@@ -131,18 +137,25 @@ int read_config_file(const char *filename, lustre_irods_connector_cfg_t *config_
         snprintf(config_struct->irods_client_ipc_address, MAX_CONFIG_VALUE_SIZE, "%s", irods_client_ipc_address_str.c_str());
         snprintf(config_struct->changelog_reader_ipc_address, MAX_CONFIG_VALUE_SIZE, "%s", changelog_reader_ipc_address_str.c_str());
 
+        try {
+            config_struct->irods_updater_thread_count = boost::lexical_cast<unsigned int>(irods_updater_thread_count_str);
+        } catch (boost::bad_lexical_cast& e) {
+            LOG(LOG_ERR, "Could not parse irods_updater_thread_count as an integer.\n");
+            return lustre_irods::CONFIGURATION_ERROR;
+        }
+
 
 
         /*try {
-            config_struct->changelog_reader_connection = std::stoi(changelog_reader_recv_port_str);
-        } catch (std::invalid_argument& e) {
+            config_struct->changelog_reader_connection = boost::lexical_cast<unsigned int>(changelog_reader_recv_port_str);
+        } catch (boost::bad_lexical_cast& e) {
             LOG(LOG_ERR, "Could not parse changelog_reader_recv_port as an integer.\n");
             return lustre_irods::CONFIGURATION_ERROR;
         }
 
         try {
-            config_struct->irods_client_recv_port = std::stoi(irods_client_recv_port_str);
-        } catch (std::invalid_argument& e) {
+            config_struct->irods_client_recv_port = boost::lexical_cast(irods_client_recv_port_str);
+        } catch (boost::bad_lexical_cast& e) {
             LOG(LOG_ERR, "Could not parse irods_client_recv_port as an integer.\n");
             return lustre_irods::CONFIGURATION_ERROR;
         }*/

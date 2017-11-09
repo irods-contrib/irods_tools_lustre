@@ -103,19 +103,19 @@ std::string receive_message(zmq::socket_t& subscriber) {
 
 // irods api client thread main routine
 // this is the main loop that reads the change entries in memory and sends them to iRODS via the API.
-void irods_api_client_main(std::shared_ptr<lustre_irods_connection> conn, const lustre_irods_connector_cfg_t *config_struct_ptr,
-        change_map_t *change_map) {
+void irods_api_client_main(const lustre_irods_connector_cfg_t *config_struct_ptr,
+        change_map_t *change_map, unsigned int thread_number) {
 
     zmq::context_t context(1);  // 1 I/O thread
     zmq::socket_t subscriber(context, ZMQ_SUB);
-    LOG(LOG_DBG, "client subscriber conn_str = %s\n", config_struct_ptr->irods_client_ipc_address);
+    LOG(LOG_DBG, "client (%u) subscriber conn_str = %s\n", thread_number, config_struct_ptr->irods_client_ipc_address);
     subscriber.connect(config_struct_ptr->irods_client_ipc_address);
     std::string identity("changetable_readers");
     subscriber.setsockopt(ZMQ_SUBSCRIBE, identity.c_str(), identity.length());
 
     zmq::context_t context2(1);
     zmq::socket_t publisher(context, ZMQ_PUB);
-    LOG(LOG_DBG, "client publisher conn_str = %s\n", config_struct_ptr->changelog_reader_ipc_address);
+    LOG(LOG_DBG, "client (%u) publisher conn_str = %s\n", thread_number, config_struct_ptr->changelog_reader_ipc_address);
     publisher.connect(config_struct_ptr->changelog_reader_ipc_address);
 
     // if we get an error sending data to irods, use a backoff_timer
@@ -126,12 +126,12 @@ void irods_api_client_main(std::shared_ptr<lustre_irods_connection> conn, const 
 
     while (!quit) {
 
-        LOG(LOG_INFO,"irods client reading change map\n");
+        LOG(LOG_INFO,"irods client (%u) reading change map\n", thread_number);
 
-        if (irods_error_detected) {
-            LOG(LOG_INFO, "irods error detected.  try to reinstantiate the connection\n");
+        /*if (irods_error_detected) {
+            LOG(LOG_INFO, "irods error detected.  try to reinstantiate the connection to client (%u)\n", thread_number);
 
-            if (conn->instantiate_irods_connection() == 0) {
+            if (conn.instantiate_irods_connection() == 0) {
 
                 irods_error_detected = false;
 
@@ -140,29 +140,50 @@ void irods_api_client_main(std::shared_ptr<lustre_irods_connection> conn, const 
                 s_sendmore(publisher, "changelog_reader");
                 s_send(publisher, "continue");
             }
-        } 
+        }*/ 
 
         // loop through and process entries
-        while (!irods_error_detected && entries_ready_to_process(change_map)) {
+        while (entries_ready_to_process(change_map)) {
             
-            irodsLustreApiInp_t inp{ };
+            // connection will close on each iteration
+            lustre_irods_connection conn(thread_number);
+            int rc = conn.instantiate_irods_connection(); 
+            if (rc < 0) {
+                LOG(LOG_ERR, "instantiate_irods_connection failed.  exiting...\n");
+                irods_error_detected = true;
+            } else {
+                if (irods_error_detected) {
+                    LOG(LOG_DBG, "sending continue message to changelog reader\n");
+                    s_sendmore(publisher, "changelog_reader");
+                    s_send(publisher, "continue");
+                }
+                irods_error_detected = false;
+            }
+
 
             std::shared_ptr<change_map_t> removed_entries = std::make_shared<change_map_t>(); 
 
-            if (write_change_table_to_capnproto_buf(config_struct_ptr, &inp, change_map, removed_entries) < 0) {
-                LOG(LOG_ERROR, "Could not execute write_change_table_to_capnproto_buf\n");
-                continue;
+            if (!irods_error_detected) {
+                irodsLustreApiInp_t inp{ };
+
+                if (write_change_table_to_capnproto_buf(config_struct_ptr, &inp, change_map, removed_entries) < 0) {
+                    LOG(LOG_ERROR, "irods client (%u): Could not execute write_change_table_to_capnproto_buf\n", thread_number);
+                    continue;
+                }
+
+                if (conn.send_change_map_to_irods(&inp) == lustre_irods::IRODS_ERROR) {
+                    irods_error_detected = true;
+                }
+                free(inp.buf);
+
             }
 
-            if (conn->send_change_map_to_irods(&inp) == lustre_irods::IRODS_ERROR) {
-
-                irods_error_detected = true;
+            if (irods_error_detected) {
 
                 // send message to changelog reader to pause reading changelog
-                LOG(LOG_DBG, "sending pause message to changelog_reader\n");
+                LOG(LOG_DBG, "irods client (%u): sending pause message to changelog_reader\n", thread_number);
                 s_sendmore(publisher, "changelog_reader");
                 s_send(publisher, "pause");
-
 
                 // error occurred - add removed_entries rows back into table 
                 auto &change_map_seq = removed_entries->get<0>(); 
@@ -174,15 +195,15 @@ void irods_api_client_main(std::shared_ptr<lustre_irods_connection> conn, const 
                 if (error_backoff_timer < 256*config_struct_ptr->update_irods_interval_seconds) {
                     error_backoff_timer = error_backoff_timer << 1;
                 }
+                break;
 
             } else {
                error_backoff_timer = config_struct_ptr->update_irods_interval_seconds;
             }
-            free(inp.buf);
 
             // see if there is a quit message, if so terminate
             if (received_terminate_message(subscriber)) {
-                LOG(LOG_DBG, "irods client received a terminate message\n");
+                LOG(LOG_DBG, "irods client (%u) received a terminate message\n", thread_number);
                 quit = true;
                 break;
             }
@@ -190,19 +211,18 @@ void irods_api_client_main(std::shared_ptr<lustre_irods_connection> conn, const 
 
         // doing this in a loop so that we can catch a terminate more quickly
         // not sure how to interrupt the sleep with zmq
+        LOG(LOG_DBG, "irods client (%u) sleeping for %u seconds\n", thread_number, error_backoff_timer);
         for (unsigned int i = 0; !quit && i < error_backoff_timer; ++i) {
             if (received_terminate_message(subscriber)) {
-                LOG(LOG_DBG, "irods client received a terminate message\n");
+                LOG(LOG_DBG, "irods client (%u) received a terminate message\n", thread_number);
                 quit = true;
                 break;
             }
-
             sleep(1);
         }
-
     }
 
-    LOG(LOG_DBG,"irods_client_exiting\n");
+    LOG(LOG_DBG,"irods client (%u) exiting\n", thread_number);
 }
 
 
@@ -287,20 +307,23 @@ int main(int argc, char *argv[]) {
         LOG(LOG_ERR, "failed to deserialize change map on startup\n");
         return 1;
     }
-  
-    std::shared_ptr<lustre_irods_connection> conn = std::make_shared<lustre_irods_connection>();
+ 
+    //std::shared_ptr<lustre_irods_connection> conn = std::make_shared<lustre_irods_connection>();
+    { 
+        lustre_irods_connection conn(0);
 
-    rc = conn->instantiate_irods_connection(); 
-    if (rc < 0) {
-        LOG(LOG_ERR, "instantiate_irods_connection failed.  exiting...\n");
-        return 1;
-    }
+        rc = conn.instantiate_irods_connection(); 
+        if (rc < 0) {
+            LOG(LOG_ERR, "instantiate_irods_connection failed.  exiting...\n");
+            return 1;
+        }
 
-    // read the resource id from resource name
-    rc = conn->populate_irods_resc_id(&config_struct); 
-    if (rc < 0) {
-        LOG(LOG_ERR, "populate_irods_resc_id returned an error\n");
-        return 1;
+        // read the resource id from resource name
+        rc = conn.populate_irods_resc_id(&config_struct); 
+        if (rc < 0) {
+            LOG(LOG_ERR, "populate_irods_resc_id returned an error\n");
+            return 1;
+        }
     }
 
     // start a pub/sub publisher which is used to terminate threads
@@ -319,7 +342,11 @@ int main(int argc, char *argv[]) {
     subscriber.setsockopt(ZMQ_SUBSCRIBE, identity.c_str(), identity.length());
 
     // start the thread that sends changes to iRODS
-    std::thread irods_api_client_thread(irods_api_client_main, conn, &config_struct, &change_map);
+    std::vector<std::thread> irods_api_client_thread_list;
+    for (unsigned int i = 0; i < config_struct.irods_updater_thread_count; ++i) {
+        std::thread t(irods_api_client_main, &config_struct, &change_map, i);
+        irods_api_client_thread_list.push_back(move(t));
+    }
 
     rc = start_lcap_changelog(&config_struct, &ctx);
     if (rc < 0) {
@@ -350,12 +377,14 @@ int main(int argc, char *argv[]) {
     }
 
     // send message to threads to terminate
-    LOG(LOG_DBG, "sending terminate message to client\n");
+    LOG(LOG_DBG, "sending terminate message to clients\n");
     s_sendmore(publisher, "changetable_readers");
     s_send(publisher, "terminate");
 
-    irods_api_client_thread.join();
-
+    //irods_api_client_thread.join();
+    for (auto iter = irods_api_client_thread_list.begin(); iter != irods_api_client_thread_list.end(); ++iter) {
+        iter->join();
+    }
 
     LOG(LOG_DBG, "serializing change_map to database\n");
     if (serialize_change_map_to_sqlite(&change_map) < 0) {
