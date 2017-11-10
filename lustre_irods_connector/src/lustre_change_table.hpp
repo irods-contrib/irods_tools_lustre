@@ -96,6 +96,7 @@ bool entries_ready_to_process(change_map_t *change_map);
 int serialize_change_map_to_sqlite(change_map_t *change_map);
 int deserialize_change_map_from_sqlite(change_map_t *change_map);
 int initiate_change_map_serialization_database();
+void add_entries_back_to_change_table(change_map_t *change_map, std::shared_ptr<change_map_t>& removed_entries);
 
 #endif
 

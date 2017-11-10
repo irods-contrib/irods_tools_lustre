@@ -33,7 +33,8 @@ std::string object_type_to_str(ChangeDescriptor::ObjectTypeEnum type);
 //using namespace boost::interprocess;
 
 //static boost::shared_mutex change_table_mutex;
-std::mutex change_table_mutex;
+static std::mutex change_table_mutex;
+
 
 int validate_operands(const lustre_irods_connector_cfg_t *config_struct_ptr, const char *fidstr_cstr,
             const char *parent_fidstr, const char *object_name, const char *lustre_path_cstr, void *change_map_void_ptr) {
@@ -900,3 +901,14 @@ int initiate_change_map_serialization_database() {
 
     return lustre_irods::SUCCESS;
 }
+
+void add_entries_back_to_change_table(change_map_t *change_map, std::shared_ptr<change_map_t>& removed_entries) {
+
+    std::lock_guard<std::mutex> lock(change_table_mutex);
+
+    auto &change_map_seq = removed_entries->get<0>(); 
+    for (auto iter = change_map_seq.begin(); iter != change_map_seq.end(); ++iter) {
+        change_map->push_back(*iter);
+    }
+}
+

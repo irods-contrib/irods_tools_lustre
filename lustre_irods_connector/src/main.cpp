@@ -36,6 +36,20 @@
 #define LCAP_CL_BLOCK   (0x01 << 1)
 #endif
 
+// This is a mutex to lock the hash of all of the files.  This is designed to make sure that operations that may be order dependent
+// will always be executed in the same order.
+// For example:
+//
+// 1) mv /dir1/file1 /dir1/file2
+// 2) mv /dir1/file3 /dir1/file2
+//
+// These must be run in the proper order.  The irods updater thread that exectutes (1) will lock mutex[hash("/dir1/file1")] and mutex[hash("/dir1/file2")].
+// The irods updater thread the executes (2) will be held up until it can execute the lock on mutex[hash("/dir1/file2")].
+//
+// TODO: Need to consider deadlocks.
+std::mutex file_hash_lock[100];
+
+
 namespace po = boost::program_options;
 
 struct lcap_cl_ctx;
@@ -185,11 +199,13 @@ void irods_api_client_main(const lustre_irods_connector_cfg_t *config_struct_ptr
                 s_sendmore(publisher, "changelog_reader");
                 s_send(publisher, "pause");
 
+                add_entries_back_to_change_table(change_map, removed_entries);
+
                 // error occurred - add removed_entries rows back into table 
-                auto &change_map_seq = removed_entries->get<0>(); 
+                /*auto &change_map_seq = removed_entries->get<0>(); 
                 for (auto iter = change_map_seq.begin(); iter != change_map_seq.end(); ++iter) {
                     change_map->push_back(*iter);
-                }
+                }*/
 
                 // next sleep will be twice the last sleep 
                 if (error_backoff_timer < 256*config_struct_ptr->update_irods_interval_seconds) {
