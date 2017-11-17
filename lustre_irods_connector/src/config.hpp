@@ -11,11 +11,12 @@ typedef struct lustre_irods_connector_cfg {
     int64_t irods_resource_id;
     unsigned int changelog_poll_interval_seconds;
     unsigned int update_irods_interval_seconds;
-    char irods_client_ipc_address[MAX_CONFIG_VALUE_SIZE];
-    char changelog_reader_ipc_address[MAX_CONFIG_VALUE_SIZE];
+    char irods_client_broadcast_address[MAX_CONFIG_VALUE_SIZE];
+    char changelog_reader_broadcast_address[MAX_CONFIG_VALUE_SIZE];
+    char changelog_reader_push_work_address[MAX_CONFIG_VALUE_SIZE];
+    char result_accumulator_push_address[MAX_CONFIG_VALUE_SIZE];
     unsigned int irods_updater_thread_count;
-    //unsigned int changelog_reader_recv_port;
-    //unsigned int irods_client_recv_port;
+    unsigned int maximum_records_per_update_to_irods;
 } lustre_irods_connector_cfg_t;
 
 

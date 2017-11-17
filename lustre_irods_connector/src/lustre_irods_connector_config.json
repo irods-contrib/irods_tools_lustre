@@ -6,8 +6,11 @@
         "log_level": "LOG_DBG",
         "changelog_poll_interval_seconds": 5,
         "update_irods_interval_seconds": 7,
-        "irods_client_ipc_address": "ipc:///terminate_threads",
-        "changelog_reader_ipc_address": "ipc:///stop_reading_events",
-        "irods_updater_thread_count": 4
+        "irods_client_broadcast_address": "ipc:///irods_client_broadcast_events",
+        "changelog_reader_broadcast_address": "ipc:///changelog_reader_broadcast_events",
+        "changelog_reader_push_work_address": "ipc:///changelog_reader_push_work_events",
+        "result_accumulator_push_address": "ipc:///result_accumulator_push_address",
+        "irods_updater_thread_count": 4,
+        "maximum_records_per_update_to_irods": 10,
 }
 

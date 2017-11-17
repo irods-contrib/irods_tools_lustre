@@ -60,9 +60,12 @@ int read_config_file(const char *filename, lustre_irods_connector_cfg_t *config_
     std::string log_level_str;
     std::string changelog_poll_interval_seconds_str;
     std::string update_irods_interval_seconds_str;
-    std::string irods_client_ipc_address_str;
-    std::string changelog_reader_ipc_address_str;
+    std::string irods_client_broadcast_address_str;
+    std::string changelog_reader_broadcast_address_str;
+    std::string changelog_reader_push_work_address_str;
+    std::string result_accumulator_push_address_str;
     std::string irods_updater_thread_count_str;
+    std::string maximum_records_per_update_to_irods_str;
 
     try {
         json_map config_map{ json_file{ filename } };
@@ -91,19 +94,32 @@ int read_config_file(const char *filename, lustre_irods_connector_cfg_t *config_
             LOG(LOG_ERR, "Key update_irods_interval_seconds missing from %s\n", filename);
             return lustre_irods::CONFIGURATION_ERROR;
         }
-        if (read_key_from_map(config_map, "irods_client_ipc_address", irods_client_ipc_address_str) != 0) {
+        if (read_key_from_map(config_map, "irods_client_broadcast_address", irods_client_broadcast_address_str) != 0) {
             LOG(LOG_ERR, "Key changelog_reader_recv_port missing from %s\n", filename);
             return lustre_irods::CONFIGURATION_ERROR;
         }
-        if (read_key_from_map(config_map, "changelog_reader_ipc_address", changelog_reader_ipc_address_str) != 0) {
+
+        if (read_key_from_map(config_map, "changelog_reader_broadcast_address", changelog_reader_broadcast_address_str) != 0) {
             LOG(LOG_ERR, "Key update_irods_interval_seconds missing from %s\n", filename);
             return lustre_irods::CONFIGURATION_ERROR;
         }
+        if (read_key_from_map(config_map, "changelog_reader_push_work_address", changelog_reader_push_work_address_str) != 0) {
+            LOG(LOG_ERR, "Key changelog_reader_push_work_address missing from %s\n", filename);
+            return lustre_irods::CONFIGURATION_ERROR;
+        }
+        if (read_key_from_map(config_map, "result_accumulator_push_address", result_accumulator_push_address_str) != 0) {
+            LOG(LOG_ERR, "Key result_accumulator_push_address missing from %s\n", filename);
+            return lustre_irods::CONFIGURATION_ERROR;
+        }
+
         if (read_key_from_map(config_map, "irods_updater_thread_count", irods_updater_thread_count_str) != 0) {
             LOG(LOG_ERR, "Key irods_updater_thread_count missing from %s\n", filename);
             return lustre_irods::CONFIGURATION_ERROR;
         }
- 
+        if (read_key_from_map(config_map, "maximum_records_per_update_to_irods", maximum_records_per_update_to_irods_str) != 0) {
+            LOG(LOG_ERR, "Key mum_records_per_update_to_irods missing from %s\n", filename);
+            return lustre_irods::CONFIGURATION_ERROR;
+        }
 
 
         // populate config variables
@@ -134,8 +150,10 @@ int read_config_file(const char *filename, lustre_irods_connector_cfg_t *config_
             return lustre_irods::CONFIGURATION_ERROR;
         }
 
-        snprintf(config_struct->irods_client_ipc_address, MAX_CONFIG_VALUE_SIZE, "%s", irods_client_ipc_address_str.c_str());
-        snprintf(config_struct->changelog_reader_ipc_address, MAX_CONFIG_VALUE_SIZE, "%s", changelog_reader_ipc_address_str.c_str());
+        snprintf(config_struct->irods_client_broadcast_address, MAX_CONFIG_VALUE_SIZE, "%s", irods_client_broadcast_address_str.c_str());
+        snprintf(config_struct->changelog_reader_broadcast_address, MAX_CONFIG_VALUE_SIZE, "%s", changelog_reader_broadcast_address_str.c_str());
+        snprintf(config_struct->changelog_reader_push_work_address, MAX_CONFIG_VALUE_SIZE, "%s", changelog_reader_push_work_address_str.c_str());
+        snprintf(config_struct->result_accumulator_push_address, MAX_CONFIG_VALUE_SIZE, "%s", result_accumulator_push_address_str.c_str());
 
         try {
             config_struct->irods_updater_thread_count = boost::lexical_cast<unsigned int>(irods_updater_thread_count_str);
@@ -144,7 +162,12 @@ int read_config_file(const char *filename, lustre_irods_connector_cfg_t *config_
             return lustre_irods::CONFIGURATION_ERROR;
         }
 
-
+        try {
+            config_struct->maximum_records_per_update_to_irods = boost::lexical_cast<unsigned int>(maximum_records_per_update_to_irods_str);
+        } catch (boost::bad_lexical_cast& e) {
+            LOG(LOG_ERR, "Could not parse maximum_records_per_update_to_irods as an integer.\n");
+            return lustre_irods::CONFIGURATION_ERROR;
+        }
 
         /*try {
             config_struct->changelog_reader_connection = boost::lexical_cast<unsigned int>(changelog_reader_recv_port_str);

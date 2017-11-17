@@ -115,22 +115,63 @@ std::string receive_message(zmq::socket_t& subscriber) {
     return contents;
 }
 
+// thread which reads the results from the irods updater threads and updates
+// the change table in memory
+void result_accumulator_main(const lustre_irods_connector_cfg_t *config_struct_ptr,
+        change_map_t *change_map) {
+
+    // set up broadcast subscriber for terminate messages 
+    zmq::context_t context(1);  // 1 I/O thread
+    zmq::socket_t subscriber(context, ZMQ_SUB);
+    LOG(LOG_DBG, "result_accumulator subscriber conn_str = %s\n", config_struct_ptr->irods_client_broadcast_address);
+    subscriber.connect(config_struct_ptr->irods_client_broadcast_address);
+    std::string identity("changetable_readers");
+    subscriber.setsockopt(ZMQ_SUBSCRIBE, identity.c_str(), identity.length());
+
+    // set up receiver to receive results
+    zmq::socket_t receiver(context,ZMQ_PULL);
+    LOG(LOG_DBG, "result_accumulator receiver conn_str = %s\n", config_struct_ptr->result_accumulator_push_address);
+    receiver.bind(config_struct_ptr->result_accumulator_push_address);
+
+    while (true) {
+        if (received_terminate_message(subscriber)) {
+            LOG(LOG_DBG, "result accumulator received a terminate message\n");
+            break;
+        }
+    }
+    LOG(LOG_DBG, "result accumulator exiting\n");
+
+
+}
+
 // irods api client thread main routine
 // this is the main loop that reads the change entries in memory and sends them to iRODS via the API.
 void irods_api_client_main(const lustre_irods_connector_cfg_t *config_struct_ptr,
         change_map_t *change_map, unsigned int thread_number) {
 
+    // set up broadcast subscriber for terminate messages 
     zmq::context_t context(1);  // 1 I/O thread
     zmq::socket_t subscriber(context, ZMQ_SUB);
-    LOG(LOG_DBG, "client (%u) subscriber conn_str = %s\n", thread_number, config_struct_ptr->irods_client_ipc_address);
-    subscriber.connect(config_struct_ptr->irods_client_ipc_address);
+    LOG(LOG_DBG, "client (%u) subscriber conn_str = %s\n", thread_number, config_struct_ptr->irods_client_broadcast_address);
+    subscriber.connect(config_struct_ptr->irods_client_broadcast_address);
     std::string identity("changetable_readers");
     subscriber.setsockopt(ZMQ_SUBSCRIBE, identity.c_str(), identity.length());
 
-    zmq::context_t context2(1);
+    // set up broadcast publisher for sending pause message to lustre log reader in case of irods failures
+    //zmq::context_t context2(1);
     zmq::socket_t publisher(context, ZMQ_PUB);
-    LOG(LOG_DBG, "client (%u) publisher conn_str = %s\n", thread_number, config_struct_ptr->changelog_reader_ipc_address);
-    publisher.connect(config_struct_ptr->changelog_reader_ipc_address);
+    LOG(LOG_DBG, "client (%u) publisher conn_str = %s\n", thread_number, config_struct_ptr->changelog_reader_broadcast_address);
+    publisher.connect(config_struct_ptr->changelog_reader_broadcast_address);
+
+    // set up receiver for receiving update jobs
+    zmq::socket_t receiver(context, ZMQ_PULL);
+    LOG(LOG_DBG, "client (%u) push work conn_str = %s\n", thread_number, config_struct_ptr->changelog_reader_push_work_address);
+    receiver.connect(config_struct_ptr->changelog_reader_push_work_address);
+
+    // set up sender for sending update result status
+    zmq::socket_t sender(context, ZMQ_PUSH);
+    LOG(LOG_DBG, "client (%u) push results conn_str = %s\n", thread_number, config_struct_ptr->result_accumulator_push_address);
+    sender.connect(config_struct_ptr->result_accumulator_push_address);
 
     // if we get an error sending data to irods, use a backoff_timer
     unsigned int error_backoff_timer = config_struct_ptr->update_irods_interval_seconds;
@@ -345,19 +386,27 @@ int main(int argc, char *argv[]) {
     // start a pub/sub publisher which is used to terminate threads
     zmq::context_t context(1);
     zmq::socket_t publisher(context, ZMQ_PUB);
-    LOG(LOG_DBG, "main publisher conn_str = %s\n", config_struct.irods_client_ipc_address);
-    publisher.bind(config_struct.irods_client_ipc_address);
+    LOG(LOG_DBG, "main publisher conn_str = %s\n", config_struct.irods_client_broadcast_address);
+    publisher.bind(config_struct.irods_client_broadcast_address);
 
     // start another pub/sub which is used for clients to send a stop reading
     // events message if iRODS is down
-    zmq::context_t context2(1);
-    zmq::socket_t subscriber(context2, ZMQ_SUB);
-    LOG(LOG_DBG, "main subscriber conn_str = %s\n", config_struct.changelog_reader_ipc_address);
-    subscriber.bind(config_struct.changelog_reader_ipc_address);
+    //zmq::context_t context2(1);
+    zmq::socket_t subscriber(context, ZMQ_SUB);
+    LOG(LOG_DBG, "main subscriber conn_str = %s\n", config_struct.changelog_reader_broadcast_address);
+    subscriber.bind(config_struct.changelog_reader_broadcast_address);
     std::string identity("changelog_reader");
     subscriber.setsockopt(ZMQ_SUBSCRIBE, identity.c_str(), identity.length());
 
-    // start the thread that sends changes to iRODS
+    // start a PUSH notifier to send messages to the iRODS updater threads
+    zmq::socket_t  sender(context, ZMQ_PUSH);
+    sender.bind(config_struct.changelog_reader_push_work_address);
+ 
+
+    // start accumulator thread which receives results back from iRODS updater threads
+    std::thread t(result_accumulator_main, &config_struct, &change_map); 
+
+    // start threads that sends changes to iRODS
     std::vector<std::thread> irods_api_client_thread_list;
     for (unsigned int i = 0; i < config_struct.irods_updater_thread_count; ++i) {
         std::thread t(irods_api_client_main, &config_struct, &change_map, i);
