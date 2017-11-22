@@ -6,22 +6,22 @@
 const int MAX_CONFIG_VALUE_SIZE = 256;
 
 typedef struct irods_connection_cfg {
-    char irods_host[MAX_CONFIG_VALUE_SIZE];
+    std::string irods_host;
     unsigned int irods_port;
-    char irods_user[MAX_CONFIG_VALUE_SIZE];
+    std::string irods_user;
 } irods_connection_cfg_t;
 
 typedef struct lustre_irods_connector_cfg {
-    char mdtname[MAX_CONFIG_VALUE_SIZE];
-    char lustre_root_path[MAX_CONFIG_VALUE_SIZE];
-    char irods_register_path[MAX_CONFIG_VALUE_SIZE];
-    char irods_resource_name[MAX_CONFIG_VALUE_SIZE];
+    std::string mdtname;
+    std::string lustre_root_path;
+    std::string irods_register_path;
+    std::string irods_resource_name;
     int64_t irods_resource_id;
     unsigned int changelog_poll_interval_seconds;
-    char irods_client_broadcast_address[MAX_CONFIG_VALUE_SIZE];
-    char changelog_reader_broadcast_address[MAX_CONFIG_VALUE_SIZE];
-    char changelog_reader_push_work_address[MAX_CONFIG_VALUE_SIZE];
-    char result_accumulator_push_address[MAX_CONFIG_VALUE_SIZE];
+    std::string irods_client_broadcast_address;
+    std::string changelog_reader_broadcast_address;
+    std::string changelog_reader_push_work_address;
+    std::string result_accumulator_push_address;
     unsigned int irods_updater_thread_count;
     unsigned int maximum_records_per_update_to_irods;
     std::vector<irods_connection_cfg_t> irods_connection_list;
@@ -29,6 +29,6 @@ typedef struct lustre_irods_connector_cfg {
 } lustre_irods_connector_cfg_t;
 
 
-int read_config_file(const char *filename, lustre_irods_connector_cfg_t *config_struct);
+int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *config_struct);
 
 #endif

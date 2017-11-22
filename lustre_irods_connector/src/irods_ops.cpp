@@ -91,7 +91,7 @@ int lustre_irods_connection::populate_irods_resc_id(lustre_irods_connector_cfg_t
     memset(&gen_inp, 0, sizeof(gen_inp));
 
     char query_str[ MAX_NAME_LEN ];
-    snprintf(query_str, MAX_NAME_LEN, "select RESC_ID where RESC_NAME = '%s'", config_struct_ptr->irods_resource_name);
+    snprintf(query_str, MAX_NAME_LEN, "select RESC_ID where RESC_NAME = '%s'", config_struct_ptr->irods_resource_name.c_str());
 
     fillGenQueryInpFromStrCond(query_str, &gen_inp);
     gen_inp.maxRows = MAX_SQL_ROWS;
@@ -100,10 +100,10 @@ int lustre_irods_connection::populate_irods_resc_id(lustre_irods_connector_cfg_t
 
     if ( status < 0 || gen_out->rowCnt < 1) {
         if ( status == CAT_NO_ROWS_FOUND ) {
-            LOG(LOG_ERR, "No resource found in iRODS for resc_name %s\n", config_struct_ptr->irods_resource_name);
+            LOG(LOG_ERR, "No resource found in iRODS for resc_name %s\n", config_struct_ptr->irods_resource_name.c_str());
             return lustre_irods::RESOURCE_NOT_FOUND_ERROR;
         }
-        LOG(LOG_ERR, "Lookup resource id for resource %s returned error\n", config_struct_ptr->irods_resource_name);
+        LOG(LOG_ERR, "Lookup resource id for resource %s returned error\n", config_struct_ptr->irods_resource_name.c_str());
         return lustre_irods::IRODS_ERROR;
     }
 
