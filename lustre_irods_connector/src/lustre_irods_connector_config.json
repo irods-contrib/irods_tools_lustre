@@ -5,12 +5,25 @@
         "irods_resource_name": "demoResc",
         "log_level": "LOG_DBG",
         "changelog_poll_interval_seconds": 5,
-        "update_irods_interval_seconds": 7,
         "irods_client_broadcast_address": "ipc:///irods_client_broadcast_events",
         "changelog_reader_broadcast_address": "ipc:///changelog_reader_broadcast_events",
         "changelog_reader_push_work_address": "ipc:///changelog_reader_push_work_events",
         "result_accumulator_push_address": "ipc:///result_accumulator_push_address",
         "irods_updater_thread_count": 4,
         "maximum_records_per_update_to_irods": 10,
+
+        "default_irods_host": "localhost",
+        "default_irods_port": "1247",
+        "default_irods_user": "rods",
+        "thread_1_connection_parameters": {
+                 "irods_host": "localhost",
+                 "irods_port": "1247",
+                 "irods_user": "rods"
+        },
+        "thread_2_connection_parameters": {
+                 "irods_host": "localhost",
+                 "irods_port": "1247",
+                 "irods_user": "rods"
+        }
 }
 

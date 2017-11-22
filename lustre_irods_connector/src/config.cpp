@@ -59,7 +59,6 @@ int read_config_file(const char *filename, lustre_irods_connector_cfg_t *config_
     std::string irods_resource_name_str;
     std::string log_level_str;
     std::string changelog_poll_interval_seconds_str;
-    std::string update_irods_interval_seconds_str;
     std::string irods_client_broadcast_address_str;
     std::string changelog_reader_broadcast_address_str;
     std::string changelog_reader_push_work_address_str;
@@ -90,17 +89,12 @@ int read_config_file(const char *filename, lustre_irods_connector_cfg_t *config_
             LOG(LOG_ERR, "Key changelog_poll_interval_seconds missing from %s\n", filename);
             return lustre_irods::CONFIGURATION_ERROR;
         }
-        if (read_key_from_map(config_map, "update_irods_interval_seconds", update_irods_interval_seconds_str) != 0) {
-            LOG(LOG_ERR, "Key update_irods_interval_seconds missing from %s\n", filename);
-            return lustre_irods::CONFIGURATION_ERROR;
-        }
         if (read_key_from_map(config_map, "irods_client_broadcast_address", irods_client_broadcast_address_str) != 0) {
             LOG(LOG_ERR, "Key changelog_reader_recv_port missing from %s\n", filename);
             return lustre_irods::CONFIGURATION_ERROR;
         }
-
         if (read_key_from_map(config_map, "changelog_reader_broadcast_address", changelog_reader_broadcast_address_str) != 0) {
-            LOG(LOG_ERR, "Key update_irods_interval_seconds missing from %s\n", filename);
+            LOG(LOG_ERR, "Key changelog_reader_broadcast_address missing from %s\n", filename);
             return lustre_irods::CONFIGURATION_ERROR;
         }
         if (read_key_from_map(config_map, "changelog_reader_push_work_address", changelog_reader_push_work_address_str) != 0) {
@@ -140,13 +134,6 @@ int read_config_file(const char *filename, lustre_irods_connector_cfg_t *config_
             config_struct->changelog_poll_interval_seconds = boost::lexical_cast<unsigned int>(changelog_poll_interval_seconds_str);
         } catch (boost::bad_lexical_cast& e) {
             LOG(LOG_ERR, "Could not parse changelog_poll_interval_seconds as an integer.\n");
-            return lustre_irods::CONFIGURATION_ERROR;
-        }
-
-        try {
-            config_struct->update_irods_interval_seconds = boost::lexical_cast<unsigned int>(update_irods_interval_seconds_str);
-        } catch (boost::bad_lexical_cast& e) {
-            LOG(LOG_ERR, "Could not parse update_irods_interval_seconds as an integer.\n");
             return lustre_irods::CONFIGURATION_ERROR;
         }
 
