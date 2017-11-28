@@ -240,7 +240,7 @@ void irods_api_client_main(const lustre_irods_connector_cfg_t *config_struct_ptr
 
             // in a failure state, remain here until we have detected that iRODS is back up
 
-            unsigned int sleep_period = 4;
+            unsigned int sleep_period = 10;
 
             // try a connection in a loop until irods is back up. 
             while (conn.instantiate_irods_connection(config_struct_ptr, thread_number ) != 0) {
@@ -258,7 +258,7 @@ void irods_api_client_main(const lustre_irods_connector_cfg_t *config_struct_ptr
                 }
 
                 // double sleep period
-                sleep_period = sleep_period << 1;
+                //sleep_period = sleep_period << 1;
 
             }
 
@@ -508,7 +508,7 @@ int main(int argc, char *argv[]) {
     // send message to threads to terminate
     LOG(LOG_DBG, "sending terminate message to clients\n");
     s_sendmore(publisher, "changetable_readers");
-    s_send(publisher, "terminate");
+    s_send(publisher, "terminate"); 
 
     //irods_api_client_thread.join();
     for (auto iter = irods_api_client_thread_list.begin(); iter != irods_api_client_thread_list.end(); ++iter) {
