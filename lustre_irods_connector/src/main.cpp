@@ -190,8 +190,6 @@ void irods_api_client_main(const lustre_irods_connector_cfg_t *config_struct_ptr
 
     while (!quit) {
 
-        LOG(LOG_DBG, "irods client(%u): irods_error_detected is %d.\n", thread_number, irods_error_detected);
-
         // see if we have a work message
         zmq::message_t message;
         if (!irods_error_detected && receiver.recv(&message)) {
@@ -483,6 +481,22 @@ int main(int argc, char *argv[]) {
         if (!pause_reading) {
             LOG(LOG_INFO,"changelog client polling changelog\n");
             poll_change_log_and_process(config_struct.mdtname.c_str(), config_struct.lustre_root_path.c_str(), &change_map, ctx);
+
+            while (entries_ready_to_process(&change_map)) {
+                // get records ready to be processed into buf and buflen
+                void *buf = nullptr;
+                int buflen;
+                write_change_table_to_capnproto_buf(&config_struct, buf, buflen,
+                            &change_map);
+
+                 // send inp to irods updaters
+                 zmq::message_t message(buflen);
+                 memcpy(message.data(), buf, buflen);
+                 sender.send(message);
+
+                 free(buf);
+             }
+
         } else {
             LOG(LOG_DBG, "in a paused state.  not reading changelog...\n");
         }
