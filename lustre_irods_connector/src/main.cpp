@@ -193,7 +193,7 @@ void irods_api_client_main(const lustre_irods_connector_cfg_t *config_struct_ptr
 
             lustre_irods_connection conn(thread_number);
 
-            if (conn.instantiate_irods_connection() == 0) {
+            if (conn.instantiate_irods_connection(config_struct_ptr, thread_number ) == 0) {
 
                 // We previously had an error but it has cleared.  Send a message to changelog reader to
                 // continue processing changelog.
@@ -346,7 +346,7 @@ int main(int argc, char *argv[]) {
     { 
         lustre_irods_connection conn(0);
 
-        rc = conn.instantiate_irods_connection(); 
+        rc = conn.instantiate_irods_connection(nullptr, 0); 
         if (rc < 0) {
             LOG(LOG_ERR, "instantiate_irods_connection failed.  exiting...\n");
             return 1;

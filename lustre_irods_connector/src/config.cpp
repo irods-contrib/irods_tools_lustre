@@ -1,5 +1,6 @@
 #include <jeayeson/jeayeson.hpp>
 #include <boost/lexical_cast.hpp>
+#include <boost/format.hpp>
 #include <iostream>
 #include <sstream>
 #include <typeinfo>
@@ -147,19 +148,53 @@ int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *
             return lustre_irods::CONFIGURATION_ERROR;
         }
 
-        /*try {
-            config_struct->changelog_reader_connection = boost::lexical_cast<unsigned int>(changelog_reader_recv_port_str);
-        } catch (boost::bad_lexical_cast& e) {
-            LOG(LOG_ERR, "Could not parse changelog_reader_recv_port as an integer.\n");
-            return lustre_irods::CONFIGURATION_ERROR;
-        }
+        // read individual thread connection parameters
+        boost::format format_object("thread_%i_connection_parameters");
+        for (unsigned int i = 0; i < config_struct->irods_updater_thread_count; ++i) {
 
-        try {
-            config_struct->irods_client_recv_port = boost::lexical_cast(irods_client_recv_port_str);
-        } catch (boost::bad_lexical_cast& e) {
-            LOG(LOG_ERR, "Could not parse irods_client_recv_port as an integer.\n");
-            return lustre_irods::CONFIGURATION_ERROR;
-        }*/
+
+            std::string key = str(format_object % i); 
+
+            auto entry = config_map.find(key);
+            if (entry != config_map.end()) {
+                irods_connection_cfg config_entry;
+                auto tmp = entry->second["irods_host"];
+                std::stringstream ss;
+                ss << tmp;
+                std::string value = ss.str();
+                value.erase(remove(value.begin(), value.end(), '\"' ), value.end());
+                if (value == "null") {
+                    LOG(LOG_ERR, "Could not read irods_host for connection %d.  Either define it or leave off connection 1 paramters to use defaults from the iRODS environment.\n", i);
+                    return lustre_irods::CONFIGURATION_ERROR;
+                }
+
+                config_entry.irods_host = value;
+
+                // clear stringstream and read irods_port
+                ss.str( std::string() );
+                ss.clear();
+                tmp = entry->second["irods_port"];
+                ss << tmp;
+                value = ss.str();
+                value.erase(remove(value.begin(), value.end(), '\"' ), value.end());
+                try {
+                    config_entry.irods_port = boost::lexical_cast<unsigned int>(value);
+                } catch (boost::bad_lexical_cast& e) {
+                    LOG(LOG_ERR, "Could not parse port %s as an integer.\n", value.c_str());
+                    return lustre_irods::CONFIGURATION_ERROR;
+                }
+                config_struct->irods_connection_list[i] = config_entry;
+
+            }
+        } 
+
+        LOG(LOG_DBG, "  --- irods_connection_list --- \n");
+        for (auto iter = config_struct->irods_connection_list.begin(); iter != config_struct->irods_connection_list.end(); ++iter) {
+            LOG(LOG_DBG, "connection: %d\n", iter->first);
+            LOG(LOG_DBG, "host: %s\n", iter->second.irods_host.c_str());
+            LOG(LOG_DBG, "port: %d\n", iter->second.irods_port);
+        }
+        LOG(LOG_DBG, "  ----------------------------- \n");
 
     } catch (std::exception& e) {
         LOG(LOG_ERR, "Could not read %s - %s\n", filename.c_str(), e.what());

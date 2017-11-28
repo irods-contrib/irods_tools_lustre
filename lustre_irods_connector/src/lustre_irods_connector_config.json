@@ -11,19 +11,13 @@
         "result_accumulator_push_address": "ipc:///result_accumulator_push_address",
         "irods_updater_thread_count": 4,
         "maximum_records_per_update_to_irods": 10,
-
-        "default_irods_host": "localhost",
-        "default_irods_port": "1247",
-        "default_irods_user": "rods",
         "thread_1_connection_parameters": {
                  "irods_host": "localhost",
-                 "irods_port": "1247",
-                 "irods_user": "rods"
+                 "irods_port": "1247"
         },
         "thread_2_connection_parameters": {
                  "irods_host": "localhost",
-                 "irods_port": "1247",
-                 "irods_user": "rods"
+                 "irods_port": "1247"
         }
 }
 

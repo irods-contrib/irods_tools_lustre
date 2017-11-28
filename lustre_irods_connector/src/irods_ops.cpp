@@ -130,7 +130,10 @@ int lustre_irods_connection::populate_irods_resc_id(lustre_irods_connector_cfg_t
     return 0;
 }
 
-int lustre_irods_connection::instantiate_irods_connection() {
+// Instantiate an iRODS connection.  If config_struct_ptr is null then the irods environment is used.  If config_struct_ptr is not
+// null and there is an entry for this thread_number in config_struct_ptr->irods_connection_list then use the host and port from that.
+// Otherwise use the irods environment for everything.
+int lustre_irods_connection::instantiate_irods_connection(const lustre_irods_connector_cfg_t *config_struct_ptr, int thread_number) {
 
     rodsEnv myEnv;
     int status;
@@ -141,8 +144,24 @@ int lustre_irods_connection::instantiate_irods_connection() {
         return lustre_irods::IRODS_ENVIRONMENT_ERROR;
     }
 
+    std::string irods_host;
+    int irods_port;
+    if (config_struct_ptr != nullptr) {
+        auto entry = config_struct_ptr->irods_connection_list.find(thread_number);
+        if (entry != config_struct_ptr->irods_connection_list.end()) {
+            irods_host = entry->second.irods_host;
+            irods_port = entry->second.irods_port;
+        } else {
+            irods_host = myEnv.rodsHost;
+            irods_port = myEnv.rodsPort;
+        }
+    } else {
+        irods_host = myEnv.rodsHost;
+        irods_port = myEnv.rodsPort;
+    }
+
     LOG(LOG_ERR, "rcConnect being called.\n");
-    irods_conn = rcConnect( myEnv.rodsHost, myEnv.rodsPort, myEnv.rodsUserName, myEnv.rodsZone, 1, &errMsg );
+    irods_conn = rcConnect( irods_host.c_str(), irods_port, myEnv.rodsUserName, myEnv.rodsZone, 1, &errMsg );
     LOG(LOG_ERR, "irods_conn is %i\n", irods_conn != nullptr);
 
     if (irods_conn == NULL) {

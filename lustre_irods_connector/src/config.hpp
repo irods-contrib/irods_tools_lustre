@@ -1,14 +1,13 @@
 #ifndef _IRODS_LUSTRE_CHANGELOG_CONFIG_H
 #define _IRODS_LUSTRE_CHANGELOG_CONFIG_H
 
-#include <vector>
+#include <map>
 
 const int MAX_CONFIG_VALUE_SIZE = 256;
 
 typedef struct irods_connection_cfg {
     std::string irods_host;
     unsigned int irods_port;
-    std::string irods_user;
 } irods_connection_cfg_t;
 
 typedef struct lustre_irods_connector_cfg {
@@ -24,7 +23,7 @@ typedef struct lustre_irods_connector_cfg {
     std::string result_accumulator_push_address;
     unsigned int irods_updater_thread_count;
     unsigned int maximum_records_per_update_to_irods;
-    std::vector<irods_connection_cfg_t> irods_connection_list;
+    std::map<int, irods_connection_cfg_t> irods_connection_list;
 
 } lustre_irods_connector_cfg_t;
 

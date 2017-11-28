@@ -15,7 +15,7 @@ class lustre_irods_connection {
    ~lustre_irods_connection(); 
    int send_change_map_to_irods(irodsLustreApiInp_t *inp) const;
    int populate_irods_resc_id(lustre_irods_connector_cfg_t *config_struct_ptr);
-   int instantiate_irods_connection();
+   int instantiate_irods_connection(const lustre_irods_connector_cfg_t *config_struct_ptr, int thread_number);
 };
 
 #endif
