@@ -28,6 +28,8 @@
 
 #include <boost/program_options.hpp>
 #include <boost/format.hpp>
+#include <boost/algorithm/string/predicate.hpp>
+#include <boost/lexical_cast.hpp>
 
 #ifndef LPX64
 #define LPX64   "%#llx"
@@ -82,6 +84,15 @@ static std::string s_recv_noblock(zmq::socket_t& socket) {
     socket.recv(&message, ZMQ_NOBLOCK);
 
     return std::string(static_cast<char*>(message.data()), message.size());
+}
+
+bool received_terminate_message(zmq::socket_t& subscriber) {
+
+    std::string address = s_recv_noblock(subscriber);
+    std::string contents = s_recv_noblock(subscriber);
+
+    return contents == "terminate";
+
 }
 
 
@@ -145,7 +156,7 @@ void result_accumulator_main(const lustre_irods_connector_cfg_t *config_struct_p
 void irods_api_client_main(const lustre_irods_connector_cfg_t *config_struct_ptr,
         change_map_t *change_map, unsigned int thread_number) {
 
-    // set up broadcast subscriber for terminate messages and to receive irods up/down messages
+    // set up broadcast subscriber for terminate messages
     zmq::context_t context(1);  // 1 I/O thread
     zmq::socket_t subscriber(context, ZMQ_SUB);
     LOG(LOG_DBG, "client (%u) subscriber conn_str = %s\n", thread_number, config_struct_ptr->irods_client_broadcast_address.c_str());
@@ -170,18 +181,20 @@ void irods_api_client_main(const lustre_irods_connector_cfg_t *config_struct_ptr
     LOG(LOG_DBG, "client (%u) push results conn_str = %s\n", thread_number, config_struct_ptr->result_accumulator_push_address.c_str());
     sender.connect(config_struct_ptr->result_accumulator_push_address.c_str());
 
-    // if we get an error sending data to irods, use a backoff_timer
-    //unsigned int error_backoff_timer = config_struct_ptr->update_irods_interval_seconds;
-
     //bool irods_error_detected = false;
     bool quit = false;
     bool irods_error_detected = false;
 
+    // initiate a connection object
+    lustre_irods_connection conn(thread_number);
+
     while (!quit) {
+
+        LOG(LOG_DBG, "irods client(%u): irods_error_detected is %d.\n", thread_number, irods_error_detected);
 
         // see if we have a work message
         zmq::message_t message;
-        if (receiver.recv(&message)) {
+        if (!irods_error_detected && receiver.recv(&message)) {
             LOG(LOG_DBG, "irods client(%u): Received work message %s.\n", thread_number, (char*)message.data());
 
 
@@ -191,19 +204,7 @@ void irods_api_client_main(const lustre_irods_connector_cfg_t *config_struct_ptr
 
             LOG(LOG_DBG, "irods client (%u): received message of length %d\n", thread_number, inp.buflen);
 
-            lustre_irods_connection conn(thread_number);
-
             if (conn.instantiate_irods_connection(config_struct_ptr, thread_number ) == 0) {
-
-                // We previously had an error but it has cleared.  Send a message to changelog reader to
-                // continue processing changelog.
-                // TODO with multiple threads there may be an error but this flag isn't set on this thread
-                if (irods_error_detected) {
-                    irods_error_detected = false;
-                    LOG(LOG_DBG, "sending continue message to changelog reader\n");
-                    s_sendmore(publisher, "changelog_reader");
-                    s_send(publisher, "continue");
-                }
 
                 // send to irods
                 if (conn.send_change_map_to_irods(&inp) == lustre_irods::IRODS_ERROR) {
@@ -213,13 +214,15 @@ void irods_api_client_main(const lustre_irods_connector_cfg_t *config_struct_ptr
                 irods_error_detected = true;
             }
 
-            // TODO work this out
             if (irods_error_detected) {
+
+                // irods was previous up but now is down
 
                 // send message to changelog reader to pause reading changelog
                 LOG(LOG_DBG, "irods client (%u): sending pause message to changelog_reader\n", thread_number);
                 s_sendmore(publisher, "changelog_reader");
-                s_send(publisher, "pause");
+                std::string msg = str(boost::format("pause:%u") % thread_number);
+                s_send(publisher, msg.c_str());
 
                 // send a failure message to result accumulator.  Send "FAIL:" plus the original message
                 zmq::message_t response_message(message.size() + 4);
@@ -235,21 +238,48 @@ void irods_api_client_main(const lustre_irods_connector_cfg_t *config_struct_ptr
 
            }
 
-        }
+        } else if (irods_error_detected) {
 
-        std::string bcast_msg = receive_message(subscriber);
-        if (bcast_msg == "terminate") {
-            LOG(LOG_DBG, "irods client (%u) received a terminate message\n", thread_number);
-            quit = true;
-            break;
-        } else if (bcast_msg == "pause") {
-            LOG(LOG_DBG, "irods client (%u) received a pause message echoed from changlog reader\n", thread_number);
-            irods_error_detected = true;
-        } else if (bcast_msg == "continue") {
-            LOG(LOG_DBG, "irods client (%u) received a pause message echoed from changlog reader\n", thread_number);
+            // in a failure state, remain here until we have detected that iRODS is back up
+
+            unsigned int sleep_period = 4;
+
+            // try a connection in a loop until irods is back up. 
+            while (conn.instantiate_irods_connection(config_struct_ptr, thread_number ) != 0) {
+
+                // sleep for sleep_period in a 1s loop so we can catch a terminate message
+                for (unsigned int i = 0; i < sleep_period; ++i) {
+                    sleep(1);
+
+                    // see if there is a quit message, if so terminate
+                    if (received_terminate_message(subscriber)) {
+                        LOG(LOG_DBG, "irods client (%u) received a terminate message\n", thread_number);
+                        LOG(LOG_DBG,"irods client (%u) exiting\n", thread_number);
+                        return;
+                    }
+                }
+
+                // double sleep period
+                sleep_period = sleep_period << 1;
+
+            }
+
+            // irods is back up, set status and send a message to the changelog reader
+            
             irods_error_detected = false;
+            LOG(LOG_DBG, "sending continue message to changelog reader\n");
+            std::string msg = str(boost::format("continue:%u") % thread_number);
+            s_sendmore(publisher, "changelog_reader");
+            s_send(publisher, msg.c_str());
         }
 
+
+        // see if there is a quit message, if so terminate
+        if (received_terminate_message(subscriber)) {
+             LOG(LOG_DBG, "irods client (%u) received a terminate message\n", thread_number);
+             quit = true;
+             break;
+        }
 
     }
 
@@ -383,11 +413,18 @@ int main(int argc, char *argv[]) {
     // start accumulator thread which receives results back from iRODS updater threads
     std::thread t(result_accumulator_main, &config_struct, &change_map); 
 
-    // start threads that sends changes to iRODS
+    // create a vector of irods client updater threads 
     std::vector<std::thread> irods_api_client_thread_list;
+
+    // create a vector holding the status of the client's connection to irods - true is up, false is down
+    std::vector<bool> irods_api_client_connection_status;   
+    unsigned int failed_connections_to_irods_count = 0;
+
+    // start up the threads
     for (unsigned int i = 0; i < config_struct.irods_updater_thread_count; ++i) {
         std::thread t(irods_api_client_main, &config_struct, &change_map, i);
         irods_api_client_thread_list.push_back(move(t));
+        irods_api_client_connection_status.push_back(true);
     }
 
     rc = start_lcap_changelog(config_struct.mdtname.c_str(), &ctx);
@@ -401,41 +438,47 @@ int main(int argc, char *argv[]) {
 
     while (!fatal_error_detected && keep_running.load()) {
 
-        // check for a pause/continue message, read all from the queue but only act on last one
+        // check for a pause/continue message
         std::string msg;
         std::string tmp;
-        while ((tmp = receive_message(subscriber)) != "") {
-            msg = tmp; 
-        }
+        while ((msg = receive_message(subscriber)) != "") {
+            LOG(LOG_DBG, "changelog client received message %s\n", msg.c_str());
+            
+            if (boost::starts_with(msg, "pause:")) {
+                std::string thread_num_str = msg.substr(6);
+                try {
+                    unsigned int thread_num = boost::lexical_cast<unsigned int>(thread_num_str);
+                    if (thread_num < irods_api_client_connection_status.size()) {
+                        if (irods_api_client_connection_status[thread_num] == true) {
+                            failed_connections_to_irods_count++;
+                            irods_api_client_connection_status[thread_num] = false;
+                        }
+                    }
+                } catch (boost::bad_lexical_cast) {
+                    // just ignore message if it was wrong
+                }
 
-        if (msg != "") {
-            LOG(LOG_DBG, "******** changelog client received message %s\n", msg.c_str());
-        }
+            } else if (boost::starts_with(msg, "continue:")) {
+                std::string thread_num_str = msg.substr(9);
+                try {
+                    unsigned int thread_num = boost::lexical_cast<unsigned int>(thread_num_str);
+                    if (thread_num < irods_api_client_connection_status.size()) {
+                        if (irods_api_client_connection_status[thread_num] == false) {
+                            failed_connections_to_irods_count--;
+                            irods_api_client_connection_status[thread_num] = true;
+                        }
+                    }
+                } catch (boost::bad_lexical_cast) {
+                    // just ignore message if it was wrong
+                }
 
-        if (msg == "continue") {
-            LOG(LOG_INFO,"changelog client received a continue message, reseting sleep time\n");
-            sleep_period = config_struct.changelog_poll_interval_seconds;
-            pause_reading = false;
-
-            // echo continue back to all clients
-            LOG(LOG_DBG, "sending continue message to clients\n");
-            s_sendmore(publisher, "changetable_readers");
-            s_send(publisher, "continue");
-
-
-        } else if (msg == "pause") {
-            if (sleep_period <= config_struct.changelog_poll_interval_seconds << 1) {
-                LOG(LOG_INFO,"changelog client received another pause message, increase sleep time\n");
-                // if we keep getting pause messages, increase sleep time 
-                sleep_period = sleep_period << 1;
             }
-            // echo pause back to all clients
-            LOG(LOG_DBG, "sending pause message to clients\n");
-            s_sendmore(publisher, "changetable_readers");
-            s_send(publisher, "pause");
-
-           pause_reading = true;
+            LOG(LOG_DBG, "failed connection count is %d\n", failed_connections_to_irods_count);
         }
+
+        // if all the status of the irods connection for all threads is down, pause reading changelog until
+        // one comes up
+        pause_reading = (failed_connections_to_irods_count >= irods_api_client_connection_status.size()); 
 
         if (!pause_reading) {
             LOG(LOG_INFO,"changelog client polling changelog\n");
@@ -444,29 +487,6 @@ int main(int argc, char *argv[]) {
             LOG(LOG_DBG, "in a paused state.  not reading changelog...\n");
         }
 
-
-        // if we are paused, we need to query every cycle just to see if irods is back up
-        // if we're paused this will only run once whether or not there are entries ready to be processed
-        // if we're not paused - this will loop while entries are ready to process
-        while (pause_reading || entries_ready_to_process(&change_map)) {
-            // get records ready to be processed into buf and buflen
-            void *buf = nullptr;
-            int buflen;
-            write_change_table_to_capnproto_buf(&config_struct, buf, buflen,
-                            &change_map);
-
-            // send inp to irods updaters
-            zmq::message_t message(buflen);
-            memcpy(message.data(), buf, buflen);
-            sender.send(message);
-
-            free(buf);
-
-            if (pause_reading) {
-                break;
-            }
-        }
-        
         LOG(LOG_INFO,"changelog client sleeping for %d seconds\n", sleep_period);
         sleep(sleep_period);
     }
