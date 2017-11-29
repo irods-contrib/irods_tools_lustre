@@ -54,16 +54,9 @@ int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *
         return lustre_irods::INVALID_OPERAND_ERROR;
     }
 
-    //std::string mdtname_str;
-    //std::string lustre_root_path_str;
-    //std::string irods_register_path_str;
-    //std::string irods_resource_name_str;
     std::string log_level_str;
     std::string changelog_poll_interval_seconds_str;
-    //std::string irods_client_broadcast_address_str;
-    //td::string changelog_reader_broadcast_address_str;
-    //std::string changelog_reader_push_work_address_str;
-    //std::string result_accumulator_push_address_str;
+    std::string irods_client_connect_failure_retry_seconds_str;
     std::string irods_updater_thread_count_str;
     std::string maximum_records_per_update_to_irods_str;
 
@@ -88,6 +81,10 @@ int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *
         }
         if (read_key_from_map(config_map, "changelog_poll_interval_seconds", changelog_poll_interval_seconds_str) != 0) {
             LOG(LOG_ERR, "Key changelog_poll_interval_seconds missing from %s\n", filename.c_str());
+            return lustre_irods::CONFIGURATION_ERROR;
+        }
+        if (read_key_from_map(config_map, "irods_client_connect_failure_retry_seconds", irods_client_connect_failure_retry_seconds_str) != 0) {
+            LOG(LOG_ERR, "Key irods_client_connect_failure_retry_seconds missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
         }
         if (read_key_from_map(config_map, "irods_client_broadcast_address", config_struct->irods_client_broadcast_address) != 0) {
@@ -133,6 +130,14 @@ int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *
             LOG(LOG_ERR, "Could not parse changelog_poll_interval_seconds as an integer.\n");
             return lustre_irods::CONFIGURATION_ERROR;
         }
+
+        try {
+            config_struct->irods_client_connect_failure_retry_seconds = boost::lexical_cast<unsigned int>(irods_client_connect_failure_retry_seconds_str);
+        } catch (boost::bad_lexical_cast& e) {
+            LOG(LOG_ERR, "Could not parse irods_client_connect_failure_retry_seconds as an integer.\n");
+            return lustre_irods::CONFIGURATION_ERROR;
+        }
+
 
         try {
             config_struct->irods_updater_thread_count = boost::lexical_cast<unsigned int>(irods_updater_thread_count_str);

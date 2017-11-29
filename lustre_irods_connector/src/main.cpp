@@ -236,17 +236,17 @@ void irods_api_client_main(const lustre_irods_connector_cfg_t *config_struct_ptr
 
            }
 
-        } else if (irods_error_detected) {
+        } 
+        
+        if (irods_error_detected) {
 
             // in a failure state, remain here until we have detected that iRODS is back up
 
-            unsigned int sleep_period = 10;
-
             // try a connection in a loop until irods is back up. 
-            while (conn.instantiate_irods_connection(config_struct_ptr, thread_number ) != 0) {
+            do {
 
                 // sleep for sleep_period in a 1s loop so we can catch a terminate message
-                for (unsigned int i = 0; i < sleep_period; ++i) {
+                for (unsigned int i = 0; i < config_struct_ptr->irods_client_connect_failure_retry_seconds; ++i) {
                     sleep(1);
 
                     // see if there is a quit message, if so terminate
@@ -260,8 +260,8 @@ void irods_api_client_main(const lustre_irods_connector_cfg_t *config_struct_ptr
                 // double sleep period
                 //sleep_period = sleep_period << 1;
 
-            }
-
+            } while (conn.instantiate_irods_connection(config_struct_ptr, thread_number ) != 0); 
+            
             // irods is back up, set status and send a message to the changelog reader
             
             irods_error_detected = false;
@@ -438,7 +438,6 @@ int main(int argc, char *argv[]) {
 
         // check for a pause/continue message
         std::string msg;
-        std::string tmp;
         while ((msg = receive_message(subscriber)) != "") {
             LOG(LOG_DBG, "changelog client received message %s\n", msg.c_str());
             
@@ -453,7 +452,8 @@ int main(int argc, char *argv[]) {
                         }
                     }
                 } catch (boost::bad_lexical_cast) {
-                    // just ignore message if it was wrong
+                    // just ignore message if it isn't formatted properly
+                    LOG(LOG_ERR, "changelog client message was not formatted correctly.  Message: %s\n", msg.c_str());
                 }
 
             } else if (boost::starts_with(msg, "continue:")) {
@@ -467,9 +467,12 @@ int main(int argc, char *argv[]) {
                         }
                     }
                 } catch (boost::bad_lexical_cast) {
-                    // just ignore message if it was wrong
+                    // just ignore message if it isn't formatted properly
+                    LOG(LOG_ERR, "changelog client message was not formatted correctly.  Message: %s\n", msg.c_str());
                 }
 
+            } else {
+                    LOG(LOG_ERR, "changelog client received message of unknown type.  Message: %s\n", msg.c_str());
             }
             LOG(LOG_DBG, "failed connection count is %d\n", failed_connections_to_irods_count);
         }

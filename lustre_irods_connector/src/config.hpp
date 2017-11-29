@@ -17,6 +17,7 @@ typedef struct lustre_irods_connector_cfg {
     std::string irods_resource_name;
     int64_t irods_resource_id;
     unsigned int changelog_poll_interval_seconds;
+    unsigned int irods_client_connect_failure_retry_seconds;
     std::string irods_client_broadcast_address;
     std::string changelog_reader_broadcast_address;
     std::string changelog_reader_push_work_address;
