@@ -1,5 +1,5 @@
-#ifndef __irods_ops_hpp
-#define __irods_ops_hpp
+#ifndef __IRODS_OPS_HPP
+#define __IRODS_OPS_HPP
 
 #include "rodsType.h"
 #include "inout_structs.h"

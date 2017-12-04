@@ -21,6 +21,7 @@
 #include "lustre_change_table.hpp"
 #include "config.hpp"
 #include "lustre_irods_errors.hpp"
+#include "changelog_poller.hpp"
 
 #include "rodsDef.h"
 #include "inout_structs.h"
@@ -40,15 +41,6 @@
 #endif
 
 namespace po = boost::program_options;
-
-struct lcap_cl_ctx;
-
-extern "C" {
-    int start_lcap_changelog(const char*, struct lcap_cl_ctx**);
-    int poll_change_log_and_process(const char*, const char*, void *change_map, struct lcap_cl_ctx*);
-    int finish_lcap_changelog(struct lcap_cl_ctx *);
-}
-
 
 std::atomic<bool> keep_running(true);
 
@@ -108,7 +100,13 @@ std::string receive_message(zmq::socket_t& subscriber) {
 // thread which reads the results from the irods updater threads and updates
 // the change table in memory
 void result_accumulator_main(const lustre_irods_connector_cfg_t *config_struct_ptr,
-        change_map_t *change_map) {
+        change_map_t* change_map) {
+
+    if (change_map == nullptr || config_struct_ptr == nullptr) {
+        LOG(LOG_ERR, "result accumulator received a nullptr and is exiting.");
+        return;
+    }
+
 
     // set up broadcast subscriber for terminate messages 
     zmq::context_t context(1);  // 1 I/O thread
@@ -137,7 +135,7 @@ void result_accumulator_main(const lustre_irods_connector_cfg_t *config_struct_p
             unsigned char *response_buffer = tmp + 4;
 
             if (strcmp(response_flag, "FAIL") == 0) {
-                add_capnproto_buffer_back_to_change_table(response_buffer, message.size() - 4, change_map);
+                add_capnproto_buffer_back_to_change_table(response_buffer, message.size() - 4, *change_map);
             }
         }
 
@@ -154,7 +152,12 @@ void result_accumulator_main(const lustre_irods_connector_cfg_t *config_struct_p
 // irods api client thread main routine
 // this is the main loop that reads the change entries in memory and sends them to iRODS via the API.
 void irods_api_client_main(const lustre_irods_connector_cfg_t *config_struct_ptr,
-        change_map_t *change_map, unsigned int thread_number) {
+        change_map_t* change_map, unsigned int thread_number) {
+
+    if (change_map == nullptr || config_struct_ptr == nullptr) {
+        LOG(LOG_ERR, "irods api client received a nullptr and is exiting.");
+        return;
+    }
 
     // set up broadcast subscriber for terminate messages
     zmq::context_t context(1);  // 1 I/O thread
@@ -290,7 +293,7 @@ int main(int argc, char *argv[]) {
     std::string config_file = "lustre_irods_connector_config.json";
     std::string log_file;
     bool fatal_error_detected = false;
-    struct lcap_cl_ctx *ctx = nullptr;
+    void *ctx = nullptr;
 
     signal(SIGPIPE, SIG_IGN);
     
@@ -365,7 +368,7 @@ int main(int argc, char *argv[]) {
     std::map<int, change_map_t> removed_entries;
 
     LOG(LOG_DBG, "reading change_map from serialized database\n");
-    if (deserialize_change_map_from_sqlite(&change_map) < 0) {
+    if (deserialize_change_map_from_sqlite(change_map) < 0) {
         LOG(LOG_ERR, "failed to deserialize change map on startup\n");
         return 1;
     }
@@ -407,7 +410,6 @@ int main(int argc, char *argv[]) {
     zmq::socket_t  sender(context, ZMQ_PUSH);
     sender.bind(config_struct.changelog_reader_push_work_address);
 
-
     // start accumulator thread which receives results back from iRODS updater threads
     std::thread t(result_accumulator_main, &config_struct, &change_map); 
 
@@ -425,7 +427,7 @@ int main(int argc, char *argv[]) {
         irods_api_client_connection_status.push_back(true);
     }
 
-    rc = start_lcap_changelog(config_struct.mdtname.c_str(), &ctx);
+    rc = start_lcap_changelog(config_struct.mdtname, &ctx);
     if (rc < 0) {
         LOG(LOG_ERR, "lcap_changelog_start: %s\n", zmq_strerror(-rc));
         fatal_error_detected = true;
@@ -483,14 +485,14 @@ int main(int argc, char *argv[]) {
 
         if (!pause_reading) {
             LOG(LOG_INFO,"changelog client polling changelog\n");
-            poll_change_log_and_process(config_struct.mdtname.c_str(), config_struct.lustre_root_path.c_str(), &change_map, ctx);
+            poll_change_log_and_process(config_struct.mdtname.c_str(), config_struct.lustre_root_path.c_str(), change_map, ctx);
 
-            while (entries_ready_to_process(&change_map)) {
+            while (entries_ready_to_process(change_map)) {
                 // get records ready to be processed into buf and buflen
                 void *buf = nullptr;
                 int buflen;
                 write_change_table_to_capnproto_buf(&config_struct, buf, buflen,
-                            &change_map);
+                            change_map);
 
                  // send inp to irods updaters
                  zmq::message_t message(buflen);
@@ -519,7 +521,7 @@ int main(int argc, char *argv[]) {
     }
 
     LOG(LOG_DBG, "serializing change_map to database\n");
-    if (serialize_change_map_to_sqlite(&change_map) < 0) {
+    if (serialize_change_map_to_sqlite(change_map) < 0) {
         LOG(LOG_ERR, "failed to serialize change_map upon exit\n");
         fatal_error_detected = true;
     }

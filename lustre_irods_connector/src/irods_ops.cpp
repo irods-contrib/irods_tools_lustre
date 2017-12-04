@@ -93,6 +93,8 @@ int lustre_irods_connection::populate_irods_resc_id(lustre_irods_connector_cfg_t
     char query_str[ MAX_NAME_LEN ];
     snprintf(query_str, MAX_NAME_LEN, "select RESC_ID where RESC_NAME = '%s'", config_struct_ptr->irods_resource_name.c_str());
 
+    // unfortunately, this function will not take a const char* in the first argument
+    // so I can't use std::string().c_str()
     fillGenQueryInpFromStrCond(query_str, &gen_inp);
     gen_inp.maxRows = MAX_SQL_ROWS;
 

@@ -2,6 +2,7 @@
 #define _IRODS_LUSTRE_CHANGELOG_CONFIG_H
 
 #include <map>
+#include <string>
 
 const int MAX_CONFIG_VALUE_SIZE = 256;
 

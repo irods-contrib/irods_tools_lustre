@@ -68,7 +68,7 @@ include_directories(/usr/include/irods
 
 set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-z,defs")
 
-add_executable(lustre_irods_connector ${PROJECT_SOURCE_DIR}/src/change_table.capnp.c++ ${PROJECT_SOURCE_DIR}/src/lustre_change_table.cpp ${PROJECT_SOURCE_DIR}/src/irods_ops.cpp ${PROJECT_SOURCE_DIR}/src/config.cpp ${PROJECT_SOURCE_DIR}/src/changelog_poller.c ${PROJECT_SOURCE_DIR}/src/main.cpp)
+add_executable(lustre_irods_connector ${PROJECT_SOURCE_DIR}/src/change_table.capnp.c++ ${PROJECT_SOURCE_DIR}/src/lustre_change_table.cpp ${PROJECT_SOURCE_DIR}/src/irods_ops.cpp ${PROJECT_SOURCE_DIR}/src/config.cpp ${PROJECT_SOURCE_DIR}/src/changelog_poller.cpp ${PROJECT_SOURCE_DIR}/src/lcap_cpp_wrapper.c ${PROJECT_SOURCE_DIR}/src/main.cpp)
 
 #target_link_libraries(
     #lustre_irods_connector
