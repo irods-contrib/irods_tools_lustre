@@ -1,5 +1,5 @@
-#ifndef __LUSTRE_IRODS_ERRORS_HPP
-#define __LUSTRE_IRODS_ERRORS_HPP
+#ifndef LUSTRE_IRODS_ERRORS_HPP
+#define LUSTRE_IRODS_ERRORS_HPP
 
 namespace lustre_irods {
 

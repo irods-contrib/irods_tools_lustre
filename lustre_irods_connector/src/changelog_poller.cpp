@@ -38,7 +38,7 @@ std::string concatenate_paths_with_boost(const std::string& p1, const std::strin
     return path_result.string();
 } 
 
-static inline bool fid_is_zero(void *fid) {
+static inline bool fid_is_zero(lustre_fid_ptr fid) {
     if (fid == NULL) {
         return true;
     }
@@ -47,35 +47,32 @@ static inline bool fid_is_zero(void *fid) {
 
 static boost::format fid_format_obj("%#llx:0x%x:0x%x");
 
-std::string convert_to_fidstr(void *fid) {
+std::string convert_to_fidstr(lustre_fid_ptr fid) {
     return str(fid_format_obj % get_f_seq_from_lustre_fid(fid) % 
             get_f_oid_from_lustre_fid(fid) % 
             get_f_ver_from_lustre_fid(fid));
 }
 
 // for rename - the overwritten file's fidstr
-std::string get_overwritten_fidstr_from_record(void *rec) {
+std::string get_overwritten_fidstr_from_record(changelog_rec_ptr rec) {
     return convert_to_fidstr(get_cr_tfid_from_changelog_rec(rec)); 
 }
 
-int get_fidstr_from_record(void *rec, std::string& fidstr) {
+int get_fidstr_from_record(changelog_rec_ptr rec, std::string& fidstr) {
 
     if (rec == NULL) {
         LOG(LOG_ERR, "Null rec sent to %s - %d\n", __FUNCTION__, __LINE__);
         return lustre_irods::INVALID_OPERAND_ERROR;
     }
 
-    void *rnm;
+    changelog_ext_rename_ptr rnm;
 
-    switch (get_cr_type_from_changelog_rec(rec)) {
 
-        case CL_RENAME_WRAPPER:
-            rnm = changelog_rec_wrapper_rename(rec);
-            fidstr = convert_to_fidstr(get_cr_sfid_from_changelog_ext_rename(rnm));
-            break;
-        default:
-            fidstr = convert_to_fidstr(get_cr_tfid_from_changelog_rec(rec));
-            break;
+    if (get_cr_type_from_changelog_rec(rec) == get_cl_rename()) {
+        rnm = changelog_rec_wrapper_rename(rec);
+        fidstr = convert_to_fidstr(get_cr_sfid_from_changelog_ext_rename(rnm));
+    } else {
+        fidstr = convert_to_fidstr(get_cr_tfid_from_changelog_rec(rec));
     }
 
     return lustre_irods::SUCCESS;
@@ -84,7 +81,7 @@ int get_fidstr_from_record(void *rec, std::string& fidstr) {
 
 
 // Determines if the object (file, dir) from the changelog record still exists in Lustre.
-bool object_exists_in_lustre(const std::string& root_path, void *rec) {
+bool object_exists_in_lustre(const std::string& root_path, changelog_rec_ptr rec) {
 
     if (rec == NULL) {
         LOG(LOG_ERR, "Null rec sent to %s - %d\n", __FUNCTION__, __LINE__);
@@ -111,7 +108,7 @@ bool object_exists_in_lustre(const std::string& root_path, void *rec) {
 }
 
 
-int get_full_path_from_record(const std::string& root_path, void *rec, std::string& lustre_full_path) {
+int get_full_path_from_record(const std::string& root_path, changelog_rec_ptr rec, std::string& lustre_full_path) {
 
     if (rec == NULL) {
         LOG(LOG_ERR, "Null rec sent to %s - %d\n", __FUNCTION__, __LINE__);
@@ -158,9 +155,10 @@ int not_implemented(const std::string& lustre_root_path, const std::string& fids
 }
 
 
-typedef int (*lustre_operation)(const std::string&, const std::string&, const std::string&, const std::string&, const std::string&, change_map_t&);
+//typedef int (*lustre_operation)(const std::string&, const std::string&, const std::string&, const std::string&, const std::string&, change_map_t&);
 
-lustre_operation lustre_operators[CL_LAST_WRAPPER] = 
+//std::vector<lustre_operation> lustre_operators = 
+std::vector<std::function<int(const std::string&, const std::string&, const std::string&, const std::string&, const std::string&, change_map_t&)> > lustre_operators = 
 {   &not_implemented,           // CL_MARK
     &lustre_create,             // CL_CREATE
     &lustre_mkdir,              // CL_MKDIR
@@ -183,14 +181,14 @@ lustre_operation lustre_operators[CL_LAST_WRAPPER] =
     &not_implemented            // CL_ATIME - irods does not have an access time
 };
 
-int handle_record(const std::string& lustre_root_path, void *rec, change_map_t& change_map) {
+int handle_record(const std::string& lustre_root_path, changelog_rec_ptr rec, change_map_t& change_map) {
 
     if (rec == NULL) {
         LOG(LOG_ERR, "Null rec sent to %s - %d\n", __FUNCTION__, __LINE__);
         return lustre_irods::INVALID_OPERAND_ERROR;
     }
 
-    if (get_cr_type_from_changelog_rec(rec) >= CL_LAST_WRAPPER) {
+    if (get_cr_type_from_changelog_rec(rec) >= get_cl_last()) {
         LOG(LOG_ERR, "Invalid cr_type - %u\n", get_cr_type_from_changelog_rec(rec));
         return lustre_irods::INVALID_CR_TYPE_ERROR;
     }
@@ -208,7 +206,7 @@ int handle_record(const std::string& lustre_root_path, void *rec, change_map_t& 
 
     std::string object_name = changelog_rec_wrapper_name(rec);
 
-    if (get_cr_type_from_changelog_rec(rec) == CL_RENAME_WRAPPER) {
+    if (get_cr_type_from_changelog_rec(rec) == get_cl_rename()) {
 
         // remove any entries in table 
         std::string overwritten_fidstr = get_overwritten_fidstr_from_record(rec); 
@@ -216,7 +214,7 @@ int handle_record(const std::string& lustre_root_path, void *rec, change_map_t& 
 
         long long recno = -1;
         int linkno = 0;
-        void *rnm = changelog_rec_wrapper_rename(rec);
+        changelog_ext_rename_ptr rnm = changelog_rec_wrapper_rename(rec);
         std::string old_filename;
         std::string old_lustre_path;
         std::string old_parent_fid;
@@ -248,16 +246,17 @@ int handle_record(const std::string& lustre_root_path, void *rec, change_map_t& 
 
         return lustre_rename(lustre_root_path, fidstr, parent_fidstr, object_name, lustre_full_path, old_lustre_path, change_map);
     } else {
-        return (*lustre_operators[get_cr_type_from_changelog_rec(rec)])(lustre_root_path, fidstr, parent_fidstr, object_name, lustre_full_path, change_map);
+        //return (*lustre_operators[get_cr_type_from_changelog_rec(rec)])(lustre_root_path, fidstr, parent_fidstr, object_name, lustre_full_path, change_map);
+        return lustre_operators[get_cr_type_from_changelog_rec(rec)](lustre_root_path, fidstr, parent_fidstr, object_name, lustre_full_path, change_map);
     }
 }
 
-int start_lcap_changelog(const std::string& mdtname, void **ctx) {
+int start_lcap_changelog(const std::string& mdtname, lcap_cl_ctx_ptr *ctx) {
     // TODO can I start at something other than 0LL in case there are multiple listeners so the changelog and the changelog doesn't get cleared?
     return lcap_changelog_wrapper_start(ctx, get_lcap_cl_block(), mdtname.c_str(), 0LL);
 }
 
-int finish_lcap_changelog(void *ctx) {
+int finish_lcap_changelog(lcap_cl_ctx_ptr ctx) {
     return lcap_changelog_wrapper_fini(ctx);
 }
 
@@ -266,14 +265,14 @@ int finish_lcap_changelog(void *ctx) {
 //   mdtname - the name of the mdt
 //   lustre_root_path - the root path of the lustre mount point
 //   change_map - the change map
-//   ctx - the lcap context (lcap_cl_ctx) - which if void* since the header that defines lcap_cl_ctx can't be included in C++
-int poll_change_log_and_process(const std::string& mdtname, const std::string& lustre_root_path, change_map_t& change_map, void *ctx) {
+//   ctx - the lcap context (lcap_cl_ctx) 
+int poll_change_log_and_process(const std::string& mdtname, const std::string& lustre_root_path, change_map_t& change_map, lcap_cl_ctx_ptr ctx) {
 
     int                    rc;
     char                   clid[64] = {0};
 
     // the changelog_rec 
-    void *rec;
+    changelog_rec_ptr rec;
 
     while ((rc = lcap_changelog_wrapper_recv(ctx, &rec)) == 0) {
         time_t      secs;
@@ -283,7 +282,7 @@ int poll_change_log_and_process(const std::string& mdtname, const std::string& l
         secs = get_cr_time_from_changelog_rec(rec) >> 30;
         gmtime_r(&secs, &ts);
 
-        void *cr_tfid_ptr = get_cr_tfid_from_changelog_rec(rec);
+        lustre_fid_ptr cr_tfid_ptr = get_cr_tfid_from_changelog_rec(rec);
 
         LOG(LOG_INFO, "%llu %02d%-5s %02d:%02d:%02d.%06d %04d.%02d.%02d 0x%x t=%#llx:0x%x:0x%x",
                get_cr_index_from_changelog_rec(rec), get_cr_type_from_changelog_rec(rec), 
@@ -301,12 +300,12 @@ int poll_change_log_and_process(const std::string& mdtname, const std::string& l
         }
 
         if (get_cr_flags_from_changelog_rec(rec) & get_clf_rename_mask()) { 
-            void *rnm;
+            changelog_ext_rename_ptr rnm;
 
             rnm = changelog_rec_wrapper_rename(rec);
             if (!fid_is_zero(get_cr_sfid_from_changelog_ext_rename(rnm))) {
-                void *cr_sfid_ptr = get_cr_sfid_from_changelog_ext_rename(rnm);
-                void *cr_spfid_ptr = get_cr_spfid_from_changelog_ext_rename(rnm);
+                lustre_fid_ptr cr_sfid_ptr = get_cr_sfid_from_changelog_ext_rename(rnm);
+                lustre_fid_ptr cr_spfid_ptr = get_cr_spfid_from_changelog_ext_rename(rnm);
                 LOG(LOG_DBG, " s=%#llx:0x%x:0x%x sp=%#llx:0x%x:0x%x %.*s", 
                        get_f_seq_from_lustre_fid(cr_sfid_ptr),
                        get_f_oid_from_lustre_fid(cr_sfid_ptr),
@@ -321,7 +320,7 @@ int poll_change_log_and_process(const std::string& mdtname, const std::string& l
 
         // if rename
         if (get_cr_namelen_from_changelog_rec(rec)) {
-            void *cr_pfid_ptr = get_cr_pfid_from_changelog_rec(rec);
+            lustre_fid_ptr cr_pfid_ptr = get_cr_pfid_from_changelog_rec(rec);
             LOG(LOG_DBG, " p=%#llx:0x%x:0x%x %.*s", 
                     get_f_seq_from_lustre_fid(cr_pfid_ptr),
                     get_f_oid_from_lustre_fid(cr_pfid_ptr),
@@ -333,7 +332,7 @@ int poll_change_log_and_process(const std::string& mdtname, const std::string& l
         LOG(LOG_INFO, "\n");
 
         if ((rc = handle_record(lustre_root_path, rec, change_map)) < 0) {
-            void *cr_tfid_ptr = get_cr_tfid_from_changelog_rec(rec);
+            lustre_fid_ptr cr_tfid_ptr = get_cr_tfid_from_changelog_rec(rec);
             LOG(LOG_ERR, "handle record failed for %s %#llx:0x%x:0x%x rc = %i\n", 
                     changelog_type2str_wrapper(get_cr_type_from_changelog_rec(rec)), 
                     get_f_seq_from_lustre_fid(cr_tfid_ptr),

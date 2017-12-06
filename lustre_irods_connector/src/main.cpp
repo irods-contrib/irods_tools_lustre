@@ -40,6 +40,11 @@
 #define LCAP_CL_BLOCK   (0x01 << 1)
 #endif
 
+extern "C" {
+  #include "lcap_cpp_wrapper.h"
+}
+
+
 namespace po = boost::program_options;
 
 std::atomic<bool> keep_running(true);
@@ -293,7 +298,7 @@ int main(int argc, char *argv[]) {
     std::string config_file = "lustre_irods_connector_config.json";
     std::string log_file;
     bool fatal_error_detected = false;
-    void *ctx = nullptr;
+    lcap_cl_ctx_ptr ctx = nullptr;
 
     signal(SIGPIPE, SIG_IGN);
     

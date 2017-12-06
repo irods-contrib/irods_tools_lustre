@@ -1,5 +1,5 @@
-#ifndef __IRODS_LUSTRE_INOUT_STRUCTS
-#define __IRODS_LUSTRE_INOUT_STRUCTS
+#ifndef IRODS_LUSTRE_INOUT_STRUCTS
+#define IRODS_LUSTRE_INOUT_STRUCTS
 
 typedef struct {
     int buflen;

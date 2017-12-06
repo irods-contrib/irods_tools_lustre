@@ -1,5 +1,5 @@
-#ifndef __LUSTRE_CHANGE_TABLE_HPP
-#define __LUSTRE_CHANGE_TABLE_HPP
+#ifndef LUSTRE_CHANGE_TABLE_HPP
+#define LUSTRE_CHANGE_TABLE_HPP
 
 #include "inout_structs.h"
 
