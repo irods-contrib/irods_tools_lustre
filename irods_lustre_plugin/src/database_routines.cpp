@@ -682,3 +682,74 @@ rodsLong_t cmlGetCurrentSeqVal( icatSessionStruct *icss ) {
     return seq_no;
 }
 
+int
+cllCloseEnv( icatSessionStruct *icss ) {
+
+    SQLRETURN stat = SQLFreeEnv( icss->environPtr );
+
+    if ( stat == SQL_SUCCESS ) {
+        icss->environPtr = NULL;
+    }
+    else {
+        rodsLog( LOG_ERROR, "cllCloseEnv: SQLFreeEnv failed" );
+    }
+    return stat;
+}
+
+int
+cllDisconnect( icatSessionStruct *icss ) {
+
+    int i = cllCheckPending( "", 1, icss->databaseType );
+    if ( i == 1 ) {
+        i = cllExecSqlNoResult( icss, "commit" ); /* auto commit any
+                                                   pending SQLs, including
+                                                   the Audit ones */
+        /* Nothing to do if it fails */
+    }
+
+    SQLRETURN stat = SQLDisconnect( icss->connectPtr );
+    if ( stat != SQL_SUCCESS ) {
+        rodsLog( LOG_ERROR, "cllDisconnect: SQLDisconnect failed: %d", stat );
+        return -1;
+    }
+
+    stat = SQLFreeHandle( SQL_HANDLE_DBC, icss->connectPtr );
+    if ( stat == SQL_SUCCESS ) {
+        icss->connectPtr = NULL;
+    }
+    else {
+        rodsLog( LOG_ERROR, "cllDisconnect: SQLFreeHandle failed for connect: %d", stat );
+        return -2;
+    }
+
+    return 0;
+}
+
+
+int cmlClose( icatSessionStruct *icss ) {
+    int status, stat2;
+    static int pending = 0;
+
+    if ( pending == 1 ) {
+        return ( 0 );   /* avoid hang if stuck doing this */
+    }
+    pending = 1;
+
+    status = cllDisconnect( icss );
+
+    stat2 = cllCloseEnv( icss );
+
+    pending = 0;
+    if ( status ) {
+        return CAT_DISCONNECT_ERR;
+    }
+    if ( stat2 ) {
+        return CAT_CLOSE_ENV_ERR;
+    }
+    return 0;
+}
+
+
+
+
+

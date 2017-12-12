@@ -28,28 +28,28 @@ int read_key_from_map(const json_map& config_map, const std::string &key, std::s
     return lustre_irods::SUCCESS;
 }
 
-void set_log_level(std::string log_level_str) {
-    if (log_level_str == "LOG_FATAL") {
+void set_log_level(const std::string& log_level_str) {
+    if ("LOG_FATAL" == log_level_str) {
         log_level = LOG_FATAL; 
-    } else if (log_level_str == "LOG_ERR") {
+    } else if ("LOG_ERR" == log_level_str) {
         log_level = LOG_ERR;
-    } else if (log_level_str == "LOG_WARN") {
+    } else if ("LOG_WARN" == log_level_str) {
         log_level = LOG_WARN;
-    } else if (log_level_str == "LOG_INFO") {
+    } else if ("LOG_INFO" == log_level_str) {
         log_level = LOG_INFO;
-    } else if (log_level_str == "LOG_DBG") {
+    } else if ("LOG_DBG" == log_level_str) {
         log_level = LOG_DBG;
     }
 }    
 
 int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *config_struct) {
 
-    if (filename == "") {
+    if ("" == filename) {
         LOG(LOG_ERR, "read_config_file did not receive a filename\n");
         return lustre_irods::CONFIGURATION_ERROR;
     }
 
-    if (config_struct == nullptr) {
+    if (nullptr == config_struct) {
         LOG(LOG_ERR, "Null config_struct sent to %s - %d\n", __FUNCTION__, __LINE__);
         return lustre_irods::INVALID_OPERAND_ERROR;
     }
@@ -59,64 +59,70 @@ int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *
     std::string irods_client_connect_failure_retry_seconds_str;
     std::string irods_updater_thread_count_str;
     std::string maximum_records_per_update_to_irods_str;
+    std::string message_receive_timeout_msec_str;
 
     try {
         json_map config_map{ json_file{ filename.c_str() } };
 
-        if (read_key_from_map(config_map, "mdtname", config_struct->mdtname) != 0) {
+        if (0 != read_key_from_map(config_map, "mdtname", config_struct->mdtname)) {
             LOG(LOG_ERR, "Key mdtname missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
         }
-        if (read_key_from_map(config_map, "lustre_root_path", config_struct->lustre_root_path) != 0) {
+        if (0 != read_key_from_map(config_map, "lustre_root_path", config_struct->lustre_root_path)) {
             LOG(LOG_ERR, "Key lustre_root_path missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
         }
-        if (read_key_from_map(config_map, "irods_register_path", config_struct->irods_register_path) != 0) {
+        if (0 != read_key_from_map(config_map, "irods_register_path", config_struct->irods_register_path)) {
             LOG(LOG_ERR, "Key register_path missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
         }
-        if (read_key_from_map(config_map, "irods_resource_name", config_struct->irods_resource_name) != 0) {
+        if (0 != read_key_from_map(config_map, "irods_resource_name", config_struct->irods_resource_name)) {
             LOG(LOG_ERR, "Key resource_name missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
         }
-        if (read_key_from_map(config_map, "changelog_poll_interval_seconds", changelog_poll_interval_seconds_str) != 0) {
+        if (0 != read_key_from_map(config_map, "changelog_poll_interval_seconds", changelog_poll_interval_seconds_str)) {
             LOG(LOG_ERR, "Key changelog_poll_interval_seconds missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
         }
-        if (read_key_from_map(config_map, "irods_client_connect_failure_retry_seconds", irods_client_connect_failure_retry_seconds_str) != 0) {
+        if (0 != read_key_from_map(config_map, "irods_client_connect_failure_retry_seconds", irods_client_connect_failure_retry_seconds_str)) {
             LOG(LOG_ERR, "Key irods_client_connect_failure_retry_seconds missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
         }
-        if (read_key_from_map(config_map, "irods_client_broadcast_address", config_struct->irods_client_broadcast_address) != 0) {
+        if (0 != read_key_from_map(config_map, "irods_client_broadcast_address", config_struct->irods_client_broadcast_address)) {
             LOG(LOG_ERR, "Key changelog_reader_recv_port missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
         }
-        if (read_key_from_map(config_map, "changelog_reader_broadcast_address", config_struct->changelog_reader_broadcast_address) != 0) {
+        if (0 != read_key_from_map(config_map, "changelog_reader_broadcast_address", config_struct->changelog_reader_broadcast_address)) {
             LOG(LOG_ERR, "Key changelog_reader_broadcast_address missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
         }
-        if (read_key_from_map(config_map, "changelog_reader_push_work_address", config_struct->changelog_reader_push_work_address) != 0) {
+        if (0 != read_key_from_map(config_map, "changelog_reader_push_work_address", config_struct->changelog_reader_push_work_address)) {
             LOG(LOG_ERR, "Key changelog_reader_push_work_address missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
         }
-        if (read_key_from_map(config_map, "result_accumulator_push_address", config_struct->result_accumulator_push_address) != 0) {
+        if (0 != read_key_from_map(config_map, "result_accumulator_push_address", config_struct->result_accumulator_push_address)) {
             LOG(LOG_ERR, "Key result_accumulator_push_address missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
         }
 
-        if (read_key_from_map(config_map, "irods_updater_thread_count", irods_updater_thread_count_str) != 0) {
+        if (0 != read_key_from_map(config_map, "irods_updater_thread_count", irods_updater_thread_count_str)) {
             LOG(LOG_ERR, "Key irods_updater_thread_count missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
         }
-        if (read_key_from_map(config_map, "maximum_records_per_update_to_irods", maximum_records_per_update_to_irods_str) != 0) {
-            LOG(LOG_ERR, "Key mum_records_per_update_to_irods missing from %s\n", filename.c_str());
+        if (0 != read_key_from_map(config_map, "maximum_records_per_update_to_irods", maximum_records_per_update_to_irods_str)) {
+            LOG(LOG_ERR, "Key num_records_per_update_to_irods missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
         }
+        if (0 != read_key_from_map(config_map, "message_receive_timeout_msec", message_receive_timeout_msec_str)) {
+            LOG(LOG_ERR, "Key message_receive_timeout_msec missing from %s\n", filename.c_str());
+            return lustre_irods::CONFIGURATION_ERROR;
+        }
+
 
 
         // populate config variables
 
-        if (read_key_from_map(config_map, "log_level", log_level_str) == 0) {
+        if (0 == read_key_from_map(config_map, "log_level", log_level_str)) {
             printf("log_level_str = %s\n", log_level_str.c_str());
             set_log_level(log_level_str);
         } 
@@ -153,6 +159,14 @@ int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *
             return lustre_irods::CONFIGURATION_ERROR;
         }
 
+        try {
+            config_struct->message_receive_timeout_msec = boost::lexical_cast<unsigned int>(message_receive_timeout_msec_str);
+        } catch (boost::bad_lexical_cast& e) {
+            LOG(LOG_ERR, "Could not parse message_receive_timeout_msec as an integer.\n");
+            return lustre_irods::CONFIGURATION_ERROR;
+        }
+
+
         // read individual thread connection parameters
         boost::format format_object("thread_%i_connection_parameters");
         for (unsigned int i = 0; i < config_struct->irods_updater_thread_count; ++i) {
@@ -161,14 +175,14 @@ int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *
             std::string key = str(format_object % i); 
 
             auto entry = config_map.find(key);
-            if (entry != config_map.end()) {
+            if (config_map.end() != entry) {
                 irods_connection_cfg config_entry;
                 auto tmp = entry->second["irods_host"];
                 std::stringstream ss;
                 ss << tmp;
                 std::string value = ss.str();
                 value.erase(remove(value.begin(), value.end(), '\"' ), value.end());
-                if (value == "null") {
+                if ("null" == value) {
                     LOG(LOG_ERR, "Could not read irods_host for connection %d.  Either define it or leave off connection 1 paramters to use defaults from the iRODS environment.\n", i);
                     return lustre_irods::CONFIGURATION_ERROR;
                 }

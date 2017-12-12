@@ -64,7 +64,7 @@ struct ChangeMap {
   class Pipeline;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(cabd3de2d1baf714, 1, 3)
+    CAPNP_DECLARE_STRUCT_HEADER(cabd3de2d1baf714, 1, 4)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -237,6 +237,9 @@ public:
 
   inline  ::int64_t getResourceId() const;
 
+  inline bool hasUpdateStatus() const;
+  inline  ::capnp::Text::Reader getUpdateStatus() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
@@ -288,6 +291,13 @@ public:
 
   inline  ::int64_t getResourceId();
   inline void setResourceId( ::int64_t value);
+
+  inline bool hasUpdateStatus();
+  inline  ::capnp::Text::Builder getUpdateStatus();
+  inline void setUpdateStatus( ::capnp::Text::Reader value);
+  inline  ::capnp::Text::Builder initUpdateStatus(unsigned int size);
+  inline void adoptUpdateStatus(::capnp::Orphan< ::capnp::Text>&& value);
+  inline ::capnp::Orphan< ::capnp::Text> disownUpdateStatus();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -637,6 +647,40 @@ inline  ::int64_t ChangeMap::Builder::getResourceId() {
 inline void ChangeMap::Builder::setResourceId( ::int64_t value) {
   _builder.setDataField< ::int64_t>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
+}
+
+inline bool ChangeMap::Reader::hasUpdateStatus() const {
+  return !_reader.getPointerField(
+      ::capnp::bounded<3>() * ::capnp::POINTERS).isNull();
+}
+inline bool ChangeMap::Builder::hasUpdateStatus() {
+  return !_builder.getPointerField(
+      ::capnp::bounded<3>() * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::Text::Reader ChangeMap::Reader::getUpdateStatus() const {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_reader.getPointerField(
+      ::capnp::bounded<3>() * ::capnp::POINTERS));
+}
+inline  ::capnp::Text::Builder ChangeMap::Builder::getUpdateStatus() {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_builder.getPointerField(
+      ::capnp::bounded<3>() * ::capnp::POINTERS));
+}
+inline void ChangeMap::Builder::setUpdateStatus( ::capnp::Text::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::Text>::set(_builder.getPointerField(
+      ::capnp::bounded<3>() * ::capnp::POINTERS), value);
+}
+inline  ::capnp::Text::Builder ChangeMap::Builder::initUpdateStatus(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::init(_builder.getPointerField(
+      ::capnp::bounded<3>() * ::capnp::POINTERS), size);
+}
+inline void ChangeMap::Builder::adoptUpdateStatus(
+    ::capnp::Orphan< ::capnp::Text>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(_builder.getPointerField(
+      ::capnp::bounded<3>() * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::Text> ChangeMap::Builder::disownUpdateStatus() {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(_builder.getPointerField(
+      ::capnp::bounded<3>() * ::capnp::POINTERS));
 }
 
 

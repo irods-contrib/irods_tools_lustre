@@ -10,23 +10,27 @@
 #include <stdbool.h>
 #include <string.h>
 #include <zmq.hpp>
-
 #include <signal.h>
 #include <thread>
 #include <stdlib.h>
 #include <stdio.h>
 #include <iostream>
+#include <sysexits.h>
+#include <utility>
 
+// local libraries
 #include "irods_ops.hpp"
 #include "lustre_change_table.hpp"
 #include "config.hpp"
 #include "lustre_irods_errors.hpp"
 #include "changelog_poller.hpp"
-
-#include "rodsDef.h"
-#include "inout_structs.h"
 #include "logging.hpp"
 
+// irods libraries
+#include "rodsDef.h"
+#include "inout_structs.h"
+
+// boost libraries
 #include <boost/program_options.hpp>
 #include <boost/format.hpp>
 #include <boost/algorithm/string/predicate.hpp>
@@ -77,15 +81,20 @@ static bool s_send(zmq::socket_t& socket, const std::string& string) {
 static std::string s_recv_noblock(zmq::socket_t& socket) {
 
     zmq::message_t message;
-
     socket.recv(&message, ZMQ_NOBLOCK);
-
     return std::string(static_cast<char*>(message.data()), message.size());
+}
+
+//  Receive 0MQ string from socket and ignore the return 
+void s_recv_noblock_void(zmq::socket_t& socket) {
+
+    zmq::message_t message;
+    socket.recv(&message, ZMQ_NOBLOCK);
 }
 
 bool received_terminate_message(zmq::socket_t& subscriber) {
 
-    std::string address = s_recv_noblock(subscriber);
+    s_recv_noblock_void(subscriber);
     std::string contents = s_recv_noblock(subscriber);
 
     return contents == "terminate";
@@ -96,7 +105,7 @@ bool received_terminate_message(zmq::socket_t& subscriber) {
 // Perform a no-block message receive.  If no message is available return std::string("").
 std::string receive_message(zmq::socket_t& subscriber) {
 
-    std::string address = s_recv_noblock(subscriber);
+    s_recv_noblock_void(subscriber);
     std::string contents = s_recv_noblock(subscriber);
 
     return contents;
@@ -107,7 +116,7 @@ std::string receive_message(zmq::socket_t& subscriber) {
 void result_accumulator_main(const lustre_irods_connector_cfg_t *config_struct_ptr,
         change_map_t* change_map) {
 
-    if (change_map == nullptr || config_struct_ptr == nullptr) {
+    if (nullptr == change_map || nullptr == config_struct_ptr) {
         LOG(LOG_ERR, "result accumulator received a nullptr and is exiting.");
         return;
     }
@@ -123,7 +132,7 @@ void result_accumulator_main(const lustre_irods_connector_cfg_t *config_struct_p
 
     // set up receiver to receive results
     zmq::socket_t receiver(context,ZMQ_PULL);
-    receiver.setsockopt(ZMQ_RCVTIMEO, 2000);
+    receiver.setsockopt(ZMQ_RCVTIMEO, config_struct_ptr->message_receive_timeout_msec);
     LOG(LOG_DBG, "result_accumulator receiver conn_str = %s\n", config_struct_ptr->result_accumulator_push_address.c_str());
     receiver.bind(config_struct_ptr->result_accumulator_push_address);
     receiver.connect(config_struct_ptr->result_accumulator_push_address);
@@ -131,20 +140,27 @@ void result_accumulator_main(const lustre_irods_connector_cfg_t *config_struct_p
     while (true) {
         zmq::message_t message;
         if (receiver.recv(&message)) {
-            LOG(LOG_DBG, "accumulator received message of size: %lu, message: %s\n", message.size(), message.data());
-            char response_flag[5];
+            LOG(LOG_DBG, "accumulator received message of size: %lu.\n", message.size());
+            unsigned char *buf = static_cast<unsigned char*>(message.data());
+            std::string update_status;
+            get_update_status_from_capnproto_buf(buf, message.size(), update_status);
+            LOG(LOG_DBG, "update status received is %s\n", update_status.c_str());
+            if (update_status == "FAIL") {
+                add_capnproto_buffer_back_to_change_table(buf, message.size(), *change_map);
+            }
+            /*char response_flag[5];
             memcpy(response_flag, message.data(), 4);
             response_flag[4] = '\0';
             LOG(LOG_DBG, "response_flag is %s\n", response_flag);
             unsigned char *tmp= static_cast<unsigned char*>(message.data());
             unsigned char *response_buffer = tmp + 4;
 
-            if (strcmp(response_flag, "FAIL") == 0) {
+            if (0 == strcmp(response_flag, "FAIL")) {
                 add_capnproto_buffer_back_to_change_table(response_buffer, message.size() - 4, *change_map);
-            }
+            }*/
         }
 
-        if (receive_message(subscriber) == "terminate") {
+        if ("terminate" == receive_message(subscriber)) {
             LOG(LOG_DBG, "result accumulator received a terminate message\n");
             break;
         }
@@ -159,7 +175,7 @@ void result_accumulator_main(const lustre_irods_connector_cfg_t *config_struct_p
 void irods_api_client_main(const lustre_irods_connector_cfg_t *config_struct_ptr,
         change_map_t* change_map, unsigned int thread_number) {
 
-    if (change_map == nullptr || config_struct_ptr == nullptr) {
+    if (nullptr == change_map || nullptr == config_struct_ptr) {
         LOG(LOG_ERR, "irods api client received a nullptr and is exiting.");
         return;
     }
@@ -180,7 +196,7 @@ void irods_api_client_main(const lustre_irods_connector_cfg_t *config_struct_ptr
 
     // set up receiver for receiving update jobs 
     zmq::socket_t receiver(context, ZMQ_PULL);
-    receiver.setsockopt(ZMQ_RCVTIMEO, 2000);
+    receiver.setsockopt(ZMQ_RCVTIMEO, config_struct_ptr->message_receive_timeout_msec);
     LOG(LOG_DBG, "client (%u) push work conn_str = %s\n", thread_number, config_struct_ptr->changelog_reader_push_work_address.c_str());
     receiver.connect(config_struct_ptr->changelog_reader_push_work_address.c_str());
 
@@ -189,20 +205,19 @@ void irods_api_client_main(const lustre_irods_connector_cfg_t *config_struct_ptr
     LOG(LOG_DBG, "client (%u) push results conn_str = %s\n", thread_number, config_struct_ptr->result_accumulator_push_address.c_str());
     sender.connect(config_struct_ptr->result_accumulator_push_address.c_str());
 
-    //bool irods_error_detected = false;
     bool quit = false;
     bool irods_error_detected = false;
 
-    // initiate a connection object
-    lustre_irods_connection conn(thread_number);
-
     while (!quit) {
 
-        // see if we have a work message
         zmq::message_t message;
-        if (!irods_error_detected && receiver.recv(&message)) {
-            LOG(LOG_DBG, "irods client(%u): Received work message %s.\n", thread_number, (char*)message.data());
 
+        // initiate a connection object
+        lustre_irods_connection conn(thread_number);
+
+        if (!irods_error_detected && receiver.recv(&message) > 0) {
+
+            LOG(LOG_DBG, "irods client(%u): Received work message %s.\n", thread_number, (char*)message.data());
 
             irodsLustreApiInp_t inp {};
             inp.buf = static_cast<unsigned char*>(message.data());
@@ -210,10 +225,10 @@ void irods_api_client_main(const lustre_irods_connector_cfg_t *config_struct_ptr
 
             LOG(LOG_DBG, "irods client (%u): received message of length %d\n", thread_number, inp.buflen);
 
-            if (conn.instantiate_irods_connection(config_struct_ptr, thread_number ) == 0) {
+            if (0 == conn.instantiate_irods_connection(config_struct_ptr, thread_number )) {
 
                 // send to irods
-                if (conn.send_change_map_to_irods(&inp) == lustre_irods::IRODS_ERROR) {
+                if (lustre_irods::IRODS_ERROR == conn.send_change_map_to_irods(&inp)) {
                     irods_error_detected = true;
                 }
             } else {
@@ -230,16 +245,21 @@ void irods_api_client_main(const lustre_irods_connector_cfg_t *config_struct_ptr
                 std::string msg = str(boost::format("pause:%u") % thread_number);
                 s_send(publisher, msg.c_str());
 
-                // send a failure message to result accumulator.  Send "FAIL:" plus the original message
-                zmq::message_t response_message(message.size() + 4);
-                memcpy(static_cast<char*>(response_message.data()), "FAIL", 4);
-                memcpy(static_cast<char*>(response_message.data())+4, message.data(), message.size());
+                // update the status to fail and send to accumulator
+                unsigned char *buf = static_cast<unsigned char*>(message.data());
+                size_t bufflen = message.size();
+                set_update_status_in_capnproto_buf(buf, bufflen, "FAIL");
+                zmq::message_t response_message(bufflen);
+                memcpy(static_cast<char*>(response_message.data()), buf, bufflen);
                 sender.send(response_message);
 
             } else {
-                zmq::message_t response_message(message.size() + 4);
-                memcpy(static_cast<char*>(response_message.data()), "PASS", 4);
-                memcpy(static_cast<char*>(response_message.data())+4, message.data(), message.size());
+                // update the status to pass and send to accumulator
+                unsigned char *buf = static_cast<unsigned char*>(message.data());
+                size_t bufflen = message.size();
+                set_update_status_in_capnproto_buf(buf, bufflen, "PASS");
+                zmq::message_t response_message(bufflen);
+                memcpy(static_cast<char*>(response_message.data()), buf, bufflen);
                 sender.send(response_message);
 
            }
@@ -247,11 +267,15 @@ void irods_api_client_main(const lustre_irods_connector_cfg_t *config_struct_ptr
         } 
         
         if (irods_error_detected) {
-
+    
             // in a failure state, remain here until we have detected that iRODS is back up
 
             // try a connection in a loop until irods is back up. 
             do {
+
+                // initiate a connection object
+                lustre_irods_connection conn(thread_number);
+
 
                 // sleep for sleep_period in a 1s loop so we can catch a terminate message
                 for (unsigned int i = 0; i < config_struct_ptr->irods_client_connect_failure_retry_seconds; ++i) {
@@ -268,7 +292,7 @@ void irods_api_client_main(const lustre_irods_connector_cfg_t *config_struct_ptr
                 // double sleep period
                 //sleep_period = sleep_period << 1;
 
-            } while (conn.instantiate_irods_connection(config_struct_ptr, thread_number ) != 0); 
+            } while (0 != conn.instantiate_irods_connection(config_struct_ptr, thread_number )); 
             
             // irods is back up, set status and send a message to the changelog reader
             
@@ -328,7 +352,7 @@ int main(int argc, char *argv[]) {
         if (vm.count("help")) {
             std::cout << "Usage:  lustre_irods_connector [options]" << std::endl;
             std::cout << desc << std::endl;
-            return 0;
+            return EX_OK;
         }
 
         if (vm.count("config-file")) {
@@ -339,7 +363,7 @@ int main(int argc, char *argv[]) {
         if (vm.count("log-file")) {
             log_file = vm["log-file"].as<std::string>();
             dbgstream = fopen(log_file.c_str(), "a");
-            if (dbgstream == nullptr) {
+            if (nullptr == dbgstream) {
                 dbgstream = stdout;
                 LOG(LOG_ERR, "could not open log file %s... using stdout instead.\n", optarg);
             } else {
@@ -349,7 +373,7 @@ int main(int argc, char *argv[]) {
     } catch (std::exception& e) {
         std::cerr << e.what() << std::endl;
         std::cerr << desc << std::endl;
-        return 1;
+        return EX_USAGE;
     }
  
     int  rc;
@@ -357,13 +381,13 @@ int main(int argc, char *argv[]) {
     lustre_irods_connector_cfg_t config_struct;
     rc = read_config_file(config_file, &config_struct);
     if (rc < 0) {
-        return 1;
+        return EX_CONFIG;
     }
 
     LOG(LOG_DBG, "initializing change_map serialized database\n");
     if (initiate_change_map_serialization_database() < 0) {
         LOG(LOG_ERR, "failed to initialize serialization database\n");
-        return 1;
+        return EX_SOFTWARE;
     }
 
     // create the changemap in memory and read from serialized DB
@@ -375,7 +399,7 @@ int main(int argc, char *argv[]) {
     LOG(LOG_DBG, "reading change_map from serialized database\n");
     if (deserialize_change_map_from_sqlite(change_map) < 0) {
         LOG(LOG_ERR, "failed to deserialize change map on startup\n");
-        return 1;
+        return EX_SOFTWARE;
     }
 
     // connect to irods and get the resource id from the resource name 
@@ -385,14 +409,14 @@ int main(int argc, char *argv[]) {
         rc = conn.instantiate_irods_connection(nullptr, 0); 
         if (rc < 0) {
             LOG(LOG_ERR, "instantiate_irods_connection failed.  exiting...\n");
-            return 1;
+            return EX_SOFTWARE;
         }
 
         // read the resource id from resource name
         rc = conn.populate_irods_resc_id(&config_struct); 
         if (rc < 0) {
             LOG(LOG_ERR, "populate_irods_resc_id returned an error\n");
-            return 1;
+            return EX_SOFTWARE;
         }
     }
 
@@ -416,7 +440,7 @@ int main(int argc, char *argv[]) {
     sender.bind(config_struct.changelog_reader_push_work_address);
 
     // start accumulator thread which receives results back from iRODS updater threads
-    std::thread t(result_accumulator_main, &config_struct, &change_map); 
+    std::thread accumulator_thread(result_accumulator_main, &config_struct, &change_map); 
 
     // create a vector of irods client updater threads 
     std::vector<std::thread> irods_api_client_thread_list;
@@ -428,7 +452,7 @@ int main(int argc, char *argv[]) {
     // start up the threads
     for (unsigned int i = 0; i < config_struct.irods_updater_thread_count; ++i) {
         std::thread t(irods_api_client_main, &config_struct, &change_map, i);
-        irods_api_client_thread_list.push_back(move(t));
+        irods_api_client_thread_list.push_back(std::move(t));
         irods_api_client_connection_status.push_back(true);
     }
 
@@ -453,7 +477,7 @@ int main(int argc, char *argv[]) {
                 try {
                     unsigned int thread_num = boost::lexical_cast<unsigned int>(thread_num_str);
                     if (thread_num < irods_api_client_connection_status.size()) {
-                        if (irods_api_client_connection_status[thread_num] == true) {
+                        if (true == irods_api_client_connection_status[thread_num]) {
                             failed_connections_to_irods_count++;
                             irods_api_client_connection_status[thread_num] = false;
                         }
@@ -468,7 +492,7 @@ int main(int argc, char *argv[]) {
                 try {
                     unsigned int thread_num = boost::lexical_cast<unsigned int>(thread_num_str);
                     if (thread_num < irods_api_client_connection_status.size()) {
-                        if (irods_api_client_connection_status[thread_num] == false) {
+                        if (false == irods_api_client_connection_status[thread_num]) {
                             failed_connections_to_irods_count--;
                             irods_api_client_connection_status[thread_num] = true;
                         }
@@ -495,7 +519,7 @@ int main(int argc, char *argv[]) {
             while (entries_ready_to_process(change_map)) {
                 // get records ready to be processed into buf and buflen
                 void *buf = nullptr;
-                int buflen;
+                size_t buflen;
                 write_change_table_to_capnproto_buf(&config_struct, buf, buflen,
                             change_map);
 
@@ -525,6 +549,8 @@ int main(int argc, char *argv[]) {
         iter->join();
     }
 
+    accumulator_thread.join();
+
     LOG(LOG_DBG, "serializing change_map to database\n");
     if (serialize_change_map_to_sqlite(change_map) < 0) {
         LOG(LOG_ERR, "failed to serialize change_map upon exit\n");
@@ -540,13 +566,14 @@ int main(int argc, char *argv[]) {
     }
 
     LOG(LOG_DBG,"changelog client exiting\n");
-    if (dbgstream != stdout) {
+    if (stdout != dbgstream) {
         fclose(dbgstream);
     }
 
+    LOG(LOG_DBG,"this ran\n");
     if (fatal_error_detected) {
-        return 1;
+        return EX_SOFTWARE;
     }
 
-    return 0;
+    return EX_OK;
 }

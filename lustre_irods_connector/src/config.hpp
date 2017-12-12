@@ -25,6 +25,7 @@ typedef struct lustre_irods_connector_cfg {
     std::string result_accumulator_push_address;
     unsigned int irods_updater_thread_count;
     unsigned int maximum_records_per_update_to_irods;
+    unsigned int message_receive_timeout_msec;
     std::map<int, irods_connection_cfg_t> irods_connection_list;
 
 } lustre_irods_connector_cfg_t;

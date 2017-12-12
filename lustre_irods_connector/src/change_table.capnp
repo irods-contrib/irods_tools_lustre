@@ -32,6 +32,7 @@ struct ChangeMap {
   lustreRootPath @1 :Text;
   registerPath @2 :Text;
   resourceId @3 :Int64;
+  updateStatus @4 :Text;
 }
 
 

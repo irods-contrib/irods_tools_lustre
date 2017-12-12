@@ -26,8 +26,8 @@
 #include <boost/filesystem.hpp>
 
 lustre_irods_connection::~lustre_irods_connection() {
-    printf("disconnecting irods\n");
     if (irods_conn) {
+        LOG(LOG_DBG, "disconnecting irods - thread %d\n", thread_number);
         rcDisconnect(irods_conn);
     }
     irods_conn = nullptr;    
@@ -38,7 +38,7 @@ int lustre_irods_connection::send_change_map_to_irods(irodsLustreApiInp_t *inp) 
 
     LOG(LOG_DBG,"calling send_change_map_to_irods\n");
 
-    if (inp == nullptr) {
+    if (nullptr == inp) {
         LOG(LOG_ERR, "Null inp sent to %s - %d\n", __FUNCTION__, __LINE__);
         return lustre_irods::INVALID_OPERAND_ERROR;
     }    
@@ -76,7 +76,7 @@ int lustre_irods_connection::send_change_map_to_irods(irodsLustreApiInp_t *inp) 
 
 int lustre_irods_connection::populate_irods_resc_id(lustre_irods_connector_cfg_t *config_struct_ptr) {
 
-    if (config_struct_ptr == nullptr) {
+    if (nullptr == config_struct_ptr) {
         LOG(LOG_ERR, "Null config_struct_ptr sent to %s - %d\n", __FUNCTION__, __LINE__);
         return lustre_irods::INVALID_OPERAND_ERROR;
     }
@@ -101,7 +101,7 @@ int lustre_irods_connection::populate_irods_resc_id(lustre_irods_connector_cfg_t
     int status = rcGenQuery(irods_conn, &gen_inp, &gen_out);
 
     if ( status < 0 || gen_out->rowCnt < 1) {
-        if ( status == CAT_NO_ROWS_FOUND ) {
+        if ( CAT_NO_ROWS_FOUND == status ) {
             LOG(LOG_ERR, "No resource found in iRODS for resc_name %s\n", config_struct_ptr->irods_resource_name.c_str());
             return lustre_irods::RESOURCE_NOT_FOUND_ERROR;
         }
@@ -148,9 +148,9 @@ int lustre_irods_connection::instantiate_irods_connection(const lustre_irods_con
 
     std::string irods_host;
     int irods_port;
-    if (config_struct_ptr != nullptr) {
+    if (nullptr != config_struct_ptr) {
         auto entry = config_struct_ptr->irods_connection_list.find(thread_number);
-        if (entry != config_struct_ptr->irods_connection_list.end()) {
+        if (config_struct_ptr->irods_connection_list.end() != entry) {
             irods_host = entry->second.irods_host;
             irods_port = entry->second.irods_port;
         } else {
@@ -162,16 +162,16 @@ int lustre_irods_connection::instantiate_irods_connection(const lustre_irods_con
         irods_port = myEnv.rodsPort;
     }
 
-    LOG(LOG_ERR, "rcConnect being called.\n");
+    LOG(LOG_DBG, "rcConnect being called for thread %d.\n", thread_number);
     irods_conn = rcConnect( irods_host.c_str(), irods_port, myEnv.rodsUserName, myEnv.rodsZone, 1, &errMsg );
-    LOG(LOG_ERR, "irods_conn is %i\n", irods_conn != nullptr);
+    LOG(LOG_DBG, "irods_conn is %i for thread %d.\n", irods_conn != nullptr, thread_number);
 
-    if (irods_conn == NULL) {
+    if (nullptr == irods_conn) {
         return lustre_irods::IRODS_CONNECTION_ERROR;
     }
 
     status = clientLogin(irods_conn);
-    if (status != 0) {
+    if (0 != status) {
         rcDisconnect(irods_conn);
         irods_conn = nullptr;
         LOG(LOG_ERR, "Error on clientLogin() - %i\n", status);

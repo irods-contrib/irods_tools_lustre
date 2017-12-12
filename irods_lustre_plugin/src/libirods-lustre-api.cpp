@@ -261,9 +261,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
             }
 
             // register object
-            // TODO change to direct access 
             
-            // ----- Updates here -------
             int seq_no = cmlGetCurrentSeqVal(icss);
             std::string username = _comm->clientUser.userName;
             std::string zone = _comm->clientUser.rodsZone;
@@ -512,6 +510,9 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
 
         }
     }
+
+    status = cmlClose(icss);
+    rodsLog(LOG_NOTICE, "cmlClose status = %d", status);
 
     rodsLog( LOG_NOTICE, "Dynamic API - DONE" );
 

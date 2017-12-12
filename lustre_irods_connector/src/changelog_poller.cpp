@@ -39,7 +39,7 @@ std::string concatenate_paths_with_boost(const std::string& p1, const std::strin
 } 
 
 static inline bool fid_is_zero(lustre_fid_ptr fid) {
-    if (fid == NULL) {
+    if (nullptr == fid) {
         return true;
     }
     return get_f_seq_from_lustre_fid(fid) == 0 && get_f_oid_from_lustre_fid(fid) == 0;
@@ -60,7 +60,7 @@ std::string get_overwritten_fidstr_from_record(changelog_rec_ptr rec) {
 
 int get_fidstr_from_record(changelog_rec_ptr rec, std::string& fidstr) {
 
-    if (rec == NULL) {
+    if (nullptr == rec) {
         LOG(LOG_ERR, "Null rec sent to %s - %d\n", __FUNCTION__, __LINE__);
         return lustre_irods::INVALID_OPERAND_ERROR;
     }
@@ -83,7 +83,7 @@ int get_fidstr_from_record(changelog_rec_ptr rec, std::string& fidstr) {
 // Determines if the object (file, dir) from the changelog record still exists in Lustre.
 bool object_exists_in_lustre(const std::string& root_path, changelog_rec_ptr rec) {
 
-    if (rec == NULL) {
+    if (nullptr == rec) {
         LOG(LOG_ERR, "Null rec sent to %s - %d\n", __FUNCTION__, __LINE__);
         return lustre_irods::INVALID_OPERAND_ERROR;
     }
@@ -110,7 +110,7 @@ bool object_exists_in_lustre(const std::string& root_path, changelog_rec_ptr rec
 
 int get_full_path_from_record(const std::string& root_path, changelog_rec_ptr rec, std::string& lustre_full_path) {
 
-    if (rec == NULL) {
+    if (nullptr == rec) {
         LOG(LOG_ERR, "Null rec sent to %s - %d\n", __FUNCTION__, __LINE__);
         return lustre_irods::INVALID_OPERAND_ERROR;
     }
@@ -183,7 +183,7 @@ std::vector<std::function<int(const std::string&, const std::string&, const std:
 
 int handle_record(const std::string& lustre_root_path, changelog_rec_ptr rec, change_map_t& change_map) {
 
-    if (rec == NULL) {
+    if (nullptr == rec) {
         LOG(LOG_ERR, "Null rec sent to %s - %d\n", __FUNCTION__, __LINE__);
         return lustre_irods::INVALID_OPERAND_ERROR;
     }
@@ -198,7 +198,7 @@ int handle_record(const std::string& lustre_root_path, changelog_rec_ptr rec, ch
 
     get_fidstr_from_record(rec, fidstr);
     int rc = get_full_path_from_record(lustre_root_path, rec, lustre_full_path);
-    if (rc != lustre_irods::SUCCESS && rc != lustre_irods::LUSTRE_OBJECT_DNE_ERROR) {
+    if (lustre_irods::SUCCESS != rc && lustre_irods::LUSTRE_OBJECT_DNE_ERROR != rc) {
         return rc;
     }
 
@@ -234,11 +234,11 @@ int handle_record(const std::string& lustre_root_path, changelog_rec_ptr rec, ch
         old_parent_path = old_parent_path_cstr;
 
         // add a leading '/' if necessary
-        if (old_parent_path.length() == 0 || old_parent_path[0] != '/') {
+        if (0 == old_parent_path.length() || '/' != old_parent_path[0]) {
             old_parent_path = "/" + old_parent_path;
         }
         // add a trailing '/' if necessar
-        if (old_parent_path[old_parent_path.length()-1] != '/') {
+        if ('/' != old_parent_path[old_parent_path.length()-1]) {
              old_parent_path += "/";
         }
 

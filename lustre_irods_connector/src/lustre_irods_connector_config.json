@@ -12,6 +12,7 @@
         "result_accumulator_push_address": "ipc:///result_accumulator_push_address",
         "irods_updater_thread_count": 4,
         "maximum_records_per_update_to_irods": 10,
+        "message_receive_timeout_msec": 2000,
         "thread_1_connection_parameters": {
                  "irods_host": "localhost",
                  "irods_port": "1247"

@@ -53,10 +53,10 @@ int lustre_close(const std::string& lustre_root_path, const std::string& fidstr,
     LOG(LOG_DBG, "handle_close:  stat_result = %i, file_size = %ld\n", result, st.st_size);
 
     auto iter = change_map_fidstr.find(fidstr);
-    if (iter != change_map_fidstr.end()) {
+    if (change_map_fidstr.end() != iter) {
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.oper_complete = true; });
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
-        if (result == 0) {
+        if (0 == result) {
             change_map_fidstr.modify(iter, [st](change_descriptor &cd){ cd.file_size = st.st_size; });
         }
     } else {
@@ -70,7 +70,7 @@ int lustre_close(const std::string& lustre_root_path, const std::string& fidstr,
         entry.oper_complete = true;
         entry.timestamp = time(NULL);
         entry.last_event = ChangeDescriptor::EventTypeEnum::OTHER;
-        if (result == 0) {
+        if (0 == result) {
             entry.file_size = st.st_size;
         }
 
@@ -156,7 +156,7 @@ int lustre_unlink(const std::string& lustre_root_path, const std::string& fidstr
     if(iter != change_map_fidstr.end()) {   
 
         // If an add and a delete occur in the same transactional unit, just delete the transaction
-        if (iter->last_event == ChangeDescriptor::EventTypeEnum::CREATE) {
+        if (ChangeDescriptor::EventTypeEnum::CREATE == iter->last_event) {
             change_map_fidstr.erase(iter);
         } else {
             change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.oper_complete = true; });
@@ -316,7 +316,7 @@ int lustre_trunc(const std::string& lustre_root_path, const std::string& fidstr,
     if(iter != change_map_fidstr.end()) {
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.oper_complete = false; });
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
-        if (result == 0) {
+        if (0 == result) {
             change_map_fidstr.modify(iter, [st](change_descriptor &cd){ cd.file_size = st.st_size; });
         }
     } else {
@@ -327,7 +327,7 @@ int lustre_trunc(const std::string& lustre_root_path, const std::string& fidstr,
         //entry.object_name = object_name;
         entry.oper_complete = false;
         entry.timestamp = time(NULL);
-        if (result == 0) {
+        if (0 == result) {
             entry.file_size = st.st_size;
         }
         change_map.push_back(entry);
@@ -423,14 +423,65 @@ void lustre_print_change_table(change_map_t& change_map) {
     LOG(LOG_DBG, "%s", change_table_str.c_str());
 }
 
+// Sets the update status
+int set_update_status_in_capnproto_buf(unsigned char*& buf, size_t& buflen, const std::string& new_status) {
+
+    if (nullptr == buf) {
+        LOG(LOG_ERR, "Null buffer sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return lustre_irods::INVALID_OPERAND_ERROR;
+    }
+
+    const kj::ArrayPtr<const capnp::word> array_ptr{ reinterpret_cast<const capnp::word*>(&(*(buf))),
+        reinterpret_cast<const capnp::word*>(&(*(buf + buflen)))};
+
+    capnp::FlatArrayMessageReader message_reader(array_ptr);
+
+    capnp::MallocMessageBuilder message_builder;
+    //ChangeMap::Builder changeMap = message.initRoot<ChangeMap>();
+
+    message_builder.setRoot(message_reader.getRoot<ChangeMap>());
+    ChangeMap::Builder changeMap = message_builder.getRoot<ChangeMap>();
+    changeMap.setUpdateStatus(new_status.c_str());
+
+
+    kj::Array<capnp::word> array = capnp::messageToFlatArray(message_builder);
+    size_t message_size = array.size() * sizeof(capnp::word);
+
+    // TODO look at this
+    //free(buf);
+
+    buf = (unsigned char*)malloc(message_size);
+    buflen = message_size;
+    memcpy(buf, std::begin(array), message_size);
+
+    return lustre_irods::SUCCESS;
+}
+
+
+int get_update_status_from_capnproto_buf(unsigned char* buf, size_t buflen, std::string& update_status) {
+
+    if (nullptr == buf) {
+        LOG(LOG_ERR, "Null buffer sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return lustre_irods::INVALID_OPERAND_ERROR;
+    }
+
+    const kj::ArrayPtr<const capnp::word> array_ptr{ reinterpret_cast<const capnp::word*>(&(*(buf))),
+        reinterpret_cast<const capnp::word*>(&(*(buf + buflen)))};
+    capnp::FlatArrayMessageReader message(array_ptr);
+
+    ChangeMap::Reader changeMap = message.getRoot<ChangeMap>();
+    update_status = changeMap.getUpdateStatus().cStr();
+    return lustre_irods::SUCCESS;
+}
+
 
 // Processes change table by writing records ready to be sent to iRODS into capnproto buffer (buf).
 // The size of the buffer is written to buflen.
 // Note:  The buf is malloced and must be freed by caller.
-int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *config_struct_ptr, void*& buf, int& buflen, 
+int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *config_struct_ptr, void*& buf, size_t& buflen, 
         change_map_t& change_map) {
 
-    if (config_struct_ptr == nullptr) {
+    if (nullptr == config_struct_ptr) {
         LOG(LOG_ERR, "Null config_struct_ptr sent to %s - %d\n", __FUNCTION__, __LINE__);
         return lustre_irods::INVALID_OPERAND_ERROR;
     }
@@ -447,6 +498,7 @@ int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *conf
     changeMap.setLustreRootPath(config_struct_ptr->lustre_root_path);
     changeMap.setResourceId(config_struct_ptr->irods_resource_id);
     changeMap.setRegisterPath(config_struct_ptr->irods_register_path);
+    changeMap.setUpdateStatus("PENDING");
 
     size_t write_count = change_map_seq.size() >= config_struct_ptr->maximum_records_per_update_to_irods 
         ? config_struct_ptr->maximum_records_per_update_to_irods : change_map_seq.size() ;
@@ -501,7 +553,13 @@ int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *conf
 }
 
 // If we get a failure, the accumulator needs to add the entry back to the list.
-int add_capnproto_buffer_back_to_change_table(unsigned char* buf, int buflen, change_map_t& change_map) {
+int add_capnproto_buffer_back_to_change_table(unsigned char* buf, size_t buflen, change_map_t& change_map) {
+
+    if (nullptr == buf) {
+        LOG(LOG_ERR, "Null buffer sent to %s - %d\n", __FUNCTION__, __LINE__);
+        return lustre_irods::INVALID_OPERAND_ERROR;
+    }
+
 
     const kj::ArrayPtr<const capnp::word> array_ptr{ reinterpret_cast<const capnp::word*>(&(*(buf))),
         reinterpret_cast<const capnp::word*>(&(*(buf + buflen)))};
@@ -556,15 +614,15 @@ std::string event_type_to_str(ChangeDescriptor::EventTypeEnum type) {
 }
 
 ChangeDescriptor::EventTypeEnum str_to_event_type(const std::string& str) {
-    if (str == "CREATE") {
+    if ("CREAT" == str) {
         return ChangeDescriptor::EventTypeEnum::CREATE;
-    } else if (str == "UNLINK") {
+    } else if ("UNLINK" == str) {
         return ChangeDescriptor::EventTypeEnum::UNLINK;
-    } else if (str == "RMDIR") {
+    } else if ("RMDIR" == str) {
         return ChangeDescriptor::EventTypeEnum::RMDIR;
-    } else if (str == "MKDIR") {
+    } else if ("MKDIR" == str) {
         return ChangeDescriptor::EventTypeEnum::MKDIR;
-    } else if (str == "RENAME") {
+    } else if ("RENAME" == str) {
         return ChangeDescriptor::EventTypeEnum::RENAME;
     }
     return ChangeDescriptor::EventTypeEnum::OTHER;
@@ -583,7 +641,7 @@ std::string object_type_to_str(ChangeDescriptor::ObjectTypeEnum type) {
 }
 
 ChangeDescriptor::ObjectTypeEnum str_to_object_type(const std::string& str) {
-    if (str == "DIR")  {
+    if ("DIR" == str)  {
         return ChangeDescriptor::ObjectTypeEnum::DIR;
    }
    return ChangeDescriptor::ObjectTypeEnum::FILE;
@@ -634,7 +692,7 @@ int serialize_change_map_to_sqlite(change_map_t& change_map) {
         sqlite3_bind_int(stmt, 9, iter->file_size); 
 
         rc = sqlite3_step(stmt); 
-        if (rc != SQLITE_DONE) {
+        if (SQLITE_DONE != rc) {
             LOG(LOG_ERR, "ERROR inserting data: %s\n", sqlite3_errmsg(db));
         }
 
@@ -648,11 +706,11 @@ int serialize_change_map_to_sqlite(change_map_t& change_map) {
 
 static int query_callback(void *change_map_void_ptr, int argc, char** argv, char** columnNames) {
 
-    if (change_map_void_ptr == nullptr) {
+    if (nullptr == change_map_void_ptr) {
         LOG(LOG_ERR, "Invalid nullptr sent to change_map in %s\n", __FUNCTION__);
     }
 
-    if (argc != 9) {
+    if (9 != argc) {
         LOG(LOG_ERR, "Invalid number of columns returned from change_map query in database.\n");
         return  lustre_irods::SQLITE_DB_ERROR;
     }
