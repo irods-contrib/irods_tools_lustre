@@ -29,6 +29,7 @@ lustre_irods_connection::~lustre_irods_connection() {
     if (irods_conn) {
         LOG(LOG_DBG, "disconnecting irods - thread %d\n", thread_number);
         rcDisconnect(irods_conn);
+        LOG(LOG_DBG, "done disconnecting irods - thread %d\n", thread_number);
     }
     irods_conn = nullptr;    
 }
