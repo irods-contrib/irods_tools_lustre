@@ -4,14 +4,15 @@
         "irods_register_path": "/tempZone/lustre",
         "irods_resource_name": "demoResc",
         "log_level": "LOG_DBG",
-        "changelog_poll_interval_seconds": 5,
+        "changelog_poll_interval_seconds": 1,
         "irods_client_connect_failure_retry_seconds": 30
         "irods_client_broadcast_address": "ipc:///irods_client_broadcast_events",
         "changelog_reader_broadcast_address": "ipc:///changelog_reader_broadcast_events",
         "changelog_reader_push_work_address": "ipc:///changelog_reader_push_work_events",
         "result_accumulator_push_address": "ipc:///result_accumulator_push_address",
-        "irods_updater_thread_count": 4,
-        "maximum_records_per_update_to_irods": 10,
+        "irods_updater_thread_count": 5,
+        "maximum_records_per_update_to_irods": 200,
+        "maximum_records_to_receive_from_lustre_changelog": 500,
         "message_receive_timeout_msec": 2000,
         "thread_1_connection_parameters": {
                  "irods_host": "localhost",

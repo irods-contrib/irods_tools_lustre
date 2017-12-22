@@ -1,4 +1,5 @@
 #include <string>
+#include <set>
 #include <ctime>
 #include <sstream>
 #include <mutex>
@@ -479,7 +480,11 @@ int get_update_status_from_capnproto_buf(unsigned char* buf, size_t buflen, std:
 // The size of the buffer is written to buflen.
 // Note:  The buf is malloced and must be freed by caller.
 int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *config_struct_ptr, void*& buf, size_t& buflen, 
-        change_map_t& change_map) {
+        change_map_t& change_map, std::set<std::string>& active_fidstr_list) {
+
+
+    // store up a list of fidstr that are being added to this buffer
+    std::set<std::string> temp_fidstr_list;
 
     if (nullptr == config_struct_ptr) {
         LOG(LOG_ERR, "Null config_struct_ptr sent to %s - %d\n", __FUNCTION__, __LINE__);
@@ -505,6 +510,7 @@ int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *conf
 
     capnp::List<ChangeDescriptor>::Builder entries = changeMap.initEntries(write_count);
 
+    bool collision_in_fidstr = false;
     unsigned long cnt = 0;
     for (auto iter = change_map_seq.begin(); iter != change_map_seq.end() && cnt < write_count;) { 
 
@@ -513,6 +519,32 @@ int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *conf
         LOG(LOG_DBG, "change_map size = %lu\n", change_map_seq.size()); 
 
         if (iter->oper_complete) {
+
+            // break out of the main loop if we reach an fidstr that is already being operated on
+            // by another thread.  In the case of MKDIR, CREATE, and RENAME, break out if the parent_fidstr is already bing
+            // operated on by another thread.
+
+            if (iter->last_event == ChangeDescriptor::EventTypeEnum::MKDIR ||
+                    iter->last_event == ChangeDescriptor::EventTypeEnum::CREATE ||
+                    iter->last_event == ChangeDescriptor::EventTypeEnum::RENAME) {
+
+                if (active_fidstr_list.find(iter->parent_fidstr) != active_fidstr_list.end()) {
+                    LOG(LOG_DBG, "fidstr %s is already in active fidstr list - breaking out \n", iter->parent_fidstr.c_str());
+                    collision_in_fidstr = true;
+                    break;
+                }
+            }
+
+            if (active_fidstr_list.find(iter->fidstr) != active_fidstr_list.end()) {
+                LOG(LOG_DBG, "fidstr %s is already in active fidstr list - breaking out\n", iter->fidstr.c_str());
+                collision_in_fidstr = true;
+                break;
+            }
+
+           
+            LOG(LOG_DBG, "adding fidstr %s to active fidstr list\n", iter->fidstr.c_str());
+            temp_fidstr_list.insert(iter->fidstr);
+ 
             entries[cnt].setFidstr(iter->fidstr);
             entries[cnt].setParentFidstr(iter->parent_fidstr);
             entries[cnt].setObjectType(iter->object_type);
@@ -549,11 +581,18 @@ int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *conf
     buflen = message_size;
     memcpy(buf, std::begin(array), message_size);
 
+    // add all fid strings from tmp_fidstr to active_fidstr_list
+    active_fidstr_list.insert(temp_fidstr_list.begin(), temp_fidstr_list.end());
+
+    if (collision_in_fidstr) {
+        return lustre_irods::COLLISION_IN_FIDSTR;
+    }
+
     return lustre_irods::SUCCESS;
 }
 
 // If we get a failure, the accumulator needs to add the entry back to the list.
-int add_capnproto_buffer_back_to_change_table(unsigned char* buf, size_t buflen, change_map_t& change_map) {
+int add_capnproto_buffer_back_to_change_table(unsigned char* buf, size_t buflen, change_map_t& change_map, std::set<std::string>& active_fidstr_list) {
 
     if (nullptr == buf) {
         LOG(LOG_ERR, "Null buffer sent to %s - %d\n", __FUNCTION__, __LINE__);
@@ -561,13 +600,15 @@ int add_capnproto_buffer_back_to_change_table(unsigned char* buf, size_t buflen,
     }
 
 
+    std::lock_guard<std::mutex> lock(change_table_mutex);
+
     const kj::ArrayPtr<const capnp::word> array_ptr{ reinterpret_cast<const capnp::word*>(&(*(buf))),
         reinterpret_cast<const capnp::word*>(&(*(buf + buflen)))};
     capnp::FlatArrayMessageReader message(array_ptr);
 
-    ChangeMap::Reader changeMap = message.getRoot<ChangeMap>();
+    ChangeMap::Reader change_map_from_message = message.getRoot<ChangeMap>();
 
-    for (ChangeDescriptor::Reader entry : changeMap.getEntries()) {
+    for (ChangeDescriptor::Reader entry : change_map_from_message.getEntries()) {
 
         change_descriptor record {};
         record.last_event = entry.getEventType();
@@ -584,10 +625,33 @@ int add_capnproto_buffer_back_to_change_table(unsigned char* buf, size_t buflen,
 
         // TODO - do we need to put this on the front of the list?
         change_map.push_back(record);
+
+        // remove fidstr from active fidstr list
+        //LOG(LOG_DBG, "add_capnproto_buffer_back_to_change_table: removing fidstr %s from active fidstr list - lustre_path is %s\n", record.fidstr.c_str(), record.lustre_path.c_str());
+        active_fidstr_list.erase(record.fidstr);
     }
 
     return lustre_irods::SUCCESS;
 }   
+
+void remove_fidstr_from_active_list(unsigned char* buf, size_t buflen, std::set<std::string>& active_fidstr_list) {
+
+    std::lock_guard<std::mutex> lock(change_table_mutex);
+    const kj::ArrayPtr<const capnp::word> array_ptr{ reinterpret_cast<const capnp::word*>(&(*(buf))),
+        reinterpret_cast<const capnp::word*>(&(*(buf + buflen)))};
+    capnp::FlatArrayMessageReader message(array_ptr);
+
+    ChangeMap::Reader change_map_from_message = message.getRoot<ChangeMap>();
+
+    for (ChangeDescriptor::Reader entry : change_map_from_message.getEntries()) {
+        std::string fidstr = entry.getFidstr().cStr();
+        std::string lustre_path = entry.getLustrePath().cStr();
+        //LOG(LOG_DBG, "remove_fidstr_from_active_list: removing fidstr %s from active fidstr list - lustre_path is %s\n", fidstr.c_str(), lustre_path.c_str());
+        active_fidstr_list.erase(fidstr.c_str());
+    }
+
+}
+
 
 std::string event_type_to_str(ChangeDescriptor::EventTypeEnum type) {
     switch (type) {

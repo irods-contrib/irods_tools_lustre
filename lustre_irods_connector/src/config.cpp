@@ -59,6 +59,7 @@ int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *
     std::string irods_client_connect_failure_retry_seconds_str;
     std::string irods_updater_thread_count_str;
     std::string maximum_records_per_update_to_irods_str;
+    std::string maximum_records_to_receive_from_lustre_changelog_str;
     std::string message_receive_timeout_msec_str;
 
     try {
@@ -113,6 +114,10 @@ int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *
             LOG(LOG_ERR, "Key num_records_per_update_to_irods missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
         }
+        if (0 != read_key_from_map(config_map, "maximum_records_to_receive_from_lustre_changelog", maximum_records_to_receive_from_lustre_changelog_str)) {
+            LOG(LOG_ERR, "Key num_records_per_update_to_irods missing from %s\n", filename.c_str());
+            return lustre_irods::CONFIGURATION_ERROR;
+        }
         if (0 != read_key_from_map(config_map, "message_receive_timeout_msec", message_receive_timeout_msec_str)) {
             LOG(LOG_ERR, "Key message_receive_timeout_msec missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
@@ -158,6 +163,14 @@ int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *
             LOG(LOG_ERR, "Could not parse maximum_records_per_update_to_irods as an integer.\n");
             return lustre_irods::CONFIGURATION_ERROR;
         }
+
+        try {
+            config_struct->maximum_records_to_receive_from_lustre_changelog = boost::lexical_cast<unsigned int>(maximum_records_to_receive_from_lustre_changelog_str);
+        } catch (boost::bad_lexical_cast& e) {
+            LOG(LOG_ERR, "Could not parse maximum_records_to_receive_from_lustre_changelog as an integer.\n");
+            return lustre_irods::CONFIGURATION_ERROR;
+        }
+
 
         try {
             config_struct->message_receive_timeout_msec = boost::lexical_cast<unsigned int>(message_receive_timeout_msec_str);
@@ -206,14 +219,6 @@ int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *
 
             }
         } 
-
-        LOG(LOG_DBG, "  --- irods_connection_list --- \n");
-        for (auto iter = config_struct->irods_connection_list.begin(); iter != config_struct->irods_connection_list.end(); ++iter) {
-            LOG(LOG_DBG, "connection: %d\n", iter->first);
-            LOG(LOG_DBG, "host: %s\n", iter->second.irods_host.c_str());
-            LOG(LOG_DBG, "port: %d\n", iter->second.irods_port);
-        }
-        LOG(LOG_DBG, "  ----------------------------- \n");
 
     } catch (std::exception& e) {
         LOG(LOG_ERR, "Could not read %s - %s\n", filename.c_str(), e.what());

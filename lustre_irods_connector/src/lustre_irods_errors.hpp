@@ -15,6 +15,8 @@ const int LUSTRE_OBJECT_DNE_ERROR = -8;
 const int LLAPI_FID2PATH_ERROR = -9;
 const int INVALID_CR_TYPE_ERROR = -10;
 const int SQLITE_DB_ERROR = -11;
+const int QUIT = -12;
+const int COLLISION_IN_FIDSTR = -13;
 
 }
 

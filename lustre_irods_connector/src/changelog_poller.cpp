@@ -266,15 +266,21 @@ int finish_lcap_changelog(lcap_cl_ctx_ptr ctx) {
 //   lustre_root_path - the root path of the lustre mount point
 //   change_map - the change map
 //   ctx - the lcap context (lcap_cl_ctx) 
-int poll_change_log_and_process(const std::string& mdtname, const std::string& lustre_root_path, change_map_t& change_map, lcap_cl_ctx_ptr ctx) {
+int poll_change_log_and_process(const std::string& mdtname, const std::string& lustre_root_path, change_map_t& change_map, lcap_cl_ctx_ptr ctx, int max_records_to_retrieve) {
+
+    LOG(LOG_DBG, "poll_change_log_and_process: max_records_to_retrieve = %d\n", max_records_to_retrieve);
 
     int                    rc;
     char                   clid[64] = {0};
-
     // the changelog_rec 
     changelog_rec_ptr rec;
 
-    while ((rc = lcap_changelog_wrapper_recv(ctx, &rec)) == 0) {
+    int cntr = 0;
+
+    while (cntr < max_records_to_retrieve && (rc = lcap_changelog_wrapper_recv(ctx, &rec)) == 0) {
+         
+        cntr++;
+
         time_t      secs;
         struct tm   ts;
 

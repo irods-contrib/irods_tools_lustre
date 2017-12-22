@@ -6,6 +6,7 @@
 #include "config.hpp"
 #include <string>
 #include <ctime>
+#include <vector>
 
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/sequenced_index.hpp>
@@ -15,7 +16,6 @@
 
 #include "change_table.capnp.h"
 
-#include <string>
 
 struct change_descriptor {
     std::string                   fidstr;
@@ -89,9 +89,11 @@ int initiate_change_map_serialization_database();
 int set_update_status_in_capnproto_buf(unsigned char*& buf, size_t& buflen, const std::string& new_status);
 int get_update_status_from_capnproto_buf(unsigned char* buf, size_t buflen, std::string& update_status);
 void add_entries_back_to_change_table(change_map_t& change_map, std::shared_ptr<change_map_t>& removed_entries);
-int add_capnproto_buffer_back_to_change_table(unsigned char* buf, size_t buflen, change_map_t& change_map);
+int add_capnproto_buffer_back_to_change_table(unsigned char* buf, size_t buflen, change_map_t& change_map, std::set<std::string>& current_active_fidstr_list);
+void remove_fidstr_from_active_list(unsigned char* buf, size_t buflen, std::set<std::string>& current_active_fidstr_list);
 int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *config_struct_ptr, void*& buf, size_t& buflen,
-    change_map_t& change_map);
+                                          change_map_t& change_map, std::set<std::string>& current_active_fidstr_list); 
+
 
 #endif
 
