@@ -83,6 +83,12 @@ const char *update_collection_for_rename_sql = "update R_COLL_MAIN set coll_name
                    "inner join R_META_MAIN on R_META_MAIN.meta_id = R_OBJT_METAMAP.meta_id "
                    "where R_META_MAIN.meta_attr_name = 'fidstr' and R_META_MAIN.meta_attr_value = ?)";
 
+const char *remove_object_meta_sql = "delete from R_OBJT_METAMAP where object_id = ("
+                   "select R_OBJT_METAMAP.object_id "
+                   "from R_OBJT_METAMAP "
+                   "inner join R_META_MAIN on R_META_MAIN.meta_id = R_OBJT_METAMAP.meta_id "
+                   "where R_META_MAIN.meta_attr_name = 'fidstr' and R_META_MAIN.meta_attr_value = ?)";
+
 const char *unlink_sql = "delete from R_DATA_MAIN where data_id = ("
                    "select R_DATA_MAIN.data_id "
                    "from R_DATA_MAIN "
@@ -480,13 +486,23 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
                 continue;
             }
 
+            // delete the metadata on the data object 
+            cllBindVars[0] = fidstr.c_str();
+            cllBindVarCount = 1;
+            status = cmlExecuteNoAnswerSql(remove_object_meta_sql, icss);
+
+            if (status != 0) {
+                // Couldn't delete metadata.  Just log and continue.
+                rodsLog(LOG_ERROR, "Error deleting metadata from data object %s.  Error is %i", fidstr.c_str(), status);
+            }
+
+
             status =  cmlExecuteNoAnswerSql("commit", icss);
 
             if (status != 0) {
                 rodsLog(LOG_ERROR, "Error committing delete for data object %s.  Error is %i", fidstr.c_str(), status);
                 continue;
             }
-
 
         } else if (event_type == ChangeDescriptor::EventTypeEnum::RMDIR) {
 
@@ -500,13 +516,22 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
                 continue;
             }
 
+            // delete the metadata on the collection 
+            cllBindVars[0] = fidstr.c_str();
+            cllBindVarCount = 1;
+            status = cmlExecuteNoAnswerSql(remove_object_meta_sql, icss);
+
+            if (status != 0) {
+                // Couldn't delete metadata.  Just log and continue.
+                rodsLog(LOG_ERROR, "Error deleting metadata from collection %s.  Error is %i", fidstr.c_str(), status);
+            }
+
             status =  cmlExecuteNoAnswerSql("commit", icss);
 
             if (status != 0) {
                 rodsLog(LOG_ERROR, "Error committing delete for collection %s.  Error is %i", fidstr.c_str(), status);
                 continue;
             }
-
 
         }
     }

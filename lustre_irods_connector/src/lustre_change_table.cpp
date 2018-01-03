@@ -521,7 +521,7 @@ int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *conf
         if (iter->oper_complete) {
 
             // break out of the main loop if we reach an fidstr that is already being operated on
-            // by another thread.  In the case of MKDIR, CREATE, and RENAME, break out if the parent_fidstr is already bing
+            // by another thread.  In the case of MKDIR, CREATE, and RENAME, break out if the parent_fidstr is already being
             // operated on by another thread.
 
             if (iter->last_event == ChangeDescriptor::EventTypeEnum::MKDIR ||

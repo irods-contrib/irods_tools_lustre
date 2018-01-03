@@ -204,7 +204,7 @@ int handle_record(const std::string& lustre_root_path, changelog_rec_ptr rec, ch
 
     std::string parent_fidstr = convert_to_fidstr(get_cr_pfid_from_changelog_rec(rec));
 
-    std::string object_name = changelog_rec_wrapper_name(rec);
+    std::string object_name(changelog_rec_wrapper_name(rec), get_cr_namelen_from_changelog_rec(rec));
 
     if (get_cr_type_from_changelog_rec(rec) == get_cl_rename()) {
 
@@ -220,7 +220,8 @@ int handle_record(const std::string& lustre_root_path, changelog_rec_ptr rec, ch
         std::string old_parent_fid;
         std::string old_parent_path;
 
-        old_filename = std::string(changelog_rec_wrapper_sname(rec)).substr(0, (int)changelog_rec_wrapper_snamelen(rec));
+        //old_filename = std::string(changelog_rec_wrapper_sname(rec)).substr(0, (int)changelog_rec_wrapper_snamelen(rec));
+        old_filename = std::string(changelog_rec_wrapper_sname(rec), changelog_rec_wrapper_snamelen(rec));
 
         old_parent_fid = convert_to_fidstr(get_cr_spfid_from_changelog_ext_rename(rnm));
 
