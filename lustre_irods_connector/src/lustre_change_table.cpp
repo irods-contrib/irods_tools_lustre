@@ -39,7 +39,7 @@ std::string object_type_to_str(ChangeDescriptor::ObjectTypeEnum type);
 static std::mutex change_table_mutex;
 
 
-int lustre_close(const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
+int lustre_close(unsigned long long cr_index, const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
                  const std::string& object_name, const std::string& lustre_path, change_map_t& change_map) {
 
     std::lock_guard<std::mutex> lock(change_table_mutex);
@@ -55,6 +55,7 @@ int lustre_close(const std::string& lustre_root_path, const std::string& fidstr,
 
     auto iter = change_map_fidstr.find(fidstr);
     if (change_map_fidstr.end() != iter) {
+        change_map_fidstr.modify(iter, [cr_index](change_descriptor &cd){ cd.cr_index = cr_index; });
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.oper_complete = true; });
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
         if (0 == result) {
@@ -63,6 +64,7 @@ int lustre_close(const std::string& lustre_root_path, const std::string& fidstr,
     } else {
         // this is probably an append so no file update is done
         change_descriptor entry{};
+        entry.cr_index = cr_index;
         entry.fidstr = fidstr;
         entry.parent_fidstr = parent_fidstr;
         entry.object_name = object_name;
@@ -75,13 +77,13 @@ int lustre_close(const std::string& lustre_root_path, const std::string& fidstr,
             entry.file_size = st.st_size;
         }
 
-        change_map.push_back(entry);
+        change_map.insert(entry);
     }
     return lustre_irods::SUCCESS;
 
 }
 
-int lustre_mkdir(const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
+int lustre_mkdir(unsigned long long cr_index, const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
                  const std::string& object_name, const std::string& lustre_path, change_map_t& change_map) {
 
     std::lock_guard<std::mutex> lock(change_table_mutex);
@@ -91,11 +93,13 @@ int lustre_mkdir(const std::string& lustre_root_path, const std::string& fidstr,
 
     auto iter = change_map_fidstr.find(fidstr);
     if(iter != change_map_fidstr.end()) {
+        change_map_fidstr.modify(iter, [cr_index](change_descriptor &cd){ cd.cr_index = cr_index; });
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.oper_complete = true; });
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.last_event = ChangeDescriptor::EventTypeEnum::MKDIR; });
     } else {
         change_descriptor entry{};
+        entry.cr_index = cr_index;
         entry.fidstr = fidstr;
         entry.parent_fidstr = parent_fidstr;
         entry.object_name = object_name;
@@ -104,13 +108,13 @@ int lustre_mkdir(const std::string& lustre_root_path, const std::string& fidstr,
         entry.last_event = ChangeDescriptor::EventTypeEnum::MKDIR;
         entry.timestamp = time(NULL);
         entry.object_type = ChangeDescriptor::ObjectTypeEnum::DIR;
-        change_map.push_back(entry);
+        change_map.insert(entry);
     }
     return lustre_irods::SUCCESS; 
 
 }
 
-int lustre_rmdir(const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
+int lustre_rmdir(unsigned long long cr_index, const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
                  const std::string& object_name, const std::string& lustre_path, change_map_t& change_map) {
 
 
@@ -122,6 +126,7 @@ int lustre_rmdir(const std::string& lustre_root_path, const std::string& fidstr,
 
     auto iter = change_map_fidstr.find(fidstr);
     if(iter != change_map_fidstr.end()) {
+        change_map_fidstr.modify(iter, [cr_index](change_descriptor &cd){ cd.cr_index = cr_index; });
         change_map_fidstr.modify(iter, [parent_fidstr](change_descriptor &cd){ cd.parent_fidstr = parent_fidstr; });
         change_map_fidstr.modify(iter, [object_name](change_descriptor &cd){ cd.object_name = object_name; });
         change_map_fidstr.modify(iter, [lustre_path](change_descriptor &cd){ cd.lustre_path = lustre_path; });
@@ -130,6 +135,7 @@ int lustre_rmdir(const std::string& lustre_root_path, const std::string& fidstr,
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
     } else {
         change_descriptor entry{};
+        entry.cr_index = cr_index;
         entry.fidstr = fidstr;
         entry.oper_complete = true;
         entry.last_event = ChangeDescriptor::EventTypeEnum::RMDIR;
@@ -137,14 +143,14 @@ int lustre_rmdir(const std::string& lustre_root_path, const std::string& fidstr,
         entry.object_type = ChangeDescriptor::ObjectTypeEnum::DIR;
         entry.parent_fidstr = parent_fidstr;
         entry.object_name = object_name;
-        change_map.push_back(entry);
+        change_map.insert(entry);
     }
     return lustre_irods::SUCCESS; 
 
 
 }
 
-int lustre_unlink(const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
+int lustre_unlink(unsigned long long cr_index, const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
                   const std::string& object_name, const std::string& lustre_path, change_map_t& change_map) {
   
     std::lock_guard<std::mutex> lock(change_table_mutex);
@@ -160,12 +166,14 @@ int lustre_unlink(const std::string& lustre_root_path, const std::string& fidstr
         if (ChangeDescriptor::EventTypeEnum::CREATE == iter->last_event) {
             change_map_fidstr.erase(iter);
         } else {
+            change_map_fidstr.modify(iter, [cr_index](change_descriptor &cd){ cd.cr_index = cr_index; });
             change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.oper_complete = true; });
             change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.last_event = ChangeDescriptor::EventTypeEnum::UNLINK; });
             change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
        }
     } else {
         change_descriptor entry{};
+        entry.cr_index = cr_index;
         entry.fidstr = fidstr;
         //entry.parent_fidstr = parent_fidstr;
         //entry.lustre_path = lustre_path;
@@ -174,13 +182,13 @@ int lustre_unlink(const std::string& lustre_root_path, const std::string& fidstr
         entry.timestamp = time(NULL);
         entry.object_type = ChangeDescriptor::ObjectTypeEnum::FILE;
         entry.object_name = object_name;
-        change_map.push_back(entry);
+        change_map.insert(entry);
     }
 
     return lustre_irods::SUCCESS; 
 }
 
-int lustre_rename(const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
+int lustre_rename(unsigned long long cr_index, const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
                   const std::string& object_name, const std::string& lustre_path, const std::string& old_lustre_path, change_map_t& change_map) {
 
     std::lock_guard<std::mutex> lock(change_table_mutex);
@@ -197,11 +205,13 @@ int lustre_rename(const std::string& lustre_root_path, const std::string& fidstr
     // if there is a previous entry, just update the lustre_path to the new path
     // otherwise, add a new entry
     if(iter != change_map_fidstr.end()) {
+        change_map_fidstr.modify(iter, [cr_index](change_descriptor &cd){ cd.cr_index = cr_index; });
         change_map_fidstr.modify(iter, [parent_fidstr](change_descriptor &cd){ cd.parent_fidstr = parent_fidstr; });
         change_map_fidstr.modify(iter, [object_name](change_descriptor &cd){ cd.object_name = object_name; });
         change_map_fidstr.modify(iter, [lustre_path](change_descriptor &cd){ cd.lustre_path = lustre_path; });
     } else {
         change_descriptor entry{};
+        entry.cr_index = cr_index;
         entry.fidstr = fidstr;
         entry.parent_fidstr = parent_fidstr;
         entry.object_name = object_name;
@@ -219,7 +229,7 @@ int lustre_rename(const std::string& lustre_root_path, const std::string& fidstr
         } else {
             change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.object_type = ChangeDescriptor::ObjectTypeEnum::FILE; });
         }*/
-        change_map.push_back(entry);
+        change_map.insert(entry);
     }
 
     LOG(LOG_DBG, "rename:  old_lustre_path = %s\n", old_lustre_path.c_str());
@@ -239,7 +249,7 @@ int lustre_rename(const std::string& lustre_root_path, const std::string& fidstr
 
 }
 
-int lustre_create(const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
+int lustre_create(unsigned long long cr_index, const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
                   const std::string& object_name, const std::string& lustre_path, change_map_t& change_map) {
 
     std::lock_guard<std::mutex> lock(change_table_mutex);
@@ -249,6 +259,7 @@ int lustre_create(const std::string& lustre_root_path, const std::string& fidstr
 
     auto iter = change_map_fidstr.find(fidstr);
     if(iter != change_map_fidstr.end()) {
+        change_map_fidstr.modify(iter, [cr_index](change_descriptor &cd){ cd.cr_index = cr_index; });
         change_map_fidstr.modify(iter, [parent_fidstr](change_descriptor &cd){ cd.parent_fidstr = parent_fidstr; });
         change_map_fidstr.modify(iter, [object_name](change_descriptor &cd){ cd.object_name = object_name; });
         change_map_fidstr.modify(iter, [lustre_path](change_descriptor &cd){ cd.lustre_path = lustre_path; });
@@ -257,6 +268,7 @@ int lustre_create(const std::string& lustre_root_path, const std::string& fidstr
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
     } else {
         change_descriptor entry{};
+        entry.cr_index = cr_index;
         entry.fidstr = fidstr;
         entry.parent_fidstr = parent_fidstr;
         entry.object_name = object_name;
@@ -265,14 +277,14 @@ int lustre_create(const std::string& lustre_root_path, const std::string& fidstr
         entry.last_event = ChangeDescriptor::EventTypeEnum::CREATE;
         entry.timestamp = time(NULL);
         entry.object_type = ChangeDescriptor::ObjectTypeEnum::FILE;
-        change_map.push_back(entry);
+        change_map.insert(entry);
     }
 
     return lustre_irods::SUCCESS; 
 
 }
 
-int lustre_mtime(const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
+int lustre_mtime(unsigned long long cr_index, const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
                  const std::string& object_name, const std::string& lustre_path, change_map_t& change_map) {
 
     std::lock_guard<std::mutex> lock(change_table_mutex);
@@ -282,10 +294,12 @@ int lustre_mtime(const std::string& lustre_root_path, const std::string& fidstr,
 
     auto iter = change_map_fidstr.find(fidstr);
     if(iter != change_map_fidstr.end()) {   
+        change_map_fidstr.modify(iter, [cr_index](change_descriptor &cd){ cd.cr_index = cr_index; });
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.oper_complete = false; });
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
     } else {
         change_descriptor entry{};
+        entry.cr_index = cr_index;
         entry.fidstr = fidstr;
         //entry.parent_fidstr = parent_fidstr;
         //entry.lustre_path = lustre_path;
@@ -293,14 +307,14 @@ int lustre_mtime(const std::string& lustre_root_path, const std::string& fidstr,
         entry.last_event = ChangeDescriptor::EventTypeEnum::OTHER;
         entry.oper_complete = false;
         entry.timestamp = time(NULL);
-        change_map.push_back(entry);
+        change_map.insert(entry);
     }
 
     return lustre_irods::SUCCESS; 
 
 }
 
-int lustre_trunc(const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
+int lustre_trunc(unsigned long long cr_index, const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
                  const std::string& object_name, const std::string& lustre_path, change_map_t& change_map) {
 
     std::lock_guard<std::mutex> lock(change_table_mutex);
@@ -315,6 +329,7 @@ int lustre_trunc(const std::string& lustre_root_path, const std::string& fidstr,
 
     auto iter = change_map_fidstr.find(fidstr);
     if(iter != change_map_fidstr.end()) {
+        change_map_fidstr.modify(iter, [cr_index](change_descriptor &cd){ cd.cr_index = cr_index; });
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.oper_complete = false; });
         change_map_fidstr.modify(iter, [](change_descriptor &cd){ cd.timestamp = time(NULL); });
         if (0 == result) {
@@ -322,6 +337,7 @@ int lustre_trunc(const std::string& lustre_root_path, const std::string& fidstr,
         }
     } else {
         change_descriptor entry{};
+        entry.cr_index = cr_index;
         entry.fidstr = fidstr;
         //entry.parent_fidstr = parent_fidstr;
         //entry.lustre_path = lustre_path;
@@ -331,7 +347,7 @@ int lustre_trunc(const std::string& lustre_root_path, const std::string& fidstr,
         if (0 == result) {
             entry.file_size = st.st_size;
         }
-        change_map.push_back(entry);
+        change_map.insert(entry);
     }
 
     return lustre_irods::SUCCESS; 
@@ -382,8 +398,8 @@ int remove_fidstr_from_table(const std::string& fidstr, change_map_t& change_map
 // This is just a debugging function
 void lustre_write_change_table_to_str(const change_map_t& change_map, std::string& buffer) {
 
-    boost::format change_record_header_format_obj("%-30s %-30s %-12s %-20s %-30s %-17s %-11s %-15s %-10s\n");
-    boost::format change_record_format_obj("%-30s %-30s %-12s %-20s %-30s %-17s %-11s %-15s %lu\n");
+    boost::format change_record_header_format_obj("%-15s %-30s %-30s %-12s %-20s %-30s %-17s %-11s %-15s %-10s\n");
+    boost::format change_record_format_obj("%015u %-30s %-30s %-12s %-20s %-30s %-17s %-11s %-15s %lu\n");
 
     std::lock_guard<std::mutex> lock(change_table_mutex);
 
@@ -392,10 +408,10 @@ void lustre_write_change_table_to_str(const change_map_t& change_map, std::strin
 
     char time_str[18];
 
-    buffer = str(change_record_header_format_obj % "FIDSTR" % "PARENT_FIDSTR" % "OBJECT_TYPE" % "OBJECT_NAME" % "LUSTRE_PATH" % "TIME" %
+    buffer = str(change_record_header_format_obj % "CR_INDEX" % "FIDSTR" % "PARENT_FIDSTR" % "OBJECT_TYPE" % "OBJECT_NAME" % "LUSTRE_PATH" % "TIME" %
             "EVENT_TYPE" % "OPER_COMPLETE?" % "FILE_SIZE");
 
-    buffer += str(change_record_header_format_obj % "------" % "-------------" % "-----------"% "-----------" % "-----------" % "----" % 
+    buffer += str(change_record_header_format_obj % "--------" % "------" % "-------------" % "-----------"% "-----------" % "-----------" % "----" % 
             "----------" % "--------------" % "---------");
 
     for (auto iter = change_map_seq.begin(); iter != change_map_seq.end(); ++iter) {
@@ -405,7 +421,7 @@ void lustre_write_change_table_to_str(const change_map_t& change_map, std::strin
          timeinfo = localtime(&iter->timestamp);
          strftime(time_str, sizeof(time_str), "%Y%m%d %I:%M:%S", timeinfo);
 
-         buffer += str(change_record_format_obj % fidstr.c_str() % iter->parent_fidstr.c_str() %
+         buffer += str(change_record_format_obj % iter->cr_index % fidstr.c_str() % iter->parent_fidstr.c_str() %
                  object_type_to_str(iter->object_type).c_str() %
                  iter->object_name.c_str() % 
                  iter->lustre_path.c_str() % time_str % 
@@ -417,14 +433,14 @@ void lustre_write_change_table_to_str(const change_map_t& change_map, std::strin
 }
 
 // This is just a debugging function
-void lustre_print_change_table(change_map_t& change_map) {
+void lustre_print_change_table(const change_map_t& change_map) {
    
     std::string change_table_str; 
     lustre_write_change_table_to_str(change_map, change_table_str);
     LOG(LOG_DBG, "%s", change_table_str.c_str());
 }
 
-// Sets the update status
+// Sets the update status.  This copies the message to a new buffer which must be deleted by the caller.
 int set_update_status_in_capnproto_buf(unsigned char*& buf, size_t& buflen, const std::string& new_status) {
 
     if (nullptr == buf) {
@@ -447,9 +463,6 @@ int set_update_status_in_capnproto_buf(unsigned char*& buf, size_t& buflen, cons
 
     kj::Array<capnp::word> array = capnp::messageToFlatArray(message_builder);
     size_t message_size = array.size() * sizeof(capnp::word);
-
-    // TODO look at this
-    //free(buf);
 
     buf = (unsigned char*)malloc(message_size);
     buflen = message_size;
@@ -544,7 +557,8 @@ int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *conf
            
             LOG(LOG_DBG, "adding fidstr %s to active fidstr list\n", iter->fidstr.c_str());
             temp_fidstr_list.insert(iter->fidstr);
- 
+
+            entries[cnt].setCrIndex(iter->cr_index);
             entries[cnt].setFidstr(iter->fidstr);
             entries[cnt].setParentFidstr(iter->parent_fidstr);
             entries[cnt].setObjectType(iter->object_type);
@@ -554,7 +568,7 @@ int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *conf
             entries[cnt].setFileSize(iter->file_size);
 
             // before deleting write the entry to removed_entries 
-            //removed_entries->push_back(*iter);
+            //removed_entries->insert(*iter);
 
             // delete entry from table 
             iter = change_map_seq.erase(iter);
@@ -611,6 +625,7 @@ int add_capnproto_buffer_back_to_change_table(unsigned char* buf, size_t buflen,
     for (ChangeDescriptor::Reader entry : change_map_from_message.getEntries()) {
 
         change_descriptor record {};
+        record.cr_index = entry.getCrIndex();
         record.last_event = entry.getEventType();
         record.fidstr = entry.getFidstr().cStr();
         record.lustre_path = entry.getLustrePath().cStr();
@@ -623,8 +638,7 @@ int add_capnproto_buffer_back_to_change_table(unsigned char* buf, size_t buflen,
 
         LOG(LOG_DBG, "writing entry back to change_map.\n");
 
-        // TODO - do we need to put this on the front of the list?
-        change_map.push_back(record);
+        change_map.insert(record);
 
         // remove fidstr from active fidstr list
         //LOG(LOG_DBG, "add_capnproto_buffer_back_to_change_table: removing fidstr %s from active fidstr list - lustre_path is %s\n", record.fidstr.c_str(), record.lustre_path.c_str());
@@ -678,7 +692,7 @@ std::string event_type_to_str(ChangeDescriptor::EventTypeEnum type) {
 }
 
 ChangeDescriptor::EventTypeEnum str_to_event_type(const std::string& str) {
-    if ("CREAT" == str) {
+    if ("CREATE" == str) {
         return ChangeDescriptor::EventTypeEnum::CREATE;
     } else if ("UNLINK" == str) {
         return ChangeDescriptor::EventTypeEnum::UNLINK;
@@ -718,6 +732,7 @@ bool entries_ready_to_process(change_map_t& change_map) {
     // get change map indexed on oper_complete 
     auto &change_map_oper_complete = change_map.get<change_descriptor_oper_complete_idx>();
     bool ready = change_map_oper_complete.count(true) > 0;
+    LOG(LOG_INFO, "change map size: =%lu\n", change_map.size());
     LOG(LOG_INFO, "entries_ready_to_process = %i\n", ready);
     return ready; 
 }
@@ -743,8 +758,8 @@ int serialize_change_map_to_sqlite(change_map_t& change_map) {
 
         sqlite3_stmt *stmt;     
         sqlite3_prepare_v2(db, "insert into change_map (fidstr, parent_fidstr, object_name, lustre_path, last_event, "
-                               "timestamp, oper_complete, object_type, file_size) values (?1, ?2, ?3, ?4, "
-                               "?5, ?6, ?7, ?8, ?9);", -1, &stmt, NULL);       
+                               "timestamp, oper_complete, object_type, file_size, cr_index) values (?1, ?2, ?3, ?4, "
+                               "?5, ?6, ?7, ?8, ?9, ?10);", -1, &stmt, NULL);       
         sqlite3_bind_text(stmt, 1, iter->fidstr.c_str(), -1, SQLITE_STATIC); 
         sqlite3_bind_text(stmt, 2, iter->parent_fidstr.c_str(), -1, SQLITE_STATIC); 
         sqlite3_bind_text(stmt, 3, iter->object_name.c_str(), -1, SQLITE_STATIC); 
@@ -754,6 +769,7 @@ int serialize_change_map_to_sqlite(change_map_t& change_map) {
         sqlite3_bind_int(stmt, 7, iter->oper_complete ? 1 : 0);
         sqlite3_bind_text(stmt, 8, object_type_to_str(iter->object_type).c_str(), -1, SQLITE_STATIC); 
         sqlite3_bind_int(stmt, 9, iter->file_size); 
+        sqlite3_bind_int(stmt, 10, iter->cr_index); 
 
         rc = sqlite3_step(stmt); 
         if (SQLITE_DONE != rc) {
@@ -774,7 +790,7 @@ static int query_callback(void *change_map_void_ptr, int argc, char** argv, char
         LOG(LOG_ERR, "Invalid nullptr sent to change_map in %s\n", __FUNCTION__);
     }
 
-    if (9 != argc) {
+    if (10 != argc) {
         LOG(LOG_ERR, "Invalid number of columns returned from change_map query in database.\n");
         return  lustre_irods::SQLITE_DB_ERROR;
     }
@@ -791,11 +807,13 @@ static int query_callback(void *change_map_void_ptr, int argc, char** argv, char
     int oper_complete;
     int timestamp;
     int file_size;
+    unsigned long long cr_index;
 
     try {
         oper_complete = boost::lexical_cast<int>(argv[5]);
         timestamp = boost::lexical_cast<time_t>(argv[6]);
         file_size = boost::lexical_cast<off_t>(argv[8]);
+        cr_index = boost::lexical_cast<unsigned long long>(argv[9]);
     } catch( boost::bad_lexical_cast const& ) {
         LOG(LOG_ERR, "Could not convert the string to int returned from change_map query in database.\n");
         return  lustre_irods::SQLITE_DB_ERROR;
@@ -805,9 +823,10 @@ static int query_callback(void *change_map_void_ptr, int argc, char** argv, char
     entry.timestamp = timestamp;
     entry.last_event = str_to_event_type(argv[7]);
     entry.file_size = file_size;
+    entry.cr_index = cr_index;
 
     std::lock_guard<std::mutex> lock(change_table_mutex);
-    change_map->push_back(entry);
+    change_map->insert(entry);
 
     return lustre_irods::SUCCESS;
 }
@@ -826,7 +845,7 @@ int deserialize_change_map_from_sqlite(change_map_t& change_map) {
     }
 
     rc = sqlite3_exec(db, "select fidstr, parent_fidstr, object_name, object_type, lustre_path, oper_complete, "
-                          "timestamp, last_event, file_size from change_map", query_callback, &change_map, &zErrMsg);
+                          "timestamp, last_event, file_size, cr_index from change_map", query_callback, &change_map, &zErrMsg);
 
     if (rc) {
         LOG(LOG_ERR, "Error querying change_map from db during de-serialization: %s\n", zErrMsg);
@@ -856,6 +875,7 @@ int initiate_change_map_serialization_database() {
 
     const char *create_table_str = "create table if not exists change_map ("
        "fidstr char(256) primary key, "
+       "cr_index integer, "
        "parent_fidstr char(256), "
        "object_name char(256), "
        "lustre_path char(256), "
@@ -891,7 +911,7 @@ void add_entries_back_to_change_table(change_map_t& change_map, std::shared_ptr<
 
     auto &change_map_seq = removed_entries->get<0>(); 
     for (auto iter = change_map_seq.begin(); iter != change_map_seq.end(); ++iter) {
-        change_map.push_back(*iter);
+        change_map.insert(*iter);
     }
 }
 

@@ -252,6 +252,7 @@ void run_main_changelog_reader_loop(const lustre_irods_connector_cfg_t& config_s
                 // wait on the completion of one fid to complete before continuing, 
                 // then break out of this loop
                 if (rc != lustre_irods::SUCCESS) {
+                    free(buf);
                     break;
                 }
 
@@ -435,6 +436,7 @@ void irods_api_client_main(const lustre_irods_connector_cfg_t *config_struct_ptr
                 zmq::message_t response_message(bufflen);
                 memcpy(static_cast<char*>(response_message.data()), buf, bufflen);
                 sender.send(response_message);
+                free(buf);
 
             } else {
                 // update the status to pass and send to accumulator
@@ -444,6 +446,7 @@ void irods_api_client_main(const lustre_irods_connector_cfg_t *config_struct_ptr
                 zmq::message_t response_message(bufflen);
                 memcpy(static_cast<char*>(response_message.data()), buf, bufflen);
                 sender.send(response_message);
+                free(buf);
 
            }
 
@@ -544,6 +547,8 @@ int main(int argc, char *argv[]) {
         LOG(LOG_ERR, "failed to deserialize change map on startup\n");
         return EX_SOFTWARE;
     }
+
+    lustre_print_change_table(change_map);
 
     // connect to irods and get the resource id from the resource name 
     { 

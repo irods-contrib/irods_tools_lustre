@@ -12,12 +12,14 @@
 #include <boost/multi_index/sequenced_index.hpp>
 #include <boost/multi_index/member.hpp>
 #include <boost/multi_index/hashed_index.hpp>
+#include <boost/multi_index/ordered_index.hpp>
 #include <boost/filesystem.hpp>
 
 #include "change_table.capnp.h"
 
 
 struct change_descriptor {
+    unsigned long long            cr_index;
     std::string                   fidstr;
     std::string                   parent_fidstr;
     std::string                   object_name;
@@ -38,8 +40,11 @@ struct change_descriptor_oper_complete_idx {};
 typedef boost::multi_index::multi_index_container<
   change_descriptor,
   boost::multi_index::indexed_by<
-    boost::multi_index::sequenced<
-      boost::multi_index::tag<change_descriptor_seq_idx>
+    boost::multi_index::ordered_unique<
+      boost::multi_index::tag<change_descriptor_seq_idx>,
+      boost::multi_index::member<
+        change_descriptor, unsigned long long, &change_descriptor::cr_index
+      >
     >,
     boost::multi_index::hashed_unique<
       boost::multi_index::tag<change_descriptor_fidstr_idx>,
@@ -58,22 +63,22 @@ typedef boost::multi_index::multi_index_container<
 > change_map_t;
 
 
-int lustre_close(const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
+int lustre_close(unsigned long long cr_index, const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
                      const std::string& object_name, const std::string& lustre_path, change_map_t& change_map);
-int lustre_mkdir(const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
+int lustre_mkdir(unsigned long long cr_index, const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
                      const std::string& object_name, const std::string& lustre_path, change_map_t& change_map);
-int lustre_rmdir(const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
+int lustre_rmdir(unsigned long long cr_index, const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
                      const std::string& object_name, const std::string& lustre_path, change_map_t& change_map);
-int lustre_unlink(const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
+int lustre_unlink(unsigned long long cr_index, const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
                      const std::string& object_name, const std::string& lustre_path, change_map_t& change_map);
-int lustre_rename(const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
+int lustre_rename(unsigned long long cr_index, const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
                      const std::string& object_name, const std::string& lustre_path, const std::string& old_lustre_path, 
                      change_map_t& change_map);
-int lustre_create(const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
+int lustre_create(unsigned long long cr_index, const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
                      const std::string& object_name, const std::string& lustre_path, change_map_t& change_map);
-int lustre_mtime(const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
+int lustre_mtime(unsigned long long cr_index, const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
                      const std::string& object_name, const std::string& lustre_path, change_map_t& change_map);
-int lustre_trunc(const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
+int lustre_trunc(unsigned long long cr_index, const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
                      const std::string& object_name, const std::string& lustre_path, change_map_t& change_map);
 
 
@@ -81,7 +86,6 @@ int remove_fidstr_from_table(const std::string& fidstr, change_map_t& change_map
 
 
 void lustre_print_change_table(const change_map_t& change_map);
-void lustre_write_change_table_to_str(char *buffer, const size_t buffer_size, const change_map_t& change_map);
 bool entries_ready_to_process(change_map_t& change_map);
 int serialize_change_map_to_sqlite(change_map_t& change_map);
 int deserialize_change_map_from_sqlite(change_map_t& change_map);

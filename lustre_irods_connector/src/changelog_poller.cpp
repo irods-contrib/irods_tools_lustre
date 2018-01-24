@@ -148,7 +148,7 @@ int get_full_path_from_record(const std::string& root_path, changelog_rec_ptr re
     return lustre_irods::SUCCESS;
 }
 
-int not_implemented(const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr, 
+int not_implemented(unsigned long long cr_index, const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr, 
         const std::string& object_path, const std::string& lustre_path, change_map_t& change_map) {
     LOG(LOG_DBG, "OPERATION NOT IMPLEMENTED\n");
     return lustre_irods::SUCCESS;
@@ -158,7 +158,7 @@ int not_implemented(const std::string& lustre_root_path, const std::string& fids
 //typedef int (*lustre_operation)(const std::string&, const std::string&, const std::string&, const std::string&, const std::string&, change_map_t&);
 
 //std::vector<lustre_operation> lustre_operators = 
-std::vector<std::function<int(const std::string&, const std::string&, const std::string&, const std::string&, const std::string&, change_map_t&)> > lustre_operators = 
+std::vector<std::function<int(unsigned long long, const std::string&, const std::string&, const std::string&, const std::string&, const std::string&, change_map_t&)> > lustre_operators = 
 {   &not_implemented,           // CL_MARK
     &lustre_create,             // CL_CREATE
     &lustre_mkdir,              // CL_MKDIR
@@ -192,6 +192,8 @@ int handle_record(const std::string& lustre_root_path, changelog_rec_ptr rec, ch
         LOG(LOG_ERR, "Invalid cr_type - %u\n", get_cr_type_from_changelog_rec(rec));
         return lustre_irods::INVALID_CR_TYPE_ERROR;
     }
+
+    unsigned long long cr_index = get_cr_index_from_changelog_rec(rec);
 
     std::string lustre_full_path;
     std::string fidstr;
@@ -245,10 +247,10 @@ int handle_record(const std::string& lustre_root_path, changelog_rec_ptr rec, ch
 
         old_lustre_path = lustre_root_path + old_parent_path + old_filename;
 
-        return lustre_rename(lustre_root_path, fidstr, parent_fidstr, object_name, lustre_full_path, old_lustre_path, change_map);
+        return lustre_rename(cr_index, lustre_root_path, fidstr, parent_fidstr, object_name, lustre_full_path, old_lustre_path, change_map);
     } else {
         //return (*lustre_operators[get_cr_type_from_changelog_rec(rec)])(lustre_root_path, fidstr, parent_fidstr, object_name, lustre_full_path, change_map);
-        return lustre_operators[get_cr_type_from_changelog_rec(rec)](lustre_root_path, fidstr, parent_fidstr, object_name, lustre_full_path, change_map);
+        return lustre_operators[get_cr_type_from_changelog_rec(rec)](cr_index, lustre_root_path, fidstr, parent_fidstr, object_name, lustre_full_path, change_map);
     }
 }
 

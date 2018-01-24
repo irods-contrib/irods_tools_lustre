@@ -49,7 +49,7 @@ struct ChangeDescriptor {
 
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(d9a83e4ac76efb39, 3, 4)
+    CAPNP_DECLARE_STRUCT_HEADER(d9a83e4ac76efb39, 4, 4)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -111,6 +111,8 @@ public:
   inline  ::ChangeDescriptor::ObjectTypeEnum getObjectType() const;
 
   inline  ::int64_t getFileSize() const;
+
+  inline  ::int64_t getCrIndex() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -182,6 +184,9 @@ public:
 
   inline  ::int64_t getFileSize();
   inline void setFileSize( ::int64_t value);
+
+  inline  ::int64_t getCrIndex();
+  inline void setCrIndex( ::int64_t value);
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -531,6 +536,20 @@ inline  ::int64_t ChangeDescriptor::Builder::getFileSize() {
 inline void ChangeDescriptor::Builder::setFileSize( ::int64_t value) {
   _builder.setDataField< ::int64_t>(
       ::capnp::bounded<2>() * ::capnp::ELEMENTS, value);
+}
+
+inline  ::int64_t ChangeDescriptor::Reader::getCrIndex() const {
+  return _reader.getDataField< ::int64_t>(
+      ::capnp::bounded<3>() * ::capnp::ELEMENTS);
+}
+
+inline  ::int64_t ChangeDescriptor::Builder::getCrIndex() {
+  return _builder.getDataField< ::int64_t>(
+      ::capnp::bounded<3>() * ::capnp::ELEMENTS);
+}
+inline void ChangeDescriptor::Builder::setCrIndex( ::int64_t value) {
+  _builder.setDataField< ::int64_t>(
+      ::capnp::bounded<3>() * ::capnp::ELEMENTS, value);
 }
 
 inline bool ChangeMap::Reader::hasEntries() const {

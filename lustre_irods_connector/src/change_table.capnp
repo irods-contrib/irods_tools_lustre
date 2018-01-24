@@ -10,6 +10,7 @@ struct ChangeDescriptor {
   operComplete @6 :Bool;
   objectType @7 :ObjectTypeEnum;
   fileSize @8 :Int64;
+  crIndex @9 :Int64;
 
   enum EventTypeEnum {
     other @0;
