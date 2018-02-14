@@ -1,6 +1,6 @@
 # Description
 
-This is a connector to synchronize Lustre files with iRODS using the Lustre changelog and LCAPD.  This is currently in a prototype stage.  Multithreading and batch updates to iRODS will be added in the near future, no hardcoded configuration, etc. 
+This is a connector to synchronize Lustre files with iRODS using the Lustre changelog and LCAPD.  This is currently in a prototype stage.  
 
 # Prerequisites
 
