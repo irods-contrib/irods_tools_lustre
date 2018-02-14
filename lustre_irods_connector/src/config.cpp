@@ -189,7 +189,7 @@ int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *
 
             auto entry = config_map.find(key);
             if (config_map.end() != entry) {
-                irods_connection_cfg config_entry;
+                irods_connection_cfg_t config_entry;
                 auto tmp = entry->second["irods_host"];
                 std::stringstream ss;
                 ss << tmp;
