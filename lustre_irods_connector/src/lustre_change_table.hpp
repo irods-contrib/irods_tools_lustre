@@ -97,6 +97,8 @@ int add_capnproto_buffer_back_to_change_table(unsigned char* buf, size_t buflen,
 void remove_fidstr_from_active_list(unsigned char* buf, size_t buflen, std::set<std::string>& current_active_fidstr_list);
 int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *config_struct_ptr, void*& buf, size_t& buflen,
                                           change_map_t& change_map, std::set<std::string>& current_active_fidstr_list); 
+int get_cr_index(unsigned long long& cr_index);
+int write_cr_index_to_sqlite(unsigned long long cr_index);
 
 
 #endif

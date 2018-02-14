@@ -184,7 +184,7 @@ int read_and_process_command_line_options(int argc, char *argv[], std::string& c
 // and sends groups of changelog records to client updater threads.
 void run_main_changelog_reader_loop(const lustre_irods_connector_cfg_t& config_struct, change_map_t& change_map, 
         lcap_cl_ctx_ptr& ctx, zmq::socket_t& publisher, zmq::socket_t& subscriber, zmq::socket_t& sender,
-        std::set<std::string>& active_fidstr_list) {
+        std::set<std::string>& active_fidstr_list, unsigned long long& last_cr_index) {
     
     // create a vector holding the status of the client's connection to irods - true is up, false is down
     std::vector<bool> irods_api_client_connection_status(config_struct.irods_updater_thread_count, true);   
@@ -239,7 +239,8 @@ void run_main_changelog_reader_loop(const lustre_irods_connector_cfg_t& config_s
 
         if (!pause_reading) {
             LOG(LOG_INFO,"changelog client polling changelog\n");
-            poll_change_log_and_process(config_struct.mdtname.c_str(), config_struct.lustre_root_path.c_str(), change_map, ctx, max_number_of_changelog_records - change_map.size());
+            poll_change_log_and_process(config_struct.mdtname.c_str(), config_struct.lustre_root_path.c_str(), change_map, ctx, 
+                    max_number_of_changelog_records - change_map.size(), last_cr_index);
 
             while (entries_ready_to_process(change_map)) {
                 // get records ready to be processed into buf and buflen
@@ -508,7 +509,7 @@ int main(int argc, char *argv[]) {
     std::string config_file = "lustre_irods_connector_config.json";
     std::string log_file;
     bool fatal_error_detected = false;
-    lcap_cl_ctx_ptr ctx = nullptr;
+    lcap_cl_ctx_ptr lcap_cl_ctx = nullptr;
 
     signal(SIGPIPE, SIG_IGN);
     
@@ -549,6 +550,13 @@ int main(int argc, char *argv[]) {
     }
 
     lustre_print_change_table(change_map);
+
+    unsigned long long last_cr_index = 0;
+    if (get_cr_index(last_cr_index) < 0) {
+        LOG(LOG_ERR, "failed to get last cr_index.  continuing with 0 as index.\n");
+    }
+
+    LOG(LOG_DBG, "last_cr_index is %llu\n", last_cr_index);
 
     // connect to irods and get the resource id from the resource name 
     { 
@@ -605,7 +613,7 @@ int main(int argc, char *argv[]) {
     }
 
     LOG(LOG_DBG, "before start_lcap_changelog\n");
-    rc = start_lcap_changelog(config_struct.mdtname, &ctx);
+    rc = start_lcap_changelog(config_struct.mdtname, &lcap_cl_ctx, last_cr_index+1);
     LOG(LOG_DBG, "after start_lcap_changelog\n");
     if (rc < 0) {
         LOG(LOG_ERR, "lcap_changelog_start: %s\n", zmq_strerror(-rc));
@@ -613,7 +621,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (!fatal_error_detected) {
-        run_main_changelog_reader_loop(config_struct, change_map, ctx, publisher, subscriber, sender, active_fidstr_list);
+        run_main_changelog_reader_loop(config_struct, change_map, lcap_cl_ctx, publisher, subscriber, sender, active_fidstr_list, last_cr_index);
     }
 
     // send message to threads to terminate
@@ -622,16 +630,11 @@ int main(int argc, char *argv[]) {
     s_send(publisher, "terminate"); 
 
     //irods_api_client_thread.join();
-    int i = 0;
     for (auto iter = irods_api_client_thread_list.begin(); iter != irods_api_client_thread_list.end(); ++iter) {
-LOG(LOG_DBG, "before thread %d join\n", i);
         iter->join();
-LOG(LOG_DBG, "after thread %d join\n", i++);
     }
 
-LOG(LOG_DBG, "before accumulator join\n");
     accumulator_thread.join();
-LOG(LOG_DBG, "after accumulator join\n");
 
     LOG(LOG_DBG, "serializing change_map to database\n");
     if (serialize_change_map_to_sqlite(change_map) < 0) {
@@ -639,7 +642,12 @@ LOG(LOG_DBG, "after accumulator join\n");
         fatal_error_detected = true;
     }
 
-    rc = finish_lcap_changelog(ctx);
+    if (write_cr_index_to_sqlite(last_cr_index) < 0) {
+        LOG(LOG_ERR, "failed to write cr_index to database upon exit\n");
+        fatal_error_detected = true;
+    }
+
+    rc = finish_lcap_changelog(lcap_cl_ctx);
     if (rc) {
         LOG(LOG_ERR, "lcap_changelog_fini: %s\n", zmq_strerror(-rc));
         fatal_error_detected = true;

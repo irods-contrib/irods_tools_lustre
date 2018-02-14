@@ -701,7 +701,7 @@ cllDisconnect( icatSessionStruct *icss ) {
 
     int i = cllCheckPending( "", 1, icss->databaseType );
     if ( i == 1 ) {
-        i = cllExecSqlNoResult( icss, "commit" ); /* auto commit any
+        cllExecSqlNoResult( icss, "commit" ); /* auto commit any
                                                    pending SQLs, including
                                                    the Audit ones */
         /* Nothing to do if it fails */

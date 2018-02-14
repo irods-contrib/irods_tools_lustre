@@ -784,7 +784,7 @@ int serialize_change_map_to_sqlite(change_map_t& change_map) {
     return lustre_irods::SUCCESS;
 }
 
-static int query_callback(void *change_map_void_ptr, int argc, char** argv, char** columnNames) {
+static int query_callback_change_map(void *change_map_void_ptr, int argc, char** argv, char** columnNames) {
 
     if (nullptr == change_map_void_ptr) {
         LOG(LOG_ERR, "Invalid nullptr sent to change_map in %s\n", __FUNCTION__);
@@ -831,6 +831,94 @@ static int query_callback(void *change_map_void_ptr, int argc, char** argv, char
     return lustre_irods::SUCCESS;
 }
 
+static int query_callback_cr_index(void *cr_index_void_ptr, int argc, char** argv, char** columnNames) {
+
+    if (nullptr == cr_index_void_ptr) {
+        LOG(LOG_ERR, "Invalid nullptr sent to cr_index_ptr in %s\n", __FUNCTION__);
+    }
+
+    if (1 != argc) {
+        LOG(LOG_ERR, "Invalid number of columns returned from cr_index query in database.\n");
+        return  lustre_irods::SQLITE_DB_ERROR;
+    }
+
+    LOG(LOG_DBG, "%s - argv[0] = [%s]\n", __FUNCTION__, argv[0]);
+
+    unsigned long long *cr_index_ptr = static_cast<unsigned long long*>(cr_index_void_ptr);
+
+    *cr_index_ptr = 0;
+
+    if (nullptr != argv[0]) {
+        try {
+            *cr_index_ptr = boost::lexical_cast<unsigned long long>(argv[0]);
+        } catch( boost::bad_lexical_cast const& ) {
+            LOG(LOG_ERR, "Could not convert the string to int returned from change_map query in database.\n");
+            return  lustre_irods::SQLITE_DB_ERROR;
+        }
+    }
+
+    return lustre_irods::SUCCESS;
+}
+
+int write_cr_index_to_sqlite(unsigned long long cr_index) {
+
+    LOG(LOG_DBG, "%s: cr_index=%llu\n", __FUNCTION__, cr_index);
+
+    sqlite3 *db;
+    int rc;
+
+    rc = sqlite3_open("change_map.db", &db);
+
+    if (rc) {
+        LOG(LOG_ERR, "Can't open change_map.db for serialization.\n");
+        return lustre_irods::SQLITE_DB_ERROR;
+    }
+
+
+    sqlite3_stmt *stmt;     
+    sqlite3_prepare_v2(db, "insert into last_cr_index (cr_index) values (?1);", -1, &stmt, NULL);       
+    sqlite3_bind_int(stmt, 1, cr_index); 
+
+    rc = sqlite3_step(stmt); 
+    if (SQLITE_DONE != rc) {
+        LOG(LOG_ERR, "ERROR inserting data: %s\n", sqlite3_errmsg(db));
+    }
+
+    sqlite3_finalize(stmt);
+
+    sqlite3_close(db);
+
+    return lustre_irods::SUCCESS;
+}
+
+
+int get_cr_index(unsigned long long& cr_index) {
+
+    sqlite3 *db;
+    char *zErrMsg = 0;
+    int rc;
+
+    rc = sqlite3_open("change_map.db", &db);
+
+    if (rc) {
+        LOG(LOG_ERR, "Can't open change_map.db to read changemap index.\n");
+        return lustre_irods::SQLITE_DB_ERROR;
+    }
+
+    rc = sqlite3_exec(db, "select max(cr_index) from last_cr_index", query_callback_cr_index, &cr_index, &zErrMsg);
+
+    if (rc) {
+        LOG(LOG_ERR, "Error querying change_map from db during de-serialization: %s\n", zErrMsg);
+        sqlite3_close(db);
+        return lustre_irods::SQLITE_DB_ERROR;
+    }
+
+    sqlite3_close(db);
+
+    return lustre_irods::SUCCESS;
+}
+
+
 int deserialize_change_map_from_sqlite(change_map_t& change_map) {
 
     sqlite3 *db;
@@ -845,7 +933,7 @@ int deserialize_change_map_from_sqlite(change_map_t& change_map) {
     }
 
     rc = sqlite3_exec(db, "select fidstr, parent_fidstr, object_name, object_type, lustre_path, oper_complete, "
-                          "timestamp, last_event, file_size, cr_index from change_map", query_callback, &change_map, &zErrMsg);
+                          "timestamp, last_event, file_size, cr_index from change_map", query_callback_change_map, &change_map, &zErrMsg);
 
     if (rc) {
         LOG(LOG_ERR, "Error querying change_map from db during de-serialization: %s\n", zErrMsg);
@@ -884,7 +972,11 @@ int initiate_change_map_serialization_database() {
        "oper_complete integer, "
        "object_type char(256), "
        "file_size integer)";
- 
+
+    // note:  storing cr_index as string because integer in sqlite is max of signed 64 bits
+    const char *create_last_cr_index_table = "create table if not exists last_cr_index ("
+       "cr_index integer primary key)";
+
     rc = sqlite3_open("change_map.db", &db);
 
     if (rc) {
@@ -899,6 +991,15 @@ int initiate_change_map_serialization_database() {
         sqlite3_close(db);
         return lustre_irods::SQLITE_DB_ERROR;
     }
+
+    rc = sqlite3_exec(db, create_last_cr_index_table,  NULL, NULL, &zErrMsg);
+    
+    if (rc) {
+        LOG(LOG_ERR, "Error creating last_cr_index table: %s\n", zErrMsg);
+        sqlite3_close(db);
+        return lustre_irods::SQLITE_DB_ERROR;
+    }
+
 
     sqlite3_close(db);
 

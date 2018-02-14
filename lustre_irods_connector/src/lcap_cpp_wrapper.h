@@ -32,6 +32,7 @@ int lcap_changelog_wrapper_clear(lcap_cl_ctx_ptr ctx,
                                  long long endrec); 
 
 int get_lcap_cl_block();
+int get_lcap_cl_direct();
 
 int llapi_fid2path_wrapper(const char *device, const char *fidstr, char *path,
                       int pathlen, long long *recno, int *linkno);

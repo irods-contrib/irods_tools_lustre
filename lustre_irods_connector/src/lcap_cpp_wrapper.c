@@ -44,6 +44,10 @@ int get_lcap_cl_block() {
     return LCAP_CL_BLOCK;
 }
 
+int get_lcap_cl_direct() {
+    return LCAP_CL_DIRECT;
+}
+
 int llapi_fid2path_wrapper(const char *device, const char *fidstr, char *path,
                       int pathlen, long long *recno, int *linkno) { 
 

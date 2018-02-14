@@ -254,9 +254,9 @@ int handle_record(const std::string& lustre_root_path, changelog_rec_ptr rec, ch
     }
 }
 
-int start_lcap_changelog(const std::string& mdtname, lcap_cl_ctx_ptr *ctx) {
-    // TODO can I start at something other than 0LL in case there are multiple listeners so the changelog and the changelog doesn't get cleared?
-    return lcap_changelog_wrapper_start(ctx, get_lcap_cl_block(), mdtname.c_str(), 0LL);
+int start_lcap_changelog(const std::string& mdtname, lcap_cl_ctx_ptr *ctx, unsigned long long start_cr_index) {
+    // TODO passing start_cr_index seems to not work
+    return lcap_changelog_wrapper_start(ctx, get_lcap_cl_block(), mdtname.c_str(), start_cr_index);
 }
 
 int finish_lcap_changelog(lcap_cl_ctx_ptr ctx) {
@@ -269,7 +269,8 @@ int finish_lcap_changelog(lcap_cl_ctx_ptr ctx) {
 //   lustre_root_path - the root path of the lustre mount point
 //   change_map - the change map
 //   ctx - the lcap context (lcap_cl_ctx) 
-int poll_change_log_and_process(const std::string& mdtname, const std::string& lustre_root_path, change_map_t& change_map, lcap_cl_ctx_ptr ctx, int max_records_to_retrieve) {
+int poll_change_log_and_process(const std::string& mdtname, const std::string& lustre_root_path, change_map_t& change_map, lcap_cl_ctx_ptr ctx, 
+        int max_records_to_retrieve, unsigned long long& last_cr_index) {
 
     LOG(LOG_DBG, "poll_change_log_and_process: max_records_to_retrieve = %d\n", max_records_to_retrieve);
 
@@ -281,6 +282,11 @@ int poll_change_log_and_process(const std::string& mdtname, const std::string& l
     int cntr = 0;
 
     while (cntr < max_records_to_retrieve && (rc = lcap_changelog_wrapper_recv(ctx, &rec)) == 0) {
+
+        // TODO workaround because the start changelog start with startrec does not appear to be working
+        if (get_cr_index_from_changelog_rec(rec) < last_cr_index) {
+            continue;
+        } 
          
         cntr++;
 
@@ -350,6 +356,7 @@ int poll_change_log_and_process(const std::string& mdtname, const std::string& l
                     rc);
         }
 
+        last_cr_index = get_cr_index_from_changelog_rec(rec);
         rc = lcap_changelog_wrapper_clear(ctx, mdtname.c_str(), clid, get_cr_index_from_changelog_rec(rec));
         if (rc < 0) {
             LOG(LOG_ERR, "lcap_changelog_clear: %s\n", zmq_strerror(-rc));

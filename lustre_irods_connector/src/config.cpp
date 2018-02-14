@@ -196,7 +196,7 @@ int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *
                 std::string value = ss.str();
                 value.erase(remove(value.begin(), value.end(), '\"' ), value.end());
                 if ("null" == value) {
-                    LOG(LOG_ERR, "Could not read irods_host for connection %d.  Either define it or leave off connection 1 paramters to use defaults from the iRODS environment.\n", i);
+                    LOG(LOG_ERR, "Could not read irods_host for connection %u.  Either define it or leave off connection 1 paramters to use defaults from the iRODS environment.\n", i);
                     return lustre_irods::CONFIGURATION_ERROR;
                 }
 
