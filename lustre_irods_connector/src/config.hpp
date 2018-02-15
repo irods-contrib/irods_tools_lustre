@@ -8,7 +8,7 @@ const int MAX_CONFIG_VALUE_SIZE = 256;
 
 typedef struct irods_connection_cfg {
     std::string irods_host;
-    unsigned int irods_port;
+    int irods_port;
 } irods_connection_cfg_t;
 
 typedef struct lustre_irods_connector_cfg {
