@@ -216,9 +216,8 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
 
     int status;
 
-    // TODO check if I am the catalog, if not either error or redirect
-    //   see getAndConnRcatHost()
-
+    // Bulk request must be performed on an iCAT server.  If this is not the iCAT, forward this
+    // request to it.
     rodsServerHost_t *rodsServerHost;
     status = getAndConnRcatHost(_comm, MASTER_RCAT, (const char*)nullptr, &rodsServerHost);
     if ( status < 0 ) {
@@ -227,7 +226,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
     }
 
     if ( rodsServerHost->localFlag != LOCAL_HOST ) {
-        rodsLog(LOG_DEBUG, "Bulk request received by catalog consumer.  Forwarding request to catalog provider.");
+        rodsLog(LOG_NOTICE, "Bulk request received by catalog consumer.  Forwarding request to catalog provider.");
         status = procApiRequest(rodsServerHost->conn, 15001, _inp, nullptr, (void**)_out, nullptr);
         return status;
     }
@@ -243,9 +242,6 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
         rodsLog(LOG_ERROR, "Error:  Attempting bulk Lustre operations on a catalog consumer.  Must connect to catalog provider.");
         return CAT_NOT_OPEN;
     }
-
-    // TODO End
-
 
     icatSessionStruct *icss;
     status = chlGetRcs( &icss );
