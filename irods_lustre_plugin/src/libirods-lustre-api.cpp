@@ -7,6 +7,8 @@
 #include "objStat.h"
 #include "icatHighLevelRoutines.hpp"
 #include "irods_virtual_path.hpp"
+#include "miscServerFunct.hpp"
+#include "irods_configuration_keywords.hpp"
 
 #include "boost/lexical_cast.hpp"
 #include "boost/filesystem.hpp"
@@ -213,6 +215,37 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
     rodsLog( LOG_NOTICE, "Dynamic API - Lustre API" );
 
     int status;
+
+    // TODO check if I am the catalog, if not either error or redirect
+    //   see getAndConnRcatHost()
+
+    rodsServerHost_t *rodsServerHost;
+    status = getAndConnRcatHost(_comm, MASTER_RCAT, (const char*)nullptr, &rodsServerHost);
+    if ( status < 0 ) {
+        rodsLog(LOG_ERROR, "Error:  getAndConnRcatHost returned %d", status);
+        return status;
+    }
+
+    if ( rodsServerHost->localFlag != LOCAL_HOST ) {
+        rodsLog(LOG_DEBUG, "Bulk request received by catalog consumer.  Forwarding request to catalog provider.");
+        status = procApiRequest(rodsServerHost->conn, 15001, _inp, nullptr, (void**)_out, nullptr);
+        return status;
+    }
+
+    std::string svc_role;
+    irods::error ret = get_catalog_service_role(svc_role);
+    if(!ret.ok()) {
+        irods::log(PASS(ret));
+        return ret.code();
+    }
+
+    if (irods::CFG_SERVICE_ROLE_PROVIDER != svc_role) {
+        rodsLog(LOG_ERROR, "Error:  Attempting bulk Lustre operations on a catalog consumer.  Must connect to catalog provider.");
+        return CAT_NOT_OPEN;
+    }
+
+    // TODO End
+
 
     icatSessionStruct *icss;
     status = chlGetRcs( &icss );

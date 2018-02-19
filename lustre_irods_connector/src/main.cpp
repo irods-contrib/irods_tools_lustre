@@ -559,6 +559,7 @@ int main(int argc, char *argv[]) {
     LOG(LOG_DBG, "last_cr_index is %llu\n", last_cr_index);
 
     // connect to irods and get the resource id from the resource name 
+    // uses irods environment for this initial connection
     { 
         lustre_irods_connection conn(0);
 
