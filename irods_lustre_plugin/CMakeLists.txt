@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.5.0 FATAL_ERROR) #CPACK_DEBIAN_<COMPONENT>_PACK
 
 project(irods-lustre-api C CXX)
 
-find_package(IRODS 4.2.0 EXACT REQUIRED)
+find_package(IRODS 4.2.2 EXACT REQUIRED)
 
 if (NOT ODBC_LIBRARY)
   find_library(ODBC_LIBRARY odbc)
@@ -48,11 +48,27 @@ set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-z,defs")
 #include(icommand.cmake)
 
 set(
-  IRODS_DATABASE_PLUGINS
-  postgres
-  mysql
-  oracle
+  IRODS_DATABASE_PLUGINS ""
   )
+
+if (EXISTS "/usr/lib/irods/plugins/database/libpostgres.so")
+  list(APPEND IRODS_DATABASE_PLUGINS postgres)
+endif()
+
+if (EXISTS "/usr/lib/irods/plugins/database/libmysql.so")
+  list(APPEND IRODS_DATABASE_PLUGINS mysql)
+endif()
+
+if (EXISTS "/usr/lib/irods/plugins/database/liboracle.so")
+  list(APPEND IRODS_DATABASE_PLUGINS oracle)
+endif()
+
+#set(
+#  IRODS_DATABASE_PLUGINS
+#  postgres
+#  mysql
+#  oracle
+#  )
 
 set(CPACK_COMPONENTS_ALL ${IRODS_DATABASE_PLUGINS})
 

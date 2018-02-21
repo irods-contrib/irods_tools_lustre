@@ -668,7 +668,7 @@ rodsLong_t cmlGetCurrentSeqVal( icatSessionStruct *icss ) {
 #ifdef ORA_ICAT
     std::string sql = "select r_objectid.nextval from dual";
 #elif MY_ICAT
-    std::string sql = "select r_objectid.nextval()";
+    std::string sql = "select R_ObjectId_nextval()";
 #else
     std::string sql = "select nextval('r_objectid')";
 #endif

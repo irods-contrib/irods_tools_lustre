@@ -89,7 +89,7 @@ foreach(PLUGIN ${IRODS_API_PLUGINS})
     ${IRODS_EXTERNALS_FULLPATH_BOOST}/lib/libboost_system.so
     ${IRODS_EXTERNALS_FULLPATH_ARCHIVE}/lib/libarchive.so
     ${OPENSSL_CRYPTO_LIBRARY}
-    /usr/lib/irods/plugins/database/libpostgres.so
+    /usr/lib/irods/plugins/database/lib${DB_TYPE}.so
     /usr/local/lib/libcapnp.so
     /usr/local/lib/libkj.so
     ${ODBC_LIBRARY}

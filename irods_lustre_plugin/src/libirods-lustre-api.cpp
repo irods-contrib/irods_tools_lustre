@@ -50,71 +50,72 @@
 extern const char *cllBindVars[MAX_BIND_VARS];
 extern int cllBindVarCount;
 
-const char *update_data_size_sql = "update R_DATA_MAIN set data_size = ? where data_id = ("
+const std::string fidstr_avu_key = "lustre_identifier";
+
+const std::string update_data_size_sql = "update R_DATA_MAIN set data_size = ? where data_id = (select * from ("
                    "select R_DATA_MAIN.data_id "
                    "from R_DATA_MAIN "
                    "inner join R_OBJT_METAMAP on R_DATA_MAIN.data_id = R_OBJT_METAMAP.object_id "
                    "inner join R_META_MAIN on R_META_MAIN.meta_id = R_OBJT_METAMAP.meta_id "
-                   "where R_META_MAIN.meta_attr_name = 'fidstr' and R_META_MAIN.meta_attr_value = ?)";
+                   "where R_META_MAIN.meta_attr_name = '" + fidstr_avu_key + "' and R_META_MAIN.meta_attr_value = ?)temp_table)";
 
-const char *update_data_object_for_rename_sql = "update R_DATA_MAIN set data_name = ?, data_path = ?, coll_id = ("
+const std::string update_data_object_for_rename_sql = "update R_DATA_MAIN set data_name = ?, data_path = ?, coll_id = (select * from ("
                    "select R_COLL_MAIN.coll_id "
                    "from R_COLL_MAIN "
                    "inner join R_OBJT_METAMAP on R_COLL_MAIN.coll_id = R_OBJT_METAMAP.object_id "
                    "inner join R_META_MAIN on R_META_MAIN.meta_id = R_OBJT_METAMAP.meta_id "
-                   "where R_META_MAIN.meta_attr_name = 'fidstr' and R_META_MAIN.meta_attr_value = ?) "
-                   "where data_id = ("
+                   "where R_META_MAIN.meta_attr_name = '" + fidstr_avu_key + "' and R_META_MAIN.meta_attr_value = ?)temp_table)"
+                   "where data_id = (select * from ("
                    "select R_DATA_MAIN.data_id "
                    "from R_DATA_MAIN "
                    "inner join R_OBJT_METAMAP on R_DATA_MAIN.data_id = R_OBJT_METAMAP.object_id "
                    "inner join R_META_MAIN on R_META_MAIN.meta_id = R_OBJT_METAMAP.meta_id "
-                   "where R_META_MAIN.meta_attr_name = 'fidstr' and R_META_MAIN.meta_attr_value = ?)";
+                   "where R_META_MAIN.meta_attr_name = '" + fidstr_avu_key + "' and R_META_MAIN.meta_attr_value = ?)temp_table2)";
 
-const char *get_collection_path_from_fidstr_sql = "select R_COLL_MAIN.coll_name "
+const std::string get_collection_path_from_fidstr_sql = "select R_COLL_MAIN.coll_name "
                    "from R_COLL_MAIN "
                    "inner join R_OBJT_METAMAP on R_COLL_MAIN.coll_id = R_OBJT_METAMAP.object_id "
                    "inner join R_META_MAIN on R_META_MAIN.meta_id = R_OBJT_METAMAP.meta_id "
-                   "where R_META_MAIN.meta_attr_name = 'fidstr' and R_META_MAIN.meta_attr_value = ?";
+                   "where R_META_MAIN.meta_attr_name = '" + fidstr_avu_key + "' and R_META_MAIN.meta_attr_value = ?";
 
 
-const char *update_collection_for_rename_sql = "update R_COLL_MAIN set coll_name = ?, parent_coll_name = ? "
-                   "where coll_id = ("
+const std::string update_collection_for_rename_sql = "update R_COLL_MAIN set coll_name = ?, parent_coll_name = ? "
+                   "where coll_id = (select * from ("
                    "select R_COLL_MAIN.coll_id "
                    "from R_COLL_MAIN "
                    "inner join R_OBJT_METAMAP on R_COLL_MAIN.coll_id = R_OBJT_METAMAP.object_id "
                    "inner join R_META_MAIN on R_META_MAIN.meta_id = R_OBJT_METAMAP.meta_id "
-                   "where R_META_MAIN.meta_attr_name = 'fidstr' and R_META_MAIN.meta_attr_value = ?)";
+                   "where R_META_MAIN.meta_attr_name = '" + fidstr_avu_key + "' and R_META_MAIN.meta_attr_value = ?)temp_table)";
 
-const char *remove_object_meta_sql = "delete from R_OBJT_METAMAP where object_id = ("
+const std::string remove_object_meta_sql = "delete from R_OBJT_METAMAP where object_id = (select * from ("
                    "select R_OBJT_METAMAP.object_id "
                    "from R_OBJT_METAMAP "
                    "inner join R_META_MAIN on R_META_MAIN.meta_id = R_OBJT_METAMAP.meta_id "
-                   "where R_META_MAIN.meta_attr_name = 'fidstr' and R_META_MAIN.meta_attr_value = ?)";
+                   "where R_META_MAIN.meta_attr_name = '" + fidstr_avu_key + "' and R_META_MAIN.meta_attr_value = ?)temp_table)";
 
-const char *unlink_sql = "delete from R_DATA_MAIN where data_id = ("
+const std::string unlink_sql = "delete from R_DATA_MAIN where data_id = (select * from ("
                    "select R_DATA_MAIN.data_id "
                    "from R_DATA_MAIN "
                    "inner join R_OBJT_METAMAP on R_DATA_MAIN.data_id = R_OBJT_METAMAP.object_id "
                    "inner join R_META_MAIN on R_META_MAIN.meta_id = R_OBJT_METAMAP.meta_id "
-                   "where R_META_MAIN.meta_attr_name = 'fidstr' and R_META_MAIN.meta_attr_value = ?)";
+                   "where R_META_MAIN.meta_attr_name = '" + fidstr_avu_key + "' and R_META_MAIN.meta_attr_value = ?)temp_table)";
 
-const char *rmdir_sql = "delete from R_COLL_MAIN where coll_id = ("
+const std::string rmdir_sql = "delete from R_COLL_MAIN where coll_id = (select * from ("
                    "select R_COLL_MAIN.coll_id "
                    "from R_COLL_MAIN "
                    "inner join R_OBJT_METAMAP on R_COLL_MAIN.coll_id = R_OBJT_METAMAP.object_id "
                    "inner join R_META_MAIN on R_META_MAIN.meta_id = R_OBJT_METAMAP.meta_id "
-                   "where R_META_MAIN.meta_attr_name = 'fidstr' and R_META_MAIN.meta_attr_value = ?)";
+                   "where R_META_MAIN.meta_attr_name = '" + fidstr_avu_key + "' and R_META_MAIN.meta_attr_value = ?)temp_table)";
 
-const char *get_collection_id_sql = "select coll_id from r_coll_main where coll_name = ?";
+const std::string get_collection_id_sql = "select coll_id from R_COLL_MAIN where coll_name = ?";
 
-
-const char *insert_data_obj_sql = "insert into R_DATA_MAIN (data_id, coll_id, data_name, data_repl_num, data_type_name, "
+const std::string insert_data_obj_sql = "insert into R_DATA_MAIN (data_id, coll_id, data_name, data_repl_num, data_type_name, "
                    "data_size, resc_name, data_path, data_owner_name, data_owner_zone, data_is_dirty, data_map_id, resc_id) "
                    "values (?, ?, ?, 0, 'generic', ?, 'EMPTY_RESC_NAME', ?, ?, ?, 0, 0, ?)";
 
-const char *insert_user_ownership_data_object_sql = "insert into R_OBJT_ACCESS (object_id, user_id, access_type_id) values (?, ?, 1200)";
+const std::string insert_user_ownership_data_object_sql = "insert into R_OBJT_ACCESS (object_id, user_id, access_type_id) values (?, ?, 1200)";
 
-const char *get_user_id_sql = "select user_id from R_USER_MAIN where user_name = ?";
+const std::string get_user_id_sql = "select user_id from R_USER_MAIN where user_name = ?";
 
 
 // Returns the path in irods for a file in lustre.  
@@ -265,7 +266,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
     rodsLong_t user_id;
     std::vector<std::string> bindVars;
     bindVars.push_back(_comm->clientUser.userName);
-    status = cmlGetIntegerValueFromSql(get_user_id_sql, &user_id, bindVars, icss );
+    status = cmlGetIntegerValueFromSql(get_user_id_sql.c_str(), &user_id, bindVars, icss );
     if (status != 0) {
        rodsLog(LOG_ERROR, "Error getting user_id for user %s.  Error is %i", _comm->clientUser.userName, status);
        return SYS_USER_RETRIEVE_ERR;
@@ -309,7 +310,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
             rodsLong_t coll_id;
             std::vector<std::string> bindVars;
             bindVars.push_back(p.parent_path().string());
-            status = cmlGetIntegerValueFromSql(get_collection_id_sql, &coll_id, bindVars, icss );
+            status = cmlGetIntegerValueFromSql(get_collection_id_sql.c_str(), &coll_id, bindVars, icss );
             if (status != 0) {
                 rodsLog(LOG_ERROR, "Error during registration object %s.  Error getting collection id for collection %s.  Error is %i", 
                         fidstr.c_str(), p.parent_path().string().c_str(),  status);
@@ -326,7 +327,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
             cllBindVars[6] = _comm->clientUser.rodsZone;
             cllBindVars[7] = std::to_string(resource_id).c_str(); 
             cllBindVarCount = 8;
-            status = cmlExecuteNoAnswerSql(insert_data_obj_sql, icss);
+            status = cmlExecuteNoAnswerSql(insert_data_obj_sql.c_str(), icss);
             if (status != 0) {
                 rodsLog(LOG_ERROR, "Error registering object %s.  Error is %i", fidstr.c_str(), status);
                 continue;
@@ -342,7 +343,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
             cllBindVars[0] = std::to_string(seq_no).c_str();
             cllBindVars[1] = std::to_string(user_id).c_str();
             cllBindVarCount = 2;
-            status = cmlExecuteNoAnswerSql(insert_user_ownership_data_object_sql, icss);
+            status = cmlExecuteNoAnswerSql(insert_user_ownership_data_object_sql.c_str(), icss);
             if (status != 0) {
                 rodsLog(LOG_ERROR, "Error adding onwership to object %s.  Error is %i", fidstr.c_str(), status);
                 continue;
@@ -370,14 +371,14 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
                 continue;
             }*/
 
-            // add fidstr metadata
+            // add lustre_identifier metadata
             keyValPair_t reg_param;
             memset(&reg_param, 0, sizeof(reg_param));
-            addKeyVal(&reg_param, "fidstr", fidstr.c_str());
-            status = chlAddAVUMetadata(_comm, 0, "-d", irods_path, "fidstr", fidstr.c_str(), "");
+            addKeyVal(&reg_param, fidstr_avu_key.c_str(), fidstr.c_str());
+            status = chlAddAVUMetadata(_comm, 0, "-d", irods_path, fidstr_avu_key.c_str(), fidstr.c_str(), "");
             rodsLog(LOG_NOTICE, "Return value from chlAddAVUMetdata = %i", status);
             if (status < 0) {
-                rodsLog(LOG_ERROR, "Error adding fidstr metadata to object %s.  Error is %i", fidstr.c_str(), status);
+                rodsLog(LOG_ERROR, "Error adding %s metadata to object %s.  Error is %i", fidstr_avu_key.c_str(), fidstr.c_str(), status);
                 continue;
             }
 
@@ -404,14 +405,14 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
                 continue;
             } 
 
-            // add fidstr metadata
+            // add lustre_identifier metadata
             keyValPair_t reg_param;
             memset(&reg_param, 0, sizeof(reg_param));
-            addKeyVal(&reg_param, "fidstr", fidstr.c_str());
-            status = chlAddAVUMetadata(_comm, 0, "-C", irods_path, "fidstr", fidstr.c_str(), "");
+            addKeyVal(&reg_param, fidstr_avu_key.c_str(), fidstr.c_str());
+            status = chlAddAVUMetadata(_comm, 0, "-C", irods_path, fidstr_avu_key.c_str(), fidstr.c_str(), "");
             rodsLog(LOG_NOTICE, "Return value from chlAddAVUMetdata = %i", status);
             if (status < 0) {
-                rodsLog(LOG_ERROR, "Error adding fidstr metadata to object %s.  Error is %i", fidstr.c_str(), status);
+                rodsLog(LOG_ERROR, "Error adding %s metadata to object %s.  Error is %i", fidstr_avu_key.c_str(), fidstr.c_str(), status);
                 continue;
             }
 
@@ -422,7 +423,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
             cllBindVars[0] = std::to_string(file_size).c_str(); //file_size_str.c_str();
             cllBindVars[1] = fidstr.c_str(); 
             cllBindVarCount = 2;
-            status = cmlExecuteNoAnswerSql(update_data_size_sql, icss);
+            status = cmlExecuteNoAnswerSql(update_data_size_sql.c_str(), icss);
 
             if (status != 0) {
                 rodsLog(LOG_ERROR, "Error updating data_object_size for data_object %s.  Error is %i", fidstr.c_str(), status);
@@ -446,7 +447,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
             cllBindVars[2] = parent_fidstr.c_str();
             cllBindVars[3] = fidstr.c_str();
             cllBindVarCount = 4;
-            status = cmlExecuteNoAnswerSql(update_data_object_for_rename_sql, icss);
+            status = cmlExecuteNoAnswerSql(update_data_object_for_rename_sql.c_str(), icss);
 
             if (status != 0) {
                 rodsLog(LOG_ERROR, "Error updating data object rename for data_object %s.  Error is %i", fidstr.c_str(), status);
@@ -469,7 +470,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
             // get the parent's path - using parent's fidstr
             std::vector<std::string> bindVars;
             bindVars.push_back(parent_fidstr);
-            status = cmlGetStringValueFromSql(get_collection_path_from_fidstr_sql, parent_path, MAX_NAME_LEN, bindVars, icss);
+            status = cmlGetStringValueFromSql(get_collection_path_from_fidstr_sql.c_str(), parent_path, MAX_NAME_LEN, bindVars, icss);
             if (status != 0) {
                 rodsLog(LOG_ERROR, "Error looking up parent collection for rename for collection %s.  Error is %i", fidstr.c_str(), status);
                 cmlExecuteNoAnswerSql("rollback", icss);
@@ -488,7 +489,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
             cllBindVars[1] = parent_path;
             cllBindVars[2] = fidstr.c_str();
             cllBindVarCount = 3;
-            status = cmlExecuteNoAnswerSql(update_collection_for_rename_sql, icss);
+            status = cmlExecuteNoAnswerSql(update_collection_for_rename_sql.c_str(), icss);
 
             if (status != 0) {
                 rodsLog(LOG_ERROR, "Error updating collection object rename for collection %s.  Error is %i", fidstr.c_str(), status);
@@ -507,7 +508,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
 
             cllBindVars[0] = fidstr.c_str();
             cllBindVarCount = 1;
-            status = cmlExecuteNoAnswerSql(unlink_sql, icss);
+            status = cmlExecuteNoAnswerSql(unlink_sql.c_str(), icss);
 
             if (status != 0) {
                 rodsLog(LOG_ERROR, "Error deleting data object %s.  Error is %i", fidstr.c_str(), status);
@@ -518,7 +519,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
             // delete the metadata on the data object 
             cllBindVars[0] = fidstr.c_str();
             cllBindVarCount = 1;
-            status = cmlExecuteNoAnswerSql(remove_object_meta_sql, icss);
+            status = cmlExecuteNoAnswerSql(remove_object_meta_sql.c_str(), icss);
 
             if (status != 0) {
                 // Couldn't delete metadata.  Just log and continue.
@@ -537,7 +538,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
 
             cllBindVars[0] = fidstr.c_str();
             cllBindVarCount = 1;
-            status = cmlExecuteNoAnswerSql(rmdir_sql, icss);
+            status = cmlExecuteNoAnswerSql(rmdir_sql.c_str(), icss);
 
             if (status != 0) {
                 rodsLog(LOG_ERROR, "Error deleting directory %s.  Error is %i", fidstr.c_str(), status);
@@ -548,7 +549,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
             // delete the metadata on the collection 
             cllBindVars[0] = fidstr.c_str();
             cllBindVarCount = 1;
-            status = cmlExecuteNoAnswerSql(remove_object_meta_sql, icss);
+            status = cmlExecuteNoAnswerSql(remove_object_meta_sql.c_str(), icss);
 
             if (status != 0) {
                 // Couldn't delete metadata.  Just log and continue.
