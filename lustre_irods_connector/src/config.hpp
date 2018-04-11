@@ -16,6 +16,7 @@ typedef struct lustre_irods_connector_cfg {
     std::string lustre_root_path;
     std::string irods_register_path;
     std::string irods_resource_name;
+    std::string irods_api_update_type;    // valid values are "direct" and "policy"
     int64_t irods_resource_id;
     unsigned int changelog_poll_interval_seconds;
     unsigned int irods_client_connect_failure_retry_seconds;

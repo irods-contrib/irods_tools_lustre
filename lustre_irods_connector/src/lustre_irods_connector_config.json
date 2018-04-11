@@ -3,6 +3,7 @@
         "lustre_root_path": "/lustre01",
         "irods_register_path": "/tempZone/lustre",
         "irods_resource_name": "demoResc",
+        "irods_api_update_type", "direct",
         "log_level": "LOG_DBG",
         "changelog_poll_interval_seconds": 1,
         "irods_client_connect_failure_retry_seconds": 30,

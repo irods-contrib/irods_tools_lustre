@@ -5,6 +5,7 @@
 #include <sstream>
 #include <typeinfo>
 #include <string>
+#include <algorithm>
 
 #include "config.hpp"
 #include "logging.hpp"
@@ -81,6 +82,12 @@ int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *
             LOG(LOG_ERR, "Key resource_name missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
         }
+        if (0 != read_key_from_map(config_map, "irods_api_update_type", config_struct->irods_api_update_type)) {
+            std::transform(config_struct->irods_api_update_type.begin(), config_struct->irods_api_update_type.end(), 
+                    config_struct->irods_api_update_type.begin(), ::tolower);
+            LOG(LOG_ERR, "Key irods_api_update_type missing from %s\n", filename.c_str());
+            return lustre_irods::CONFIGURATION_ERROR;
+        }
         if (0 != read_key_from_map(config_map, "changelog_poll_interval_seconds", changelog_poll_interval_seconds_str)) {
             LOG(LOG_ERR, "Key changelog_poll_interval_seconds missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
@@ -134,6 +141,15 @@ int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *
 
         printf("log level set to %i\n", log_level);
 
+        // convert irods_api_update_type to lowercase 
+        std::transform(config_struct->irods_api_update_type.begin(), config_struct->irods_api_update_type.end(), 
+                 config_struct->irods_api_update_type.begin(), ::tolower);
+
+        // error if the setting is not "direct" or "policy"
+        if (config_struct->irods_api_update_type != "direct" && config_struct->irods_api_update_type != "policy") { 
+            LOG(LOG_ERR, "Could not parse irods_api_update_type.  It must be either \"direct\" or \"policy\".\n");
+            return lustre_irods::CONFIGURATION_ERROR;
+        }
 
         try {
             config_struct->changelog_poll_interval_seconds = boost::lexical_cast<unsigned int>(changelog_poll_interval_seconds_str);

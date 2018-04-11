@@ -515,8 +515,10 @@ int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *conf
 
     changeMap.setLustreRootPath(config_struct_ptr->lustre_root_path);
     changeMap.setResourceId(config_struct_ptr->irods_resource_id);
+    changeMap.setResourceName(config_struct_ptr->irods_resource_name);
     changeMap.setRegisterPath(config_struct_ptr->irods_register_path);
     changeMap.setUpdateStatus("PENDING");
+    changeMap.setIrodsApiUpdateType(config_struct_ptr->irods_api_update_type);
 
     size_t write_count = change_map_seq.size() >= config_struct_ptr->maximum_records_per_update_to_irods 
         ? config_struct_ptr->maximum_records_per_update_to_irods : change_map_seq.size() ;
@@ -732,8 +734,8 @@ bool entries_ready_to_process(change_map_t& change_map) {
     // get change map indexed on oper_complete 
     auto &change_map_oper_complete = change_map.get<change_descriptor_oper_complete_idx>();
     bool ready = change_map_oper_complete.count(true) > 0;
-    LOG(LOG_INFO, "change map size: =%lu\n", change_map.size());
-    LOG(LOG_INFO, "entries_ready_to_process = %i\n", ready);
+    LOG(LOG_DBG, "change map size: =%lu\n", change_map.size());
+    LOG(LOG_DBG, "entries_ready_to_process = %i\n", ready);
     return ready; 
 }
 

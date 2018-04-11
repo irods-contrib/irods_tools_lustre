@@ -34,6 +34,8 @@ struct ChangeMap {
   registerPath @2 :Text;
   resourceId @3 :Int64;
   updateStatus @4 :Text;
+  irodsApiUpdateType @5 :Text;
+  resourceName @6 :Text;
 }
 
 

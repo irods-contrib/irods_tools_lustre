@@ -238,7 +238,7 @@ void run_main_changelog_reader_loop(const lustre_irods_connector_cfg_t& config_s
         pause_reading = (failed_connections_to_irods_count >= irods_api_client_connection_status.size()); 
 
         if (!pause_reading) {
-            LOG(LOG_INFO,"changelog client polling changelog\n");
+            LOG(LOG_DBG,"changelog client polling changelog\n");
             poll_change_log_and_process(config_struct.mdtname.c_str(), config_struct.lustre_root_path.c_str(), change_map, ctx, 
                     max_number_of_changelog_records - change_map.size(), last_cr_index);
 
@@ -270,7 +270,7 @@ void run_main_changelog_reader_loop(const lustre_irods_connector_cfg_t& config_s
             LOG(LOG_DBG, "in a paused state.  not reading changelog...\n");
         }
 
-        LOG(LOG_INFO,"changelog client sleeping for %d seconds\n", sleep_period);
+        LOG(LOG_DBG,"changelog client sleeping for %d seconds\n", sleep_period);
         sleep(sleep_period);
     }
 }

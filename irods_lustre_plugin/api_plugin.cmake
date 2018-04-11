@@ -23,12 +23,14 @@ set(
   IRODS_API_PLUGIN_SOURCES_lustre_api_server
   ${CMAKE_SOURCE_DIR}/src/libirods-lustre-api.cpp
   ${CMAKE_SOURCE_DIR}/src/database_routines.cpp
+  ${CMAKE_SOURCE_DIR}/src/irods_lustre_operations.cpp
   )
 
 set(
   IRODS_API_PLUGIN_SOURCES_lustre_api_client
   ${CMAKE_SOURCE_DIR}/src/libirods-lustre-api.cpp
   ${CMAKE_SOURCE_DIR}/src/database_routines.cpp
+  ${CMAKE_SOURCE_DIR}/src/irods_lustre_operations.cpp
   )
 
 set(
