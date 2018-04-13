@@ -112,7 +112,9 @@ This will create an executable called lustre_irods_connector and a configuration
 - resource_name - the resource in iRODS
 - resource_id
 - log_level - one of LOG_FATAL, LOG_ERR, LOG_WARN, LOG_INFO, LOG_DBG
-- irods_api_update_type - one of "direct" (if desire direct DB access in the iRODS Lustre plugin) or "policy" (if desire everything to go through the iRODS API's).
+- irods_api_update_type - one of:
+    - direct - iRODS plugin uses direct DB access for all changes
+    - policy - iRODS plugin uses the iRODS API's for all changes
 
 # Running the LCAPD daemon and running the connector.
 
