@@ -83,13 +83,13 @@ make package
 Example for DEB and Postgres:
 
 ```
-sudo dpkg -i irods-lustre-api-4.2.0-Linux-postgres.deb
+sudo dpkg -i irods-lustre-api-4.2.2-Linux-postgres.deb
 ```
 
 Example for RPM and MySQL:
 
 ```
-sudo rpm -i irods-lustre-api-4.2.0-Linux-mysql.rpm
+sudo rpm -i irods-lustre-api-4.2.2-Linux-mysql.rpm
 ```
 
 9.  Build the Lustre-iRODS connector:
@@ -112,6 +112,7 @@ This will create an executable called lustre_irods_connector and a configuration
 - resource_name - the resource in iRODS
 - resource_id
 - log_level - one of LOG_FATAL, LOG_ERR, LOG_WARN, LOG_INFO, LOG_DBG
+- irods_api_update_type - one of "direct" (if desire direct DB access in the iRODS Lustre plugin) or "policy" (if desire everything to go through the iRODS API's).
 
 # Running the LCAPD daemon and running the connector.
 
