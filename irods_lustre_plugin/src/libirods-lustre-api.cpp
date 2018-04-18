@@ -121,7 +121,6 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
     ChangeMap::Reader changeMap = message.getRoot<ChangeMap>();
     std::string irods_api_update_type(changeMap.getIrodsApiUpdateType().cStr()); 
     bool direct_db_modification_requested = (irods_api_update_type == "direct");
-    rodsLog(LOG_ERROR, "direct_db_modification=%d", direct_db_modification_requested);
 
     int status;
     icatSessionStruct *icss = nullptr;
