@@ -126,6 +126,12 @@ const std::string insert_user_ownership_data_object_sql = "insert into R_OBJT_AC
 
 const std::string get_user_id_sql = "select user_id from R_USER_MAIN where user_name = ?";
 
+#ifdef POSTGRES_ICAT
+
+const std::string update_filepath_on_collection_rename_sql = "update R_DATA_MAIN set data_path = overlay(data_path placing ? from 1 for char_length(?)) where data_path like ?";
+
+#endif
+
 // finds an irods object with the attr/val/unit combination, returns the first entry in the list
 int find_irods_path_with_avu(rsComm_t *_conn, const std::string& attr, const std::string& value, const std::string& unit, bool is_collection, std::string& irods_path) {
 
@@ -407,6 +413,7 @@ void handle_mkdir(const std::string& lustre_root_path, const std::string& regist
             return;
         }
 
+
     }
 
 }
@@ -564,6 +571,29 @@ void handle_rename_dir(const std::string& lustre_root_path, const std::string& r
 
     int status;
 
+    // determine the old irods path and new irods path for the collection
+    std::string old_irods_path;
+    std::string new_parent_irods_path;
+    std::string new_irods_path;
+
+    // look up the old irods path for the collection based on fidstr
+    status = find_irods_path_with_avu(_comm, fidstr_avu_key, fidstr, "", true, old_irods_path); 
+    if (status != 0) {
+    rodsLog(LOG_ERROR, "Error renaming data object %s.  Could not find object by fidstr.", fidstr.c_str());
+        return;
+    }
+
+    // look up new parent path based on the new parent fidstr
+    status = find_irods_path_with_avu(_comm, fidstr_avu_key, parent_fidstr, "", true, new_parent_irods_path); 
+    if (status != 0) {
+        rodsLog(LOG_ERROR, "Error renaming data object %s.  Could not find object by fidstr.", parent_fidstr.c_str());
+        return;
+    }
+
+    // use object_name to get new irods path
+    new_irods_path = new_parent_irods_path + "/" + object_name;
+
+ 
     if (direct_db_access_flag) { 
 
         char parent_path[MAX_NAME_LEN];
@@ -607,25 +637,6 @@ void handle_rename_dir(const std::string& lustre_root_path, const std::string& r
 
     } else {
 
-        std::string old_irods_path;
-        std::string new_parent_irods_path;
-
-        // look up collection based on fidstr
-        status = find_irods_path_with_avu(_comm, fidstr_avu_key, fidstr, "", true, old_irods_path); 
-        if (status != 0) {
-            rodsLog(LOG_ERROR, "Error renaming data object %s.  Could not find object by fidstr.", fidstr.c_str());
-            return;
-        }
-
-        // look up new parent path based on parent fidstr
-        status = find_irods_path_with_avu(_comm, fidstr_avu_key, parent_fidstr, "", true, new_parent_irods_path); 
-        if (status != 0) {
-            rodsLog(LOG_ERROR, "Error renaming data object %s.  Could not find object by fidstr.", parent_fidstr.c_str());
-            return;
-        }
-
-        std::string new_irods_path = new_parent_irods_path + "/" + object_name;
-
         // rename the data object 
         dataObjCopyInp_t dataObjRenameInp;
         memset( &dataObjRenameInp, 0, sizeof( dataObjRenameInp ) );
@@ -643,6 +654,41 @@ void handle_rename_dir(const std::string& lustre_root_path, const std::string& r
         // TODO: Issue 6 - Must rename all file paths for all underlying data objects
 
     }
+
+    // determine the old and new lustre paths and update all data objects
+    try {
+
+        std::string old_lustre_path = lustre_root_path + old_irods_path.substr(register_path.length());
+        std::string new_lustre_path = lustre_root_path + new_irods_path.substr(register_path.length());
+        std::string like_clause = old_lustre_path + "/%";
+
+        rodsLog(LOG_NOTICE, "old_lustre_path = %s\tnew_lustre_path = %s", old_lustre_path.c_str(), new_lustre_path.c_str());
+
+        // for now, rename all with sql update
+        cllBindVars[0] = new_lustre_path.c_str();
+        cllBindVars[1] = old_lustre_path.c_str();
+        cllBindVars[2] = like_clause.c_str();
+        cllBindVarCount = 3;
+        status = cmlExecuteNoAnswerSql(update_filepath_on_collection_rename_sql.c_str(), icss);
+
+        if ( status < 0 && status != CAT_SUCCESS_BUT_WITH_NO_INFO) {
+            rodsLog(LOG_ERROR, "Error updating data objects after collection move for collection %s.  Error is %i", fidstr.c_str(), status);
+            cmlExecuteNoAnswerSql("rollback", icss);
+            return;
+        }
+
+        status =  cmlExecuteNoAnswerSql("commit", icss);
+        if (status != 0) {
+            rodsLog(LOG_ERROR, "Error committing data object update after collection move for collection %s.  Error is %i", fidstr.c_str(), status);
+            return;
+        } 
+
+
+    } catch(const std::out_of_range& e) {
+        rodsLog(LOG_ERROR, "Error updating data objects after collection move for collection %s.  Error is %i", fidstr.c_str(), status);
+        return;
+    }
+
 }
 
 void handle_unlink(const std::string& lustre_root_path, const std::string& register_path, 

@@ -41,7 +41,22 @@ void set_log_level(const std::string& log_level_str) {
     } else if ("LOG_DBG" == log_level_str) {
         log_level = LOG_DBG;
     }
-}    
+}   
+
+bool remove_trailing_slash(std::string& path) {
+
+    if (path.length() > 0) {
+        std::string::iterator it = path.end() - 1;
+        if (*it == '/')
+        {
+            path.erase(it);
+            return true;
+        }
+    }
+
+    return false;
+}
+
 
 int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *config_struct) {
 
@@ -74,10 +89,14 @@ int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *
             LOG(LOG_ERR, "Key lustre_root_path missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
         }
+        while (remove_trailing_slash(config_struct->lustre_root_path));
+
         if (0 != read_key_from_map(config_map, "irods_register_path", config_struct->irods_register_path)) {
             LOG(LOG_ERR, "Key register_path missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
         }
+        while (remove_trailing_slash(config_struct->irods_register_path));
+
         if (0 != read_key_from_map(config_map, "irods_resource_name", config_struct->irods_resource_name)) {
             LOG(LOG_ERR, "Key resource_name missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
