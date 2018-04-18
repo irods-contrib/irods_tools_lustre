@@ -127,10 +127,12 @@ const std::string insert_user_ownership_data_object_sql = "insert into R_OBJT_AC
 const std::string get_user_id_sql = "select user_id from R_USER_MAIN where user_name = ?";
 
 #ifdef POSTGRES_ICAT
-
 const std::string update_filepath_on_collection_rename_sql = "update R_DATA_MAIN set data_path = overlay(data_path placing ? from 1 for char_length(?)) where data_path like ?";
-
 #endif
+
+#ifdef MY_ICAT
+const std::string update_filepath_on_collection_rename_sql = "update R_DATA_MAIN set data_path = replace(data_path, ?, ?) where data_path like ?";
+#endif 
 
 // finds an irods object with the attr/val/unit combination, returns the first entry in the list
 int find_irods_path_with_avu(rsComm_t *_conn, const std::string& attr, const std::string& value, const std::string& unit, bool is_collection, std::string& irods_path) {
@@ -665,11 +667,21 @@ void handle_rename_dir(const std::string& lustre_root_path, const std::string& r
         rodsLog(LOG_NOTICE, "old_lustre_path = %s\tnew_lustre_path = %s", old_lustre_path.c_str(), new_lustre_path.c_str());
 
         // for now, rename all with sql update
+#ifdef POSTGRES_ICAT 
         cllBindVars[0] = new_lustre_path.c_str();
         cllBindVars[1] = old_lustre_path.c_str();
         cllBindVars[2] = like_clause.c_str();
         cllBindVarCount = 3;
         status = cmlExecuteNoAnswerSql(update_filepath_on_collection_rename_sql.c_str(), icss);
+#endif
+
+#ifdef MY_ICAT
+        cllBindVars[0] = old_lustre_path.c_str();
+        cllBindVars[1] = new_lustre_path.c_str();
+        cllBindVars[2] = like_clause.c_str();
+        cllBindVarCount = 3;
+        status = cmlExecuteNoAnswerSql(update_filepath_on_collection_rename_sql.c_str(), icss);
+#endif
 
         if ( status < 0 && status != CAT_SUCCESS_BUT_WITH_NO_INFO) {
             rodsLog(LOG_ERROR, "Error updating data objects after collection move for collection %s.  Error is %i", fidstr.c_str(), status);
