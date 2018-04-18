@@ -225,10 +225,10 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
 
     }
 
-    if (direct_db_modification_requested) {
-        status = cmlClose(icss);
-        rodsLog(LOG_NOTICE, "cmlClose status = %d", status);
-    }
+    //if (direct_db_modification_requested) {
+    //    status = cmlClose(icss);
+    //    rodsLog(LOG_NOTICE, "cmlClose status = %d", status);
+    //}
 
     rodsLog(LOG_NOTICE, "Dynamic Lustre API - DONE" );
 
