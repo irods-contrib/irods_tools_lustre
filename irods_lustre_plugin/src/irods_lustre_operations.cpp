@@ -128,11 +128,10 @@ const std::string get_user_id_sql = "select user_id from R_USER_MAIN where user_
 
 #ifdef POSTGRES_ICAT
 const std::string update_filepath_on_collection_rename_sql = "update R_DATA_MAIN set data_path = overlay(data_path placing ? from 1 for char_length(?)) where data_path like ?";
+#else
+const std::string update_filepath_on_collection_rename_sql = "update R_DATA_MAIN set data_path = replace(data_path, ?, ?) where data_path like ?";
 #endif
 
-#ifdef MY_ICAT
-const std::string update_filepath_on_collection_rename_sql = "update R_DATA_MAIN set data_path = replace(data_path, ?, ?) where data_path like ?";
-#endif 
 
 // finds an irods object with the attr/val/unit combination, returns the first entry in the list
 int find_irods_path_with_avu(rsComm_t *_conn, const std::string& attr, const std::string& value, const std::string& unit, bool is_collection, std::string& irods_path) {
@@ -635,7 +634,50 @@ void handle_rename_dir(const std::string& lustre_root_path, const std::string& r
             return;
         }
 
-        // TODO: Issue 6 - Must rename all file paths for all underlying data objects
+        try {
+
+            std::string old_lustre_path = lustre_root_path + old_irods_path.substr(register_path.length());
+            std::string new_lustre_path = lustre_root_path + new_irods_path.substr(register_path.length());
+            std::string like_clause = old_lustre_path + "/%";
+
+            rodsLog(LOG_NOTICE, "old_lustre_path = %s", old_lustre_path.c_str());
+            rodsLog(LOG_NOTICE, "new_lustre_path = %s", new_lustre_path.c_str());
+            rodsLog(LOG_NOTICE, "new_lustre_path = %s", new_lustre_path.c_str());
+
+            // for now, rename all with sql update
+#ifdef POSTGRES_ICAT 
+            cllBindVars[0] = new_lustre_path.c_str();
+            cllBindVars[1] = old_lustre_path.c_str();
+            cllBindVars[2] = like_clause.c_str();
+            cllBindVarCount = 3;
+            status = cmlExecuteNoAnswerSql(update_filepath_on_collection_rename_sql.c_str(), icss);
+#else
+            // oracle and mysql
+            cllBindVars[0] = old_lustre_path.c_str();
+            cllBindVars[1] = new_lustre_path.c_str();
+            cllBindVars[2] = like_clause.c_str();
+            cllBindVarCount = 3;
+            status = cmlExecuteNoAnswerSql(update_filepath_on_collection_rename_sql.c_str(), icss);
+#endif
+
+            if ( status < 0 && status != CAT_SUCCESS_BUT_WITH_NO_INFO) {
+                rodsLog(LOG_ERROR, "Error updating data objects after collection move for collection %s.  Error is %i", fidstr.c_str(), status);
+                cmlExecuteNoAnswerSql("rollback", icss);
+                return;
+            }
+
+            status =  cmlExecuteNoAnswerSql("commit", icss);
+            if (status != 0) {
+                rodsLog(LOG_ERROR, "Error committing data object update after collection move for collection %s.  Error is %i", fidstr.c_str(), status);
+                return;
+            } 
+
+
+        } catch(const std::out_of_range& e) {
+            rodsLog(LOG_ERROR, "Error updating data objects after collection move for collection %s.  Error is %i", fidstr.c_str(), status);
+            return;
+        }
+
 
     } else {
 
@@ -645,60 +687,17 @@ void handle_rename_dir(const std::string& lustre_root_path, const std::string& r
 
         strncpy(dataObjRenameInp.srcDataObjInp.objPath, old_irods_path.c_str(), MAX_NAME_LEN);
         strncpy(dataObjRenameInp.destDataObjInp.objPath, new_irods_path.c_str(), MAX_NAME_LEN);
-
         dataObjRenameInp.srcDataObjInp.oprType = dataObjRenameInp.destDataObjInp.oprType = RENAME_COLL;
+
+        status = rsDataObjRename( _comm, &dataObjRenameInp );
 
         if ( status < 0 ) {
             rodsLog(LOG_ERROR, "Error updating data object rename for data_object %s.  Error is %i", fidstr.c_str(), status);
             return;
         }
 
-        // TODO: Issue 6 - Must rename all file paths for all underlying data objects
+        // TODO: Issue 6 - Handle update of data object physical paths using iRODS API's 
 
-    }
-
-    // determine the old and new lustre paths and update all data objects
-    try {
-
-        std::string old_lustre_path = lustre_root_path + old_irods_path.substr(register_path.length());
-        std::string new_lustre_path = lustre_root_path + new_irods_path.substr(register_path.length());
-        std::string like_clause = old_lustre_path + "/%";
-
-        rodsLog(LOG_NOTICE, "old_lustre_path = %s\tnew_lustre_path = %s", old_lustre_path.c_str(), new_lustre_path.c_str());
-
-        // for now, rename all with sql update
-#ifdef POSTGRES_ICAT 
-        cllBindVars[0] = new_lustre_path.c_str();
-        cllBindVars[1] = old_lustre_path.c_str();
-        cllBindVars[2] = like_clause.c_str();
-        cllBindVarCount = 3;
-        status = cmlExecuteNoAnswerSql(update_filepath_on_collection_rename_sql.c_str(), icss);
-#endif
-
-#ifdef MY_ICAT
-        cllBindVars[0] = old_lustre_path.c_str();
-        cllBindVars[1] = new_lustre_path.c_str();
-        cllBindVars[2] = like_clause.c_str();
-        cllBindVarCount = 3;
-        status = cmlExecuteNoAnswerSql(update_filepath_on_collection_rename_sql.c_str(), icss);
-#endif
-
-        if ( status < 0 && status != CAT_SUCCESS_BUT_WITH_NO_INFO) {
-            rodsLog(LOG_ERROR, "Error updating data objects after collection move for collection %s.  Error is %i", fidstr.c_str(), status);
-            cmlExecuteNoAnswerSql("rollback", icss);
-            return;
-        }
-
-        status =  cmlExecuteNoAnswerSql("commit", icss);
-        if (status != 0) {
-            rodsLog(LOG_ERROR, "Error committing data object update after collection move for collection %s.  Error is %i", fidstr.c_str(), status);
-            return;
-        } 
-
-
-    } catch(const std::out_of_range& e) {
-        rodsLog(LOG_ERROR, "Error updating data objects after collection move for collection %s.  Error is %i", fidstr.c_str(), status);
-        return;
     }
 
 }
