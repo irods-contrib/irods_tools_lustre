@@ -17,6 +17,7 @@
 #include "rsRmColl.hpp"
 #include "rsDataObjRename.hpp"
 #include "rsModDataObjMeta.hpp"
+#include "rsPhyPathReg.hpp"
 
 // =-=-=-=-=-=-=-
 // // boost includes
@@ -309,25 +310,21 @@ void handle_create(const std::string& lustre_root_path, const std::string& regis
 
     } else {
 
-        // register object
-        dataObjInfo_t dataObjInfo;
-        dataObjInfo_t *outDataObjInfo;
-        memset( &dataObjInfo, 0, sizeof( dataObjInfo) );
-        strncpy(dataObjInfo.objPath, irods_path, MAX_NAME_LEN);
-        strncpy(dataObjInfo.filePath, lustre_path.c_str(), MAX_NAME_LEN);
-        strncpy(dataObjInfo.rescName, "EMPTY_RESOURCE_NAME", NAME_LEN);
-        strncpy(dataObjInfo.rescHier, resource_name.c_str(), NAME_LEN);
-        dataObjInfo.rescId = resource_id;
-        dataObjInfo.dataSize = file_size; 
-        strncpy(dataObjInfo.dataType, "generic", NAME_LEN);
-        strncpy(dataObjInfo.version, "0", NAME_LEN);
-        status = rsRegDataObj(_comm, &dataObjInfo, &outDataObjInfo); 
+        dataObjInp_t dataObjInp;
+        memset(&dataObjInp, 0, sizeof(dataObjInp));
+        strncpy(dataObjInp.objPath, irods_path, MAX_NAME_LEN);
+        addKeyVal(&dataObjInp.condInput, FILE_PATH_KW, lustre_path.c_str());
+        addKeyVal(&dataObjInp.condInput, RESC_NAME_KW, resource_name.c_str());
+        addKeyVal(&dataObjInp.condInput, RESC_HIER_STR_KW, resource_name.c_str());
+
+        status = filePathReg(_comm, &dataObjInp, resource_name.c_str());
         if (status != 0) {
             rodsLog(LOG_ERROR, "Error registering object %s.  Error is %i", fidstr.c_str(), status);
             return;
         }
-        freeDataObjInfo(outDataObjInfo);
 
+        // freeKeyValPairStruct(&dataobjInp.condInput);
+ 
         // add lustre_identifier metadata
         modAVUMetadataInp_t modAVUMetadataInp;
         memset(&modAVUMetadataInp, 0, sizeof(modAVUMetadataInp_t)); 
