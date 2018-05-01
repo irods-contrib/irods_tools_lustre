@@ -4,6 +4,8 @@
 #include "irods_stacktrace.hpp"
 #include "icatStructs.hpp"
 
+#include "database_routines.hpp"
+
 #include "boost/lexical_cast.hpp"
 #include <sql.h>
 #include <sqlext.h>
@@ -664,10 +666,10 @@ int cmlGetIntegerValueFromSql( const char *sql,
 int cmlGetNSeqVals( icatSessionStruct *icss, size_t n, std::vector<rodsLong_t>& sequences ) {
 
     int status;
-    int stmt_num;
 
 #ifdef ORA_ICAT
-    std::string sql = "select r_objectid.nextval from dual";
+    std::string sql = "select r_objectid.nextval from ( select level from dual connect by level < " +
+        std::to_string(n) + ")";
 #elif MY_ICAT
     std::string sql = "select R_ObjectId_nextval()";
 #else
@@ -676,12 +678,29 @@ int cmlGetNSeqVals( icatSessionStruct *icss, size_t n, std::vector<rodsLong_t>& 
 
     std::vector<std::string> emptyBindVars;
 
+#if MY_ICAT
+
+    // for mysql, the query must be executed n times
+     for (size_t i = 0; i < n; ++i) {
+
+        status =  cmlGetCurrentSeqVal(icss); 
+        if ( status < 0 ) {
+            rodsLog(LOG_ERROR, "cmlGetNSeqVals cmlGetCurrentSeqVal failure %d", status);
+            return status;
+        }
+
+        sequences.push_back(status);
+
+    }
+
+#else
+    int stmt_num;
     for (size_t i = 0; i < n; ++i) {
 
         if (i == 0) {
             status = cmlGetFirstRowFromSqlBV(sql.c_str(), emptyBindVars, &stmt_num, icss);
         } else {
-            status = status = cmlGetNextRowFromStatement( stmt_num, icss );
+            status = cmlGetNextRowFromStatement( stmt_num, icss );
         }
  
         if ( status < 0 ) {
@@ -712,6 +731,7 @@ int cmlGetNSeqVals( icatSessionStruct *icss, size_t n, std::vector<rodsLong_t>& 
     }
 
     cllFreeStatement(icss, stmt_num);
+#endif
 
     return 0;
 
