@@ -882,12 +882,12 @@ int write_cr_index_to_sqlite(unsigned long long cr_index) {
     sqlite3_bind_int(stmt, 1, cr_index); 
 
     rc = sqlite3_step(stmt); 
-    if (SQLITE_DONE != rc) {
+
+    if (SQLITE_DONE != rc && SQLITE_CONSTRAINT != rc) {
         LOG(LOG_ERR, "ERROR inserting data: %s\n", sqlite3_errmsg(db));
     }
 
     sqlite3_finalize(stmt);
-
     sqlite3_close(db);
 
     return lustre_irods::SUCCESS;

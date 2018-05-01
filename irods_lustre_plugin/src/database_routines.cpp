@@ -32,6 +32,8 @@ static SQLLEN resultDataSizeArray[ MAX_NUMBER_ICAT_COLUMS ];
 
 int cmlExecuteNoAnswerSql( const char *sql, icatSessionStruct *icss );
 int cmlGetStringValueFromSql( const char *sql, char *cVal, int cValSize, std::vector<std::string> &bindVars, icatSessionStruct *icss );
+int cmlGetFirstRowFromSqlBV( const char *sql, std::vector<std::string> &bindVars, int *statement, icatSessionStruct *icss );
+int cmlGetNextRowFromStatement( int stmtNum, icatSessionStruct *icss );
 
 #ifndef ORA_ICAT
 static int didBegin = 0;
@@ -659,6 +661,61 @@ int cmlGetIntegerValueFromSql( const char *sql,
     return i;
 }
 
+int cmlGetNSeqVals( icatSessionStruct *icss, size_t n, std::vector<rodsLong_t>& sequences ) {
+
+    int status;
+    int stmt_num;
+
+#ifdef ORA_ICAT
+    std::string sql = "select r_objectid.nextval from dual";
+#elif MY_ICAT
+    std::string sql = "select R_ObjectId_nextval()";
+#else
+    std::string sql = "select nextval('r_objectid') from generate_series(1, " + std::to_string(n) + ")";
+#endif
+
+    std::vector<std::string> emptyBindVars;
+
+    for (size_t i = 0; i < n; ++i) {
+
+        if (i == 0) {
+            status = cmlGetFirstRowFromSqlBV(sql.c_str(), emptyBindVars, &stmt_num, icss);
+        } else {
+            status = status = cmlGetNextRowFromStatement( stmt_num, icss );
+        }
+ 
+        if ( status < 0 ) {
+            rodsLog(LOG_ERROR, "cmlGetNSeqVals cmlGetFirstRowFromSqlBV/cmlGetNextRowFromStatement failure %d", status);
+            cllFreeStatement(icss, stmt_num);
+            return status;
+        }
+
+        size_t nCols = icss->stmtPtr[stmt_num]->numOfCols;
+        if (nCols != 1) {
+            rodsLog(LOG_ERROR, "cmlGetNSeqVals unexpected number of columns %d", nCols);
+            cllFreeStatement(icss, stmt_num);
+            return CAT_SQL_ERR;
+        }
+
+        char *result_str = icss->stmtPtr[stmt_num]->resultValue[0];
+        rodsLong_t result = 0;
+        try {
+           result = boost::lexical_cast<rodsLong_t>(result_str);
+        } catch (boost::bad_lexical_cast& e) {
+            rodsLog(LOG_ERROR, "cmlGetNSeqVals unexpected value returned %s", result_str);
+            cllFreeStatement(icss, stmt_num);
+            return CAT_SQL_ERR;
+        }
+
+        sequences.push_back(result);
+
+    }
+
+    cllFreeStatement(icss, stmt_num);
+
+    return 0;
+
+}
 
 rodsLong_t cmlGetCurrentSeqVal( icatSessionStruct *icss ) {
 
@@ -750,6 +807,42 @@ int cmlClose( icatSessionStruct *icss ) {
 }
 
 
+int cmlGetFirstRowFromSqlBV( const char *sql,
+                             std::vector<std::string> &bindVars,
+                             int *statement,
+                             icatSessionStruct *icss ) {
+    if ( int status = cllExecSqlWithResultBV( icss, statement, sql, bindVars ) ) {
+        *statement = 0;
+        if ( status <= CAT_ENV_ERR ) {
+            return status;    /* already an iRODS error code */
+        }
+        return CAT_SQL_ERR;
+    }
+    if ( cllGetRow( icss, *statement ) ) {
+        cllFreeStatement( icss, *statement );
+        *statement = 0;
+        return CAT_GET_ROW_ERR;
+    }
+    if ( icss->stmtPtr[*statement]->numOfCols == 0 ) {
+        cllFreeStatement( icss, *statement );
+        *statement = 0;
+        return CAT_NO_ROWS_FOUND;
+    }
+    return 0;
+}
 
+int cmlGetNextRowFromStatement( int stmtNum,
+                                icatSessionStruct *icss ) {
 
+    if ( 0 != cllGetRow( icss, stmtNum ) )  {
+        cllFreeStatement( icss, stmtNum );
+        return CAT_GET_ROW_ERR;
+    }
+    if ( icss->stmtPtr[stmtNum]->numOfCols == 0 ) {
+        cllFreeStatement( icss, stmtNum );
+        return CAT_NO_ROWS_FOUND;
+    }
+    return 0;
+}
+    
 

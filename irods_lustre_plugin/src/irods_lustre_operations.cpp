@@ -343,6 +343,144 @@ void handle_create(const std::string& lustre_root_path, const std::string& regis
     }
 }
 
+void handle_batch_create(const std::string& lustre_root_path, const std::string& register_path, const int64_t& resource_id,
+        const std::string& resource_name, const std::vector<std::string>& fidstr_list, const std::vector<std::string>& lustre_path_list,
+        const std::vector<std::string>& object_name_list, const std::vector<std::string>& parent_fidstr_list,
+        const std::vector<int64_t>& file_size_list, rsComm_t* _comm, icatSessionStruct *icss, const rodsLong_t& user_id) {
+
+    size_t insert_count = fidstr_list.size();
+    int status;
+
+    if (insert_count == 0) {
+        return;
+    }
+
+    if (lustre_path_list.size() != insert_count || object_name_list.size() != insert_count ||
+            parent_fidstr_list.size() != insert_count || file_size_list.size() != insert_count) {
+
+        rodsLog(LOG_ERROR, "Handle batch create.  Received lists of differing size");
+        return;
+    }
+
+    std::vector<rodsLong_t> data_obj_sequences;
+    std::vector<rodsLong_t> metadata_sequences;
+    cmlGetNSeqVals(icss, insert_count, data_obj_sequences);
+    cmlGetNSeqVals(icss, insert_count, metadata_sequences);
+
+    // insert into R_DATA_MAIN
+ 
+    std::string insert_sql(200 + insert_count*140, 0);
+    insert_sql = "insert into R_DATA_MAIN (data_id, coll_id, data_name, data_repl_num, data_type_name, "
+                             "data_size, resc_name, data_path, data_owner_name, data_owner_zone, data_is_dirty, data_map_id, resc_id) "
+                        "values ";
+
+    // cache the collection id's from parent_fidstr
+    std::map<std::string, rodsLong_t> fidstr_to_collection_id_map;
+
+    for (size_t i = 0; i < insert_count; ++i) {
+
+        rodsLong_t coll_id;
+
+        auto iter = fidstr_to_collection_id_map.find(parent_fidstr_list[i]);
+
+        if (iter != fidstr_to_collection_id_map.end()) {
+            coll_id = iter->second;
+        } else {
+            std::vector<std::string> bindVars;
+            bindVars.push_back(parent_fidstr_list[i]);
+            status = cmlGetIntegerValueFromSql(get_collection_id_from_fidstr_sql.c_str(), &coll_id, bindVars, icss );
+            if (status != 0) {
+                rodsLog(LOG_ERROR, "Error during registration object %s.  Error getting collection id for collection with fidstr=%s.  Error is %i", 
+                        fidstr_list[i].c_str(), parent_fidstr_list[i].c_str(), status);
+                continue;
+            }
+
+            fidstr_to_collection_id_map[parent_fidstr_list[i]] = coll_id;
+        }
+
+        insert_sql += "(" + std::to_string(data_obj_sequences[i]) + ", " + std::to_string(coll_id) + ", '" + object_name_list[i] + "', " +
+            std::to_string(0) +  ", 'generic', " + std::to_string(file_size_list[i]) + ", 'EMPTY_RESC_NAME', '" + lustre_path_list[i] + "', '" + 
+            _comm->clientUser.userName + "', '" + _comm->clientUser.rodsZone + "', 0, 0, " + std::to_string(resource_id) + ")";
+
+        if (i < insert_count - 1) {
+            insert_sql += ", ";
+        }
+    }
+
+    cllBindVarCount = 0;
+    status = cmlExecuteNoAnswerSql(insert_sql.c_str(), icss);
+    if (status != 0) {
+        rodsLog(LOG_ERROR, "Error performing batch insert of objects.  Error is %i.  SQL is %s.", status, insert_sql.c_str());
+        return;
+    }
+
+    // Insert into R_META_MAIN
+    
+    insert_sql = "insert into R_META_MAIN (meta_id, meta_attr_name, meta_attr_value) values ";
+
+    for (size_t i = 0; i < insert_count; ++i) {
+        insert_sql += "(" + std::to_string(metadata_sequences[i]) + ", '" + fidstr_avu_key + "', '" + 
+            fidstr_list[i] + "')";
+
+        if (i < insert_count - 1) {
+            insert_sql += ", ";
+        }
+    }
+ 
+    cllBindVarCount = 0;
+    status = cmlExecuteNoAnswerSql(insert_sql.c_str(), icss);
+    if (status != 0) {
+        rodsLog(LOG_ERROR, "Error performing batch insert into R_META_MAIN.  Error is %i.  SQL is %s.", status, insert_sql.c_str());
+        return;
+    }
+
+    // Insert into R_OBJT_METMAP
+
+    insert_sql = "insert into R_OBJT_METAMAP (object_id, meta_id) values ";
+
+    for (size_t i = 0; i < insert_count; ++i) {
+        insert_sql += "(" + std::to_string(data_obj_sequences[i]) + ", " + std::to_string(metadata_sequences[i]) + ")";
+
+        if (i < insert_count - 1) {
+            insert_sql += ", ";
+        }
+    }
+ 
+    cllBindVarCount = 0;
+    status = cmlExecuteNoAnswerSql(insert_sql.c_str(), icss);
+    if (status != 0) {
+        rodsLog(LOG_ERROR, "Error performing batch insert into R_OBJT_METAMAP.  Error is %i.  SQL is %s.", status, insert_sql.c_str());
+        return;
+    }
+
+    // insert user ownership
+    //insert into R_OBJT_ACCESS (object_id, user_id, access_type_id) values (?, ?, 1200) 
+    insert_sql = "insert into R_OBJT_ACCESS (object_id, user_id, access_type_id) values ";
+
+    for (size_t i = 0; i < insert_count; ++i) {
+        insert_sql += "(" + std::to_string(data_obj_sequences[i]) + ", " + std::to_string(user_id) + ", 1200)";
+
+        if (i < insert_count - 1) {
+            insert_sql += ", ";
+        }
+    }
+ 
+    cllBindVarCount = 0;
+    status = cmlExecuteNoAnswerSql(insert_sql.c_str(), icss);
+    if (status != 0) {
+        rodsLog(LOG_ERROR, "Error performing batch insert into R_OBJT_ACCESS.  Error is %i.  SQL is %s.", status, insert_sql.c_str());
+        return;
+    }
+
+    status =  cmlExecuteNoAnswerSql("commit", icss);
+    if (status != 0) {
+        rodsLog(LOG_ERROR, "Error committing batched insertion of data objects.  Error is %i", status);
+        return;
+    } 
+
+}
+
+
 void handle_mkdir(const std::string& lustre_root_path, const std::string& register_path, 
         const int64_t& resource_id, const std::string& resource_name, const std::string& fidstr, 
         const std::string& lustre_path, const std::string& object_name, 
@@ -764,6 +902,75 @@ void handle_unlink(const std::string& lustre_root_path, const std::string& regis
 
 
     }
+}
+
+void handle_batch_unlink(const std::vector<std::string>& fidstr_list, rsComm_t* _comm, icatSessionStruct *icss) {
+
+    size_t delete_count = fidstr_list.size();
+    int status;
+
+    if (delete_count == 0) {
+        return;
+    }
+
+    // delete from R_DATA_MAIN
+ 
+    std::string delete_sql(300 + delete_count*100, 0);
+    delete_sql = "delete from R_DATA_MAIN where data_id in (select * from ("
+                 "select R_DATA_MAIN.data_id "
+                 "from R_DATA_MAIN "
+                 "inner join R_OBJT_METAMAP on R_DATA_MAIN.data_id = R_OBJT_METAMAP.object_id "
+                 "inner join R_META_MAIN on R_META_MAIN.meta_id = R_OBJT_METAMAP.meta_id "
+                 "where R_META_MAIN.meta_attr_name = '" + fidstr_avu_key + "' and R_META_MAIN.meta_attr_value in (";
+        
+    for (size_t i = 0; i < delete_count; ++i) {
+        delete_sql += "'" + fidstr_list[i] + "'";
+
+        if (i < delete_count - 1) {
+            delete_sql += ", ";
+        } else {
+            delete_sql += "))temp_table)";
+        }
+    }
+    
+    cllBindVarCount = 0;
+    status = cmlExecuteNoAnswerSql(delete_sql.c_str(), icss);
+    if (status != 0) {
+        rodsLog(LOG_ERROR, "Error performing batch delete from R_DATA_MAIN.  Error is %i.  SQL is %s.", status, delete_sql.c_str());
+        return;
+    }
+
+    // delete from R_OBJT_METAMAP
+
+    delete_sql = "delete from R_OBJT_METAMAP where object_id in (select * from ("
+                 "select R_OBJT_METAMAP.object_id "
+                 "from R_OBJT_METAMAP "
+                 "inner join R_META_MAIN on R_META_MAIN.meta_id = R_OBJT_METAMAP.meta_id "
+                 "where R_META_MAIN.meta_attr_name = '" + fidstr_avu_key + "' and R_META_MAIN.meta_attr_value in (";
+        
+    for (size_t i = 0; i < delete_count; ++i) {
+        delete_sql += "'" + fidstr_list[i] + "'";
+
+        if (i < delete_count - 1) {
+            delete_sql += ", ";
+        } else {
+            delete_sql += "))temp_table)";
+        }
+    }
+    
+    cllBindVarCount = 0;
+    status = cmlExecuteNoAnswerSql(delete_sql.c_str(), icss);
+    if (status != 0) {
+        rodsLog(LOG_ERROR, "Error performing batch delete from R_DATA_MAIN.  Error is %i.  SQL is %s.", status, delete_sql.c_str());
+        return;
+    }
+
+    status =  cmlExecuteNoAnswerSql("commit", icss);
+    if (status != 0) {
+        rodsLog(LOG_ERROR, "Error committing batched deletion of data objects.  Error is %i", status);
+        return;
+    } 
+
 }
 
 void handle_rmdir(const std::string& lustre_root_path, const std::string& register_path, 

@@ -181,6 +181,16 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
     int64_t resource_id = changeMap.getResourceId();
     std::string resource_name(changeMap.getResourceName().cStr());
 
+    // for batched file inserts 
+    std::vector<std::string> fidstr_list_for_create;
+    std::vector<std::string> lustre_path_list;
+    std::vector<std::string> object_name_list;
+    std::vector<std::string> parent_fidstr_list;
+    std::vector<int64_t> file_size_list;
+
+    // for batched file deletes
+    std::vector<std::string> fidstr_list_for_unlink;
+
     for (ChangeDescriptor::Reader entry : changeMap.getEntries()) {
 
         const ChangeDescriptor::EventTypeEnum event_type = entry.getEventType();
@@ -194,9 +204,17 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
         // Handle changes in iRODS
 
         if (event_type == ChangeDescriptor::EventTypeEnum::CREATE) {
-            handle_create(lustre_root_path, register_path, resource_id, resource_name,
-                    fidstr, lustre_path, object_name, object_type, parent_fidstr, file_size,
-                    _comm, icss, user_id, direct_db_modification_requested);
+            if (direct_db_modification_requested) {
+                fidstr_list_for_create.push_back(fidstr);
+                lustre_path_list.push_back(lustre_path);
+                object_name_list.push_back(object_name);
+                parent_fidstr_list.push_back(parent_fidstr);
+                file_size_list.push_back(file_size);
+            } else {
+                handle_create(lustre_root_path, register_path, resource_id, resource_name,
+                        fidstr, lustre_path, object_name, object_type, parent_fidstr, file_size,
+                        _comm, icss, user_id, direct_db_modification_requested);
+            }
         } else if (event_type == ChangeDescriptor::EventTypeEnum::MKDIR) {
             handle_mkdir(lustre_root_path, register_path, resource_id, resource_name,
                     fidstr, lustre_path, object_name, object_type, parent_fidstr, file_size,
@@ -214,9 +232,13 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
                     fidstr, lustre_path, object_name, object_type, parent_fidstr, file_size,
                     _comm, icss, user_id, direct_db_modification_requested);
         } else if (event_type == ChangeDescriptor::EventTypeEnum::UNLINK) {
-            handle_unlink(lustre_root_path, register_path, resource_id, resource_name,
-                    fidstr, lustre_path, object_name, object_type, parent_fidstr, file_size,
-                    _comm, icss, user_id, direct_db_modification_requested);
+            if (direct_db_modification_requested) {
+                fidstr_list_for_unlink.push_back(fidstr);
+            } else {
+                handle_unlink(lustre_root_path, register_path, resource_id, resource_name,
+                        fidstr, lustre_path, object_name, object_type, parent_fidstr, file_size,
+                        _comm, icss, user_id, direct_db_modification_requested);
+            }
         } else if (event_type == ChangeDescriptor::EventTypeEnum::RMDIR) {
             handle_rmdir(lustre_root_path, register_path, resource_id, resource_name,
                     fidstr, lustre_path, object_name, object_type, parent_fidstr, file_size,
@@ -225,10 +247,18 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
 
     }
 
-    //if (direct_db_modification_requested) {
-    //    status = cmlClose(icss);
-    //    rodsLog(LOG_NOTICE, "cmlClose status = %d", status);
-    //}
+    if (direct_db_modification_requested) {
+
+        if (fidstr_list_for_unlink.size() > 0) {
+            handle_batch_unlink(fidstr_list_for_unlink, _comm, icss);
+        }
+ 
+        if (fidstr_list_for_create.size() > 0) {
+            handle_batch_create(lustre_root_path, register_path, resource_id, resource_name,
+                    fidstr_list_for_create, lustre_path_list, object_name_list, parent_fidstr_list, file_size_list,
+                    _comm, icss, user_id);
+        }
+    }
 
     rodsLog(LOG_NOTICE, "Dynamic Lustre API - DONE" );
 

@@ -242,6 +242,8 @@ void run_main_changelog_reader_loop(const lustre_irods_connector_cfg_t& config_s
             poll_change_log_and_process(config_struct.mdtname.c_str(), config_struct.lustre_root_path.c_str(), change_map, ctx, 
                     max_number_of_changelog_records - change_map.size(), last_cr_index);
 
+            LOG(LOG_DBG, "change_map size: %lu\n", change_map.size());
+
             while (entries_ready_to_process(change_map)) {
                 // get records ready to be processed into buf and buflen
                 void *buf = nullptr;
