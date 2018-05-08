@@ -75,6 +75,7 @@ int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *
     std::string irods_client_connect_failure_retry_seconds_str;
     std::string irods_updater_thread_count_str;
     std::string maximum_records_per_update_to_irods_str;
+    std::string maximum_records_per_sql_command_str;
     std::string maximum_records_to_receive_from_lustre_changelog_str;
     std::string message_receive_timeout_msec_str;
 
@@ -137,11 +138,15 @@ int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *
             return lustre_irods::CONFIGURATION_ERROR;
         }
         if (0 != read_key_from_map(config_map, "maximum_records_per_update_to_irods", maximum_records_per_update_to_irods_str)) {
-            LOG(LOG_ERR, "Key num_records_per_update_to_irods missing from %s\n", filename.c_str());
+            LOG(LOG_ERR, "Key maximum_records_per_update_to_irods missing from %s\n", filename.c_str());
+            return lustre_irods::CONFIGURATION_ERROR;
+        }
+        if (0 != read_key_from_map(config_map, "maximum_records_per_sql_command", maximum_records_per_sql_command_str)) {
+            LOG(LOG_ERR, "Key maximum_records_per_sql_command missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
         }
         if (0 != read_key_from_map(config_map, "maximum_records_to_receive_from_lustre_changelog", maximum_records_to_receive_from_lustre_changelog_str)) {
-            LOG(LOG_ERR, "Key num_records_per_update_to_irods missing from %s\n", filename.c_str());
+            LOG(LOG_ERR, "Key maximum_records_to_receive_from_lustre_changelog missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
         }
         if (0 != read_key_from_map(config_map, "message_receive_timeout_msec", message_receive_timeout_msec_str)) {
@@ -196,6 +201,13 @@ int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *
             config_struct->maximum_records_per_update_to_irods = boost::lexical_cast<unsigned int>(maximum_records_per_update_to_irods_str);
         } catch (boost::bad_lexical_cast& e) {
             LOG(LOG_ERR, "Could not parse maximum_records_per_update_to_irods as an integer.\n");
+            return lustre_irods::CONFIGURATION_ERROR;
+        }
+
+        try {
+            config_struct->maximum_records_per_sql_command = boost::lexical_cast<unsigned int>(maximum_records_per_sql_command_str);
+        } catch (boost::bad_lexical_cast& e) {
+            LOG(LOG_ERR, "Could not parse maximum_records_per_sql_command as an integer.\n");
             return lustre_irods::CONFIGURATION_ERROR;
         }
 

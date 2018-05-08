@@ -36,6 +36,7 @@ struct ChangeMap {
   updateStatus @4 :Text;
   irodsApiUpdateType @5 :Text;
   resourceName @6 :Text;
+  maximumRecordsPerSqlCommand @7 :Int64;
 }
 
 

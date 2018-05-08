@@ -64,7 +64,7 @@ struct ChangeMap {
   class Pipeline;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(cabd3de2d1baf714, 1, 6)
+    CAPNP_DECLARE_STRUCT_HEADER(cabd3de2d1baf714, 2, 6)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -251,6 +251,8 @@ public:
   inline bool hasResourceName() const;
   inline  ::capnp::Text::Reader getResourceName() const;
 
+  inline  ::int64_t getMaximumRecordsPerSqlCommand() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
@@ -323,6 +325,9 @@ public:
   inline  ::capnp::Text::Builder initResourceName(unsigned int size);
   inline void adoptResourceName(::capnp::Orphan< ::capnp::Text>&& value);
   inline ::capnp::Orphan< ::capnp::Text> disownResourceName();
+
+  inline  ::int64_t getMaximumRecordsPerSqlCommand();
+  inline void setMaximumRecordsPerSqlCommand( ::int64_t value);
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -788,6 +793,20 @@ inline void ChangeMap::Builder::adoptResourceName(
 inline ::capnp::Orphan< ::capnp::Text> ChangeMap::Builder::disownResourceName() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(_builder.getPointerField(
       ::capnp::bounded<5>() * ::capnp::POINTERS));
+}
+
+inline  ::int64_t ChangeMap::Reader::getMaximumRecordsPerSqlCommand() const {
+  return _reader.getDataField< ::int64_t>(
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
+}
+
+inline  ::int64_t ChangeMap::Builder::getMaximumRecordsPerSqlCommand() {
+  return _builder.getDataField< ::int64_t>(
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
+}
+inline void ChangeMap::Builder::setMaximumRecordsPerSqlCommand( ::int64_t value) {
+  _builder.setDataField< ::int64_t>(
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS, value);
 }
 
 

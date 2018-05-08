@@ -158,8 +158,13 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
         if ( status < 0 || !icss ) {
             return CAT_NOT_OPEN;
         }
-    }
 
+#if MY_ICAT
+        // for mysql, lower the isolation level for the large updates to 
+        // avoid deadlocks 
+        setMysqlIsolationLevelReadCommitted(icss);
+#endif
+    }
 
     // setup the output struct
     ( *_out ) = ( irodsLustreApiOut_t* )malloc( sizeof( irodsLustreApiOut_t ) );
@@ -180,6 +185,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
     std::string register_path(changeMap.getRegisterPath().cStr()); 
     int64_t resource_id = changeMap.getResourceId();
     std::string resource_name(changeMap.getResourceName().cStr());
+    int64_t maximum_records_per_sql_command = changeMap.getMaximumRecordsPerSqlCommand(); 
 
     // for batched file inserts 
     std::vector<std::string> fidstr_list_for_create;
@@ -250,13 +256,13 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
     if (direct_db_modification_requested) {
 
         if (fidstr_list_for_unlink.size() > 0) {
-            handle_batch_unlink(fidstr_list_for_unlink, _comm, icss);
+            handle_batch_unlink(fidstr_list_for_unlink, maximum_records_per_sql_command, _comm, icss);
         }
  
         if (fidstr_list_for_create.size() > 0) {
             handle_batch_create(lustre_root_path, register_path, resource_id, resource_name,
                     fidstr_list_for_create, lustre_path_list, object_name_list, parent_fidstr_list, file_size_list,
-                    _comm, icss, user_id);
+                    maximum_records_per_sql_command, _comm, icss, user_id);
         }
     }
 

@@ -25,6 +25,7 @@ typedef struct lustre_irods_connector_cfg {
     std::string changelog_reader_push_work_address;
     std::string result_accumulator_push_address;
     unsigned int irods_updater_thread_count;
+    unsigned int maximum_records_per_sql_command;
     unsigned int maximum_records_per_update_to_irods;
     unsigned int maximum_records_to_receive_from_lustre_changelog;
     unsigned int message_receive_timeout_msec;

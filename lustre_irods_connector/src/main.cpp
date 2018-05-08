@@ -251,6 +251,10 @@ void run_main_changelog_reader_loop(const lustre_irods_connector_cfg_t& config_s
                 int rc = write_change_table_to_capnproto_buf(&config_struct, buf, buflen,
                         change_map, active_fidstr_list);
 
+                if (rc == lustre_irods::COLLISION_IN_FIDSTR) {
+                    LOG(LOG_INFO, "----- Collision!  Breaking out -----\n");
+                }
+
                 // if we get a failure or we get a return code indicating that we must
                 // wait on the completion of one fid to complete before continuing, 
                 // then break out of this loop
@@ -404,13 +408,11 @@ void irods_api_client_main(const lustre_irods_connector_cfg_t *config_struct_ptr
 
         if (!irods_error_detected && bytes_received > 0) {
 
-            LOG(LOG_DBG, "irods client(%u): Received work message %s.\n", thread_number, (char*)message.data());
-
             irodsLustreApiInp_t inp {};
             inp.buf = static_cast<unsigned char*>(message.data());
             inp.buflen = message.size(); 
 
-            LOG(LOG_DBG, "irods client (%u): received message of length %d\n", thread_number, inp.buflen);
+            LOG(LOG_INFO, "irods client (%u): received message of length %d\n", thread_number, inp.buflen);
 
             if (0 == conn.instantiate_irods_connection(config_struct_ptr, thread_number )) {
 

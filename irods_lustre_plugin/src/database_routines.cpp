@@ -865,4 +865,15 @@ int cmlGetNextRowFromStatement( int stmtNum,
     return 0;
 }
     
+#if MY_ICAT
 
+void setMysqlIsolationLevelReadCommitted(icatSessionStruct *icss) {
+    cllBindVarCount = 0;
+    int status = cmlExecuteNoAnswerSql("set SESSION TRANSACTION ISOLATION LEVEL READ UNCOMMITTED", icss);
+    if (status != 0 && status != CAT_SUCCESS_BUT_WITH_NO_INFO) {
+        rodsLog(LOG_ERROR, "Error setting mysql isolation level.  Error is %i.", status);
+        return;
+    }
+}
+
+#endif

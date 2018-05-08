@@ -519,6 +519,7 @@ int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *conf
     changeMap.setRegisterPath(config_struct_ptr->irods_register_path);
     changeMap.setUpdateStatus("PENDING");
     changeMap.setIrodsApiUpdateType(config_struct_ptr->irods_api_update_type);
+    changeMap.setMaximumRecordsPerSqlCommand(config_struct_ptr->maximum_records_per_sql_command);
 
     size_t write_count = change_map_seq.size() >= config_struct_ptr->maximum_records_per_update_to_irods 
         ? config_struct_ptr->maximum_records_per_update_to_irods : change_map_seq.size() ;
