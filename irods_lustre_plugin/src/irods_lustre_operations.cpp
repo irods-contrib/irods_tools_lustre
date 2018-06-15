@@ -192,20 +192,13 @@ int find_irods_path_with_avu(rsComm_t *_conn, const std::string& attr, const std
 
 // Returns the path in irods for a file in lustre based on the mapping in register_map.  
 // If the prefix is not in register_map then the function returns -1, otherwise it returns 0.
-// Precondition:  irods_path is a buffer of size MAX_NAME_LEN
-int lustre_path_to_irods_path(const char *lustre_path, const std::vector<std::pair<std::string, std::string> >& register_map,
-        char *irods_path) {
-
-    rodsLog(LOG_ERROR, "%s: lustre_path=%s", __FUNCTION__, lustre_path);
-
-    std::string lustre_full_path(lustre_path);
+int lustre_path_to_irods_path(const std::string& lustre_path, const std::vector<std::pair<std::string, std::string> >& register_map,
+        std::string& irods_path) {
 
     for (auto& iter : register_map) {
         const std::string& lustre_path_prefix = iter.first;
-        rodsLog(LOG_ERROR, "%s: lustre_path_prefix=%s", __FUNCTION__, lustre_path_prefix.c_str());
-        if (lustre_full_path.compare(0, lustre_path_prefix.length(), lustre_path_prefix) == 0) {
-            rodsLog(LOG_ERROR, "%s: match!", __FUNCTION__);
-            snprintf(irods_path, MAX_NAME_LEN, "%s%s", iter.second.c_str(), lustre_path + strlen(lustre_path_prefix.c_str()));
+        if (lustre_path.compare(0, lustre_path_prefix.length(), lustre_path_prefix) == 0) {
+            irods_path = iter.second + lustre_path.substr(lustre_path_prefix.length());
             return 0;
         }
     }
@@ -215,23 +208,20 @@ int lustre_path_to_irods_path(const char *lustre_path, const std::vector<std::pa
 
 // Returns the path in lustre for a data object in irods based on the mapping in register_map.  
 // If the prefix is not in register_map then the function returns -1, otherwise it returns 0.
-// Precondition:  lustre_path is a buffer of size MAX_NAME_LEN
-int irods_path_to_lustre_path(const char *irods_path, const std::vector<std::pair<std::string, std::string> >& register_map,
-        char *lustre_path) {
-
-
-    std::string irods_full_path(irods_path);
+int irods_path_to_lustre_path(const std::string& irods_path, const std::vector<std::pair<std::string, std::string> >& register_map,
+        std::string& lustre_path) {
 
     for (auto& iter : register_map) {
         const std::string& irods_path_prefix = iter.second;
-        if (irods_full_path.compare(0, irods_path_prefix.length(), irods_path_prefix) == 0) {
-            snprintf(lustre_path, MAX_NAME_LEN, "%s%s", iter.first.c_str(), irods_path + strlen(irods_path_prefix.c_str()));
+        if (irods_path.compare(0, irods_path_prefix.length(), irods_path_prefix) == 0) {
+            lustre_path = iter.first + irods_path.substr(irods_path_prefix.length());
             return 0;
         }
     }
 
     return -1;
 }
+
 
 int get_user_id(rsComm_t* _comm, icatSessionStruct *icss, rodsLong_t& user_id, bool direct_db_access_flag) {
 
@@ -252,8 +242,8 @@ void handle_create(const std::vector<std::pair<std::string, std::string> >& regi
 
 
     int status;
-   
-    char irods_path[MAX_NAME_LEN];
+  
+    std::string irods_path; 
     if (lustre_path_to_irods_path(lustre_path.c_str(), register_map, irods_path) < 0) {
         rodsLog(LOG_NOTICE, "Skipping entry because lustre_path [%s] is not in register_map.",
                    lustre_path.c_str()); 
@@ -326,7 +316,7 @@ void handle_create(const std::vector<std::pair<std::string, std::string> >& regi
         keyValPair_t reg_param;
         memset(&reg_param, 0, sizeof(reg_param));
         addKeyVal(&reg_param, fidstr_avu_key.c_str(), fidstr.c_str());
-        status = chlAddAVUMetadata(_comm, 0, "-d", irods_path, fidstr_avu_key.c_str(), fidstr.c_str(), "");
+        status = chlAddAVUMetadata(_comm, 0, "-d", irods_path.c_str(), fidstr_avu_key.c_str(), fidstr.c_str(), "");
         rodsLog(LOG_NOTICE, "Return value from chlAddAVUMetdata = %i", status);
         if (status < 0) {
             rodsLog(LOG_ERROR, "Error adding %s metadata to object %s.  Error is %i", fidstr_avu_key.c_str(), fidstr.c_str(), status);
@@ -337,7 +327,7 @@ void handle_create(const std::vector<std::pair<std::string, std::string> >& regi
 
         dataObjInp_t dataObjInp;
         memset(&dataObjInp, 0, sizeof(dataObjInp));
-        strncpy(dataObjInp.objPath, irods_path, MAX_NAME_LEN);
+        strncpy(dataObjInp.objPath, irods_path.c_str(), MAX_NAME_LEN);
         addKeyVal(&dataObjInp.condInput, FILE_PATH_KW, lustre_path.c_str());
         addKeyVal(&dataObjInp.condInput, RESC_NAME_KW, resource_name.c_str());
         addKeyVal(&dataObjInp.condInput, RESC_HIER_STR_KW, resource_name.c_str());
@@ -355,7 +345,7 @@ void handle_create(const std::vector<std::pair<std::string, std::string> >& regi
         memset(&modAVUMetadataInp, 0, sizeof(modAVUMetadataInp_t)); 
         modAVUMetadataInp.arg0 = "add";
         modAVUMetadataInp.arg1 = "-d";
-        modAVUMetadataInp.arg2 = irods_path;
+        strncpy(modAVUMetadataInp.arg2, irods_path.c_str(), MAX_NAME_LEN);
         modAVUMetadataInp.arg3 = const_cast<char*>(fidstr_avu_key.c_str());
         modAVUMetadataInp.arg4 = const_cast<char*>(fidstr.c_str());
         status = rsModAVUMetadata(_comm, &modAVUMetadataInp);
@@ -528,8 +518,8 @@ void handle_mkdir(const std::vector<std::pair<std::string, std::string> >& regis
 
     int status;
 
-    char irods_path[MAX_NAME_LEN];
-    if (lustre_path_to_irods_path(lustre_path.c_str(), register_map, irods_path) < 0) {
+    std::string irods_path;
+    if (lustre_path_to_irods_path(lustre_path, register_map, irods_path) < 0) {
         rodsLog(LOG_NOTICE, "Skipping mkdir on lustre_path [%s] which is not in register_map.",
                lustre_path.c_str());
         return;
@@ -539,7 +529,7 @@ void handle_mkdir(const std::vector<std::pair<std::string, std::string> >& regis
 
         collInfo_t coll_info;
         memset(&coll_info, 0, sizeof(coll_info));
-        strncpy(coll_info.collName, irods_path, MAX_NAME_LEN);
+        strncpy(coll_info.collName, irods_path.c_str(), MAX_NAME_LEN);
 
         // register object
         status = chlRegColl(_comm, &coll_info);
@@ -553,7 +543,7 @@ void handle_mkdir(const std::vector<std::pair<std::string, std::string> >& regis
         keyValPair_t reg_param;
         memset(&reg_param, 0, sizeof(reg_param));
         addKeyVal(&reg_param, fidstr_avu_key.c_str(), fidstr.c_str());
-        status = chlAddAVUMetadata(_comm, 0, "-C", irods_path, fidstr_avu_key.c_str(), fidstr.c_str(), "");
+        status = chlAddAVUMetadata(_comm, 0, "-C", irods_path.c_str(), fidstr_avu_key.c_str(), fidstr.c_str(), "");
         rodsLog(LOG_NOTICE, "Return value from chlAddAVUMetadata = %i", status);
         if (status < 0) {
             rodsLog(LOG_ERROR, "Error adding %s metadata to object %s.  Error is %i", fidstr_avu_key.c_str(), fidstr.c_str(), status);
@@ -566,7 +556,7 @@ void handle_mkdir(const std::vector<std::pair<std::string, std::string> >& regis
         // register object
         collInp_t coll_input;
         memset(&coll_input, 0, sizeof(coll_input));
-        strncpy(coll_input.collName, irods_path, MAX_NAME_LEN);
+        strncpy(coll_input.collName, irods_path.c_str(), MAX_NAME_LEN);
         status = rsCollCreate(_comm, &coll_input); 
         if (status < 0) {
             rodsLog(LOG_ERROR, "Error registering collection %s.  Error is %i", fidstr.c_str(), status);
@@ -578,7 +568,7 @@ void handle_mkdir(const std::vector<std::pair<std::string, std::string> >& regis
         memset(&modAVUMetadataInp, 0, sizeof(modAVUMetadataInp_t)); 
         modAVUMetadataInp.arg0 = "add";
         modAVUMetadataInp.arg1 = "-C";
-        modAVUMetadataInp.arg2 = irods_path;
+        strncpy(modAVUMetadataInp.arg2, irods_path.c_str(), MAX_NAME_LEN);
         modAVUMetadataInp.arg3 = const_cast<char*>(fidstr_avu_key.c_str());
         modAVUMetadataInp.arg4 = const_cast<char*>(fidstr.c_str());
         status = rsModAVUMetadata(_comm, &modAVUMetadataInp);
@@ -770,26 +760,27 @@ void handle_rename_dir(const std::vector<std::pair<std::string, std::string> >& 
  
     if (direct_db_access_flag) { 
 
-        char parent_path[MAX_NAME_LEN];
-        char collection_path[MAX_NAME_LEN];
+        char parent_path_cstr[MAX_NAME_LEN];
+        std::string collection_path;
 
         // get the parent's path - using parent's fidstr
         std::vector<std::string> bindVars;
         bindVars.push_back(parent_fidstr);
-        status = cmlGetStringValueFromSql(get_collection_path_from_fidstr_sql.c_str(), parent_path, MAX_NAME_LEN, bindVars, icss);
+        status = cmlGetStringValueFromSql(get_collection_path_from_fidstr_sql.c_str(), parent_path_cstr, MAX_NAME_LEN, bindVars, icss);
+        std::string parent_path(parent_path_cstr);
         if (status != 0) {
             rodsLog(LOG_ERROR, "Error looking up parent collection for rename for collection %s.  Error is %i", fidstr.c_str(), status);
             cmlExecuteNoAnswerSql("rollback", icss);
         }
 
-        snprintf(collection_path, MAX_NAME_LEN, "%s%s%s", parent_path, irods::get_virtual_path_separator().c_str(), object_name.c_str());
+        collection_path = parent_path + irods::get_virtual_path_separator().c_str() + object_name;
 
-        rodsLog(LOG_NOTICE, "collection path = %s\tparent_path = %s", collection_path, parent_path);
+        rodsLog(LOG_NOTICE, "collection path = %s\tparent_path = %s", collection_path.c_str(), parent_path.c_str());
           
 
         // update coll_name, parent_coll_name, and coll_id
-        cllBindVars[0] = collection_path;
-        cllBindVars[1] = parent_path;
+        cllBindVars[0] = collection_path.c_str();
+        cllBindVars[1] = parent_path.c_str();
         cllBindVars[2] = fidstr.c_str();
         cllBindVarCount = 3;
         status = cmlExecuteNoAnswerSql(update_collection_for_rename_sql.c_str(), icss);
@@ -812,29 +803,29 @@ void handle_rename_dir(const std::vector<std::pair<std::string, std::string> >& 
 
             //std::string old_lustre_path = lustre_root_path + old_irods_path.substr(register_path.length());
             //std::string new_lustre_path = lustre_root_path + new_irods_path.substr(register_path.length());
-           
-            char old_lustre_path[MAX_NAME_LEN]; 
-            char new_lustre_path[MAX_NAME_LEN]; 
+        
+            std::string old_lustre_path;   
+            std::string new_lustre_path;   
 
-            if (irods_path_to_lustre_path(old_irods_path.c_str(), register_map, old_lustre_path) < 0) {
-                rodsLog(LOG_ERROR, "%s - could not convert old irods path [%s] to old lustre path .  skipping.\n", old_irods_path.c_str(), old_lustre_path);
+            if (irods_path_to_lustre_path(old_irods_path, register_map, old_lustre_path) < 0) {
+                rodsLog(LOG_ERROR, "%s - could not convert old irods path [%s] to old lustre path .  skipping.\n", old_irods_path.c_str(), old_lustre_path.c_str());
                 return;
             }
 
-            if (irods_path_to_lustre_path(new_irods_path.c_str(), register_map, new_lustre_path) < 0) {
-                rodsLog(LOG_ERROR, "%s - could not convert new irods path [%s] to new lustre path .  skipping.\n", new_irods_path.c_str(), new_lustre_path);
+            if (irods_path_to_lustre_path(new_irods_path, register_map, new_lustre_path) < 0) {
+                rodsLog(LOG_ERROR, "%s - could not convert new irods path [%s] to new lustre path .  skipping.\n", new_irods_path.c_str(), new_lustre_path.c_str());
                 return;
             }
 
-            std::string like_clause = std::string(old_lustre_path) + "/%";
+            std::string like_clause = old_lustre_path + "/%";
 
-            rodsLog(LOG_NOTICE, "old_lustre_path = %s", old_lustre_path);
-            rodsLog(LOG_NOTICE, "new_lustre_path = %s", new_lustre_path);
+            rodsLog(LOG_NOTICE, "old_lustre_path = %s", old_lustre_path.c_str());
+            rodsLog(LOG_NOTICE, "new_lustre_path = %s", new_lustre_path.c_str());
 
             // for now, rename all with sql update
 #ifdef POSTGRES_ICAT 
-            cllBindVars[0] = new_lustre_path;
-            cllBindVars[1] = old_lustre_path;
+            cllBindVars[0] = new_lustre_path.c_str();
+            cllBindVars[1] = old_lustre_path.c_str();
             cllBindVars[2] = like_clause.c_str();
             cllBindVarCount = 3;
             status = cmlExecuteNoAnswerSql(update_filepath_on_collection_rename_sql.c_str(), icss);
