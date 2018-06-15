@@ -108,13 +108,14 @@ This will create an executable called lustre_irods_connector and a configuration
 
 - mdtname - the name of the MDT in Lustre.
 - lustre_root_path - the local mount point into Lustre
-- register_path - the path in iRODS where Lustre files will be registered 
-- resource_name - the resource in iRODS
+- irods_resource_name - the resource in iRODS
 - resource_id
 - log_level - one of LOG_FATAL, LOG_ERR, LOG_WARN, LOG_INFO, LOG_DBG
 - irods_api_update_type - one of:
     - direct - iRODS plugin uses direct DB access for all changes
     - policy - iRODS plugin uses the iRODS API's for all changes
+- register_map - an array of lustre_path to irods_path mappings
+- thread_{n}_connection_paramters - irods_host and irods_port that thread n connects to.  If this is not defined the local iRODS environment (iinit) is used.
 
 # Running the LCAPD daemon and running the connector.
 
@@ -128,9 +129,12 @@ sudo lctl set_param mdd.lustre01-MDT0000.changelog_mask="MARK CREAT MKDIR HLINK 
 
 ```
 /location/to/lcap/src/lcapd/lcapd -c /etc/lcapd.conf&
+
 ```
 
-3.  Run the iRODS/Lustre connector.
+3.  Perform iinit to connect to the default iRODS host..
+
+4.  Run the iRODS/Lustre connector.
 
 ```
 /path/to/lustre_irods_connector
@@ -148,5 +152,5 @@ If the configuration file has been renamed or is not in the current location, us
 /path/to/lustre_irods_connector -c /path/to/config/file/lustre_irods_connector_config.json
 ```
 
-4.  Make changes to Lustre and detect that these changes are picked up by the connector and files are registered/deregistered/etc. in iRODS.
+5.  Make changes to Lustre and detect that these changes are picked up by the connector and files are registered/deregistered/etc. in iRODS.
 

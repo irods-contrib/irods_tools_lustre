@@ -2,7 +2,7 @@
         "mdtname": "lustre01-MDT0000",
         "lustre_root_path": "/lustreResc/lustre01",
         "irods_resource_name": "lustreResc",
-        "irods_api_update_type", "direct",
+        "irods_api_update_type": "direct",
         "log_level": "LOG_DBG",
         "changelog_poll_interval_seconds": 1,
         "irods_client_connect_failure_retry_seconds": 30,
