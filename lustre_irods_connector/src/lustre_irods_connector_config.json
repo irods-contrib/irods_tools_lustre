@@ -1,8 +1,7 @@
 {
         "mdtname": "lustre01-MDT0000",
-        "lustre_root_path": "/lustre01",
-        "irods_register_path": "/tempZone/lustre",
-        "irods_resource_name": "demoResc",
+        "lustre_root_path": "/lustreResc/lustre01",
+        "irods_resource_name": "lustreResc",
         "irods_api_update_type", "direct",
         "log_level": "LOG_DBG",
         "changelog_poll_interval_seconds": 1,
@@ -16,6 +15,23 @@
         "maximum_records_per_sql_command": 1,
         "maximum_records_to_receive_from_lustre_changelog": 500,
         "message_receive_timeout_msec": 2000,
+
+        "register_map": [
+            {
+                "lustre_path": "/lustreResc/lustre01/home",
+                "irods_register_path": "/tempZone/home"
+            },
+            {
+                "lustre_path": "/lustreResc/lustre01/a",
+                "irods_register_path": "/tempZone/a"
+            },
+            {
+                "lustre_path": "/lustreResc/lustre01",
+                "irods_register_path": "/tempZone/lustre"
+            }
+        ],
+
+
         "thread_1_connection_parameters": {
                  "irods_host": "localhost",
                  "irods_port": "1247"

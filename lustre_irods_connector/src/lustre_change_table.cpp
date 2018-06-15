@@ -513,13 +513,24 @@ int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *conf
     capnp::MallocMessageBuilder message;
     ChangeMap::Builder changeMap = message.initRoot<ChangeMap>();
 
-    changeMap.setLustreRootPath(config_struct_ptr->lustre_root_path);
+    //changeMap.setLustreRootPath(config_struct_ptr->lustre_root_path);
     changeMap.setResourceId(config_struct_ptr->irods_resource_id);
     changeMap.setResourceName(config_struct_ptr->irods_resource_name);
-    changeMap.setRegisterPath(config_struct_ptr->irods_register_path);
+    //changeMap.setRegisterPath(config_struct_ptr->irods_register_path);
     changeMap.setUpdateStatus("PENDING");
     changeMap.setIrodsApiUpdateType(config_struct_ptr->irods_api_update_type);
     changeMap.setMaximumRecordsPerSqlCommand(config_struct_ptr->maximum_records_per_sql_command);
+
+    // build the register map
+    capnp::List<RegisterMapEntry>::Builder reg_map = changeMap.initRegisterMap(config_struct_ptr->register_map.size());
+
+    unsigned long cnt = 0;
+    for (auto& iter : config_struct_ptr->register_map) {
+        reg_map[cnt].setLustrePath(iter.first);
+        reg_map[cnt].setIrodsRegisterPath(iter.second);
+        ++cnt;
+    }
+
 
     size_t write_count = change_map_seq.size() >= config_struct_ptr->maximum_records_per_update_to_irods 
         ? config_struct_ptr->maximum_records_per_update_to_irods : change_map_seq.size() ;
@@ -527,7 +538,7 @@ int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *conf
     capnp::List<ChangeDescriptor>::Builder entries = changeMap.initEntries(write_count);
 
     bool collision_in_fidstr = false;
-    unsigned long cnt = 0;
+    cnt = 0;
     for (auto iter = change_map_seq.begin(); iter != change_map_seq.end() && cnt < write_count;) { 
 
         LOG(LOG_DBG, "fidstr=%s oper_complete=%i\n", iter->fidstr.c_str(), iter->oper_complete);

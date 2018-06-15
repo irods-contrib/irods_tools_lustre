@@ -29,7 +29,6 @@ extern "C" {
   #include "lcap_cpp_wrapper.h"
 }
 
-
 std::string concatenate_paths_with_boost(const std::string& p1, const std::string& p2) {
 
     boost::filesystem::path path_obj_1{p1};
@@ -181,14 +180,16 @@ std::vector<std::function<int(unsigned long long, const std::string&, const std:
     &not_implemented            // CL_ATIME - irods does not have an access time
 };
 
-int handle_record(const std::string& lustre_root_path, changelog_rec_ptr rec, change_map_t& change_map) {
+int handle_record(const std::string& lustre_root_path, const std::vector<std::pair<std::string, std::string> >& register_map, changelog_rec_ptr rec, change_map_t& change_map) {
 
     if (nullptr == rec) {
         LOG(LOG_ERR, "Null rec sent to %s - %d\n", __FUNCTION__, __LINE__);
         return lustre_irods::INVALID_OPERAND_ERROR;
     }
 
-    if (get_cr_type_from_changelog_rec(rec) >= get_cl_last()) {
+    unsigned int cr_type = get_cr_type_from_changelog_rec(rec);
+
+    if (cr_type >= get_cl_last()) {
         LOG(LOG_ERR, "Invalid cr_type - %u\n", get_cr_type_from_changelog_rec(rec));
         return lustre_irods::INVALID_CR_TYPE_ERROR;
     }
@@ -204,11 +205,28 @@ int handle_record(const std::string& lustre_root_path, changelog_rec_ptr rec, ch
         return rc;
     }
 
+
+    // make sure lustre_full_path is in register_map
+    bool in_register_map = false;
+    for (auto& iter : register_map) {
+        const std::string& lustre_path_prefix = iter.first;
+        if (lustre_full_path.compare(0, lustre_path_prefix.length(), lustre_path_prefix) == 0) {
+            in_register_map = true;
+            break;
+        }
+    }
+
+    // just skip if the path is not in the register map.  For deletes the path will not be there.
+    if (!in_register_map && cr_type != get_cl_rename() && cr_type != get_cl_unlink() && cr_type != get_cl_rmdir()) {
+        LOG(LOG_DBG, "Skipping %s because it is not on the register map.\n", lustre_full_path.c_str());
+        return lustre_irods::SUCCESS;
+    }
+
     std::string parent_fidstr = convert_to_fidstr(get_cr_pfid_from_changelog_rec(rec));
 
     std::string object_name(changelog_rec_wrapper_name(rec), get_cr_namelen_from_changelog_rec(rec));
 
-    if (get_cr_type_from_changelog_rec(rec) == get_cl_rename()) {
+    if (cr_type == get_cl_rename()) {
 
         // remove any entries in table 
         std::string overwritten_fidstr = get_overwritten_fidstr_from_record(rec); 
@@ -249,7 +267,6 @@ int handle_record(const std::string& lustre_root_path, changelog_rec_ptr rec, ch
 
         return lustre_rename(cr_index, lustre_root_path, fidstr, parent_fidstr, object_name, lustre_full_path, old_lustre_path, change_map);
     } else {
-        //return (*lustre_operators[get_cr_type_from_changelog_rec(rec)])(lustre_root_path, fidstr, parent_fidstr, object_name, lustre_full_path, change_map);
         return lustre_operators[get_cr_type_from_changelog_rec(rec)](cr_index, lustre_root_path, fidstr, parent_fidstr, object_name, lustre_full_path, change_map);
     }
 }
@@ -269,7 +286,9 @@ int finish_lcap_changelog(lcap_cl_ctx_ptr ctx) {
 //   lustre_root_path - the root path of the lustre mount point
 //   change_map - the change map
 //   ctx - the lcap context (lcap_cl_ctx) 
-int poll_change_log_and_process(const std::string& mdtname, const std::string& lustre_root_path, change_map_t& change_map, lcap_cl_ctx_ptr ctx, 
+int poll_change_log_and_process(const std::string& mdtname, const std::string& lustre_root_path, 
+        const std::vector<std::pair<std::string, std::string> >& register_map,
+        change_map_t& change_map, lcap_cl_ctx_ptr ctx, 
         int max_records_to_retrieve, unsigned long long& last_cr_index) {
 
     LOG(LOG_DBG, "poll_change_log_and_process: max_records_to_retrieve = %d\n", max_records_to_retrieve);
@@ -347,7 +366,7 @@ int poll_change_log_and_process(const std::string& mdtname, const std::string& l
 
         LOG(LOG_INFO, "\n");
 
-        if ((rc = handle_record(lustre_root_path, rec, change_map)) < 0) {
+        if ((rc = handle_record(lustre_root_path, register_map, rec, change_map)) < 0) {
             lustre_fid_ptr cr_tfid_ptr = get_cr_tfid_from_changelog_rec(rec);
             LOG(LOG_ERR, "handle record failed for %s %#llx:0x%x:0x%x rc = %i\n", 
                     changelog_type2str_wrapper(get_cr_type_from_changelog_rec(rec)), 

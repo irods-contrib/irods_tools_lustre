@@ -86,17 +86,18 @@ int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *
             LOG(LOG_ERR, "Key mdtname missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
         }
+
         if (0 != read_key_from_map(config_map, "lustre_root_path", config_struct->lustre_root_path)) {
             LOG(LOG_ERR, "Key lustre_root_path missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
         }
         while (remove_trailing_slash(config_struct->lustre_root_path));
 
-        if (0 != read_key_from_map(config_map, "irods_register_path", config_struct->irods_register_path)) {
+        /*if (0 != read_key_from_map(config_map, "irods_register_path", config_struct->irods_register_path)) {
             LOG(LOG_ERR, "Key register_path missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
         }
-        while (remove_trailing_slash(config_struct->irods_register_path));
+        while (remove_trailing_slash(config_struct->irods_register_path));*/
 
         if (0 != read_key_from_map(config_map, "irods_resource_name", config_struct->irods_resource_name)) {
             LOG(LOG_ERR, "Key resource_name missing from %s\n", filename.c_str());
@@ -154,7 +155,37 @@ int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *
             return lustre_irods::CONFIGURATION_ERROR;
         }
 
+        // read register_map
+        try {
+            auto &register_map_array(config_map.get<json_array>("register_map"));
 
+            for (auto& iter : register_map_array) {
+                auto path_map_entry = iter.as<json_map>();
+
+                std::string lustre_path, irods_register_path;
+
+                if (0 != read_key_from_map(path_map_entry, "lustre_path", lustre_path)) {
+                    LOG(LOG_ERR, "Key lustre_path missing from entry in register_map of json file %s\n", filename.c_str());
+                    return lustre_irods::CONFIGURATION_ERROR;
+                }
+                if (0 != read_key_from_map(path_map_entry, "irods_register_path", irods_register_path)) {
+                    LOG(LOG_ERR, "Key irods_register_path missing from entry in register_map of json file %s\n", filename.c_str());
+                    return lustre_irods::CONFIGURATION_ERROR;
+                }
+
+                // remove trailing slashes
+                while (remove_trailing_slash(lustre_path));
+                while (remove_trailing_slash(irods_register_path));
+
+                std::pair<std::string, std::string> path_entry_pair;
+                path_entry_pair = std::make_pair(lustre_path, irods_register_path);
+                config_struct->register_map.push_back(path_entry_pair);
+            }
+
+        } catch (const std::exception& e) {
+            LOG(LOG_ERR, "Could not read register_map array from %s\n", filename.c_str());
+            return lustre_irods::CONFIGURATION_ERROR;
+        }
 
         // populate config variables
 

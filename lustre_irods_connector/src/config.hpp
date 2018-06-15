@@ -14,7 +14,7 @@ typedef struct irods_connection_cfg {
 typedef struct lustre_irods_connector_cfg {
     std::string mdtname;
     std::string lustre_root_path;
-    std::string irods_register_path;
+    //std::string irods_register_path;
     std::string irods_resource_name;
     std::string irods_api_update_type;    // valid values are "direct" and "policy"
     int64_t irods_resource_id;
@@ -30,6 +30,9 @@ typedef struct lustre_irods_connector_cfg {
     unsigned int maximum_records_to_receive_from_lustre_changelog;
     unsigned int message_receive_timeout_msec;
     std::map<int, irods_connection_cfg_t> irods_connection_list;
+
+    // map the lustre path to irods path
+    std::vector<std::pair<std::string, std::string> > register_map;
 
 } lustre_irods_connector_cfg_t;
 

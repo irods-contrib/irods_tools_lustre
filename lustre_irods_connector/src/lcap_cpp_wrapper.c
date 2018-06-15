@@ -155,3 +155,11 @@ unsigned int get_cl_rename() {
 unsigned int get_cl_last() {
     return CL_LAST;
 }
+
+unsigned int get_cl_rmdir() {
+    return CL_RMDIR;
+}
+
+unsigned int get_cl_unlink() {
+    return CL_UNLINK;
+}

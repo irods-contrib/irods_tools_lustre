@@ -28,15 +28,19 @@ struct ChangeDescriptor {
 
 }
 
+struct RegisterMapEntry {
+  lustrePath @0 :Text;
+  irodsRegisterPath @1 :Text;
+}
+
 struct ChangeMap {
   entries @0 :List(ChangeDescriptor);
-  lustreRootPath @1 :Text;
-  registerPath @2 :Text;
-  resourceId @3 :Int64;
-  updateStatus @4 :Text;
-  irodsApiUpdateType @5 :Text;
-  resourceName @6 :Text;
-  maximumRecordsPerSqlCommand @7 :Int64;
+  registerMap @1 :List(RegisterMapEntry);
+  resourceId @2 :Int64;
+  updateStatus @3 :Text;
+  irodsApiUpdateType @4 :Text;
+  resourceName @5 :Text;
+  maximumRecordsPerSqlCommand @6 :Int64;
 }
 
 

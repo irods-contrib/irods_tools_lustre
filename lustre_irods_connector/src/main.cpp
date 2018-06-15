@@ -239,8 +239,8 @@ void run_main_changelog_reader_loop(const lustre_irods_connector_cfg_t& config_s
 
         if (!pause_reading) {
             LOG(LOG_DBG,"changelog client polling changelog\n");
-            poll_change_log_and_process(config_struct.mdtname.c_str(), config_struct.lustre_root_path.c_str(), change_map, ctx, 
-                    max_number_of_changelog_records - change_map.size(), last_cr_index);
+            poll_change_log_and_process(config_struct.mdtname, config_struct.lustre_root_path, config_struct.register_map, 
+                    change_map, ctx, max_number_of_changelog_records - change_map.size(), last_cr_index);
 
             LOG(LOG_DBG, "change_map size: %lu\n", change_map.size());
 

@@ -31,6 +31,7 @@ enum class ObjectTypeEnum_c18a187835dc7f2b: uint16_t {
   DIR,
 };
 CAPNP_DECLARE_ENUM(ObjectTypeEnum, c18a187835dc7f2b);
+CAPNP_DECLARE_SCHEMA(bc6d5f61ec676ebd);
 CAPNP_DECLARE_SCHEMA(cabd3de2d1baf714);
 
 }  // namespace schemas
@@ -56,6 +57,21 @@ struct ChangeDescriptor {
   };
 };
 
+struct RegisterMapEntry {
+  RegisterMapEntry() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(bc6d5f61ec676ebd, 0, 2)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
+    #endif  // !CAPNP_LITE
+  };
+};
+
 struct ChangeMap {
   ChangeMap() = delete;
 
@@ -64,7 +80,7 @@ struct ChangeMap {
   class Pipeline;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(cabd3de2d1baf714, 2, 6)
+    CAPNP_DECLARE_STRUCT_HEADER(cabd3de2d1baf714, 2, 5)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -214,6 +230,97 @@ private:
 };
 #endif  // !CAPNP_LITE
 
+class RegisterMapEntry::Reader {
+public:
+  typedef RegisterMapEntry Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
+  }
+
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand());
+  }
+#endif  // !CAPNP_LITE
+
+  inline bool hasLustrePath() const;
+  inline  ::capnp::Text::Reader getLustrePath() const;
+
+  inline bool hasIrodsRegisterPath() const;
+  inline  ::capnp::Text::Reader getIrodsRegisterPath() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+};
+
+class RegisterMapEntry::Builder {
+public:
+  typedef RegisterMapEntry Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
+#endif  // !CAPNP_LITE
+
+  inline bool hasLustrePath();
+  inline  ::capnp::Text::Builder getLustrePath();
+  inline void setLustrePath( ::capnp::Text::Reader value);
+  inline  ::capnp::Text::Builder initLustrePath(unsigned int size);
+  inline void adoptLustrePath(::capnp::Orphan< ::capnp::Text>&& value);
+  inline ::capnp::Orphan< ::capnp::Text> disownLustrePath();
+
+  inline bool hasIrodsRegisterPath();
+  inline  ::capnp::Text::Builder getIrodsRegisterPath();
+  inline void setIrodsRegisterPath( ::capnp::Text::Reader value);
+  inline  ::capnp::Text::Builder initIrodsRegisterPath(unsigned int size);
+  inline void adoptIrodsRegisterPath(::capnp::Orphan< ::capnp::Text>&& value);
+  inline ::capnp::Orphan< ::capnp::Text> disownIrodsRegisterPath();
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+};
+
+#if !CAPNP_LITE
+class RegisterMapEntry::Pipeline {
+public:
+  typedef RegisterMapEntry Pipelines;
+
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+};
+#endif  // !CAPNP_LITE
+
 class ChangeMap::Reader {
 public:
   typedef ChangeMap Reads;
@@ -234,11 +341,8 @@ public:
   inline bool hasEntries() const;
   inline  ::capnp::List< ::ChangeDescriptor>::Reader getEntries() const;
 
-  inline bool hasLustreRootPath() const;
-  inline  ::capnp::Text::Reader getLustreRootPath() const;
-
-  inline bool hasRegisterPath() const;
-  inline  ::capnp::Text::Reader getRegisterPath() const;
+  inline bool hasRegisterMap() const;
+  inline  ::capnp::List< ::RegisterMapEntry>::Reader getRegisterMap() const;
 
   inline  ::int64_t getResourceId() const;
 
@@ -288,19 +392,12 @@ public:
   inline void adoptEntries(::capnp::Orphan< ::capnp::List< ::ChangeDescriptor>>&& value);
   inline ::capnp::Orphan< ::capnp::List< ::ChangeDescriptor>> disownEntries();
 
-  inline bool hasLustreRootPath();
-  inline  ::capnp::Text::Builder getLustreRootPath();
-  inline void setLustreRootPath( ::capnp::Text::Reader value);
-  inline  ::capnp::Text::Builder initLustreRootPath(unsigned int size);
-  inline void adoptLustreRootPath(::capnp::Orphan< ::capnp::Text>&& value);
-  inline ::capnp::Orphan< ::capnp::Text> disownLustreRootPath();
-
-  inline bool hasRegisterPath();
-  inline  ::capnp::Text::Builder getRegisterPath();
-  inline void setRegisterPath( ::capnp::Text::Reader value);
-  inline  ::capnp::Text::Builder initRegisterPath(unsigned int size);
-  inline void adoptRegisterPath(::capnp::Orphan< ::capnp::Text>&& value);
-  inline ::capnp::Orphan< ::capnp::Text> disownRegisterPath();
+  inline bool hasRegisterMap();
+  inline  ::capnp::List< ::RegisterMapEntry>::Builder getRegisterMap();
+  inline void setRegisterMap( ::capnp::List< ::RegisterMapEntry>::Reader value);
+  inline  ::capnp::List< ::RegisterMapEntry>::Builder initRegisterMap(unsigned int size);
+  inline void adoptRegisterMap(::capnp::Orphan< ::capnp::List< ::RegisterMapEntry>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::RegisterMapEntry>> disownRegisterMap();
 
   inline  ::int64_t getResourceId();
   inline void setResourceId( ::int64_t value);
@@ -577,6 +674,74 @@ inline void ChangeDescriptor::Builder::setCrIndex( ::int64_t value) {
       ::capnp::bounded<3>() * ::capnp::ELEMENTS, value);
 }
 
+inline bool RegisterMapEntry::Reader::hasLustrePath() const {
+  return !_reader.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
+}
+inline bool RegisterMapEntry::Builder::hasLustrePath() {
+  return !_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::Text::Reader RegisterMapEntry::Reader::getLustrePath() const {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_reader.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+inline  ::capnp::Text::Builder RegisterMapEntry::Builder::getLustrePath() {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+inline void RegisterMapEntry::Builder::setLustrePath( ::capnp::Text::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::Text>::set(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), value);
+}
+inline  ::capnp::Text::Builder RegisterMapEntry::Builder::initLustrePath(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::init(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), size);
+}
+inline void RegisterMapEntry::Builder::adoptLustrePath(
+    ::capnp::Orphan< ::capnp::Text>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::Text> RegisterMapEntry::Builder::disownLustrePath() {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+
+inline bool RegisterMapEntry::Reader::hasIrodsRegisterPath() const {
+  return !_reader.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
+}
+inline bool RegisterMapEntry::Builder::hasIrodsRegisterPath() {
+  return !_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::Text::Reader RegisterMapEntry::Reader::getIrodsRegisterPath() const {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_reader.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
+}
+inline  ::capnp::Text::Builder RegisterMapEntry::Builder::getIrodsRegisterPath() {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
+}
+inline void RegisterMapEntry::Builder::setIrodsRegisterPath( ::capnp::Text::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::Text>::set(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS), value);
+}
+inline  ::capnp::Text::Builder RegisterMapEntry::Builder::initIrodsRegisterPath(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::init(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS), size);
+}
+inline void RegisterMapEntry::Builder::adoptIrodsRegisterPath(
+    ::capnp::Orphan< ::capnp::Text>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::Text> RegisterMapEntry::Builder::disownIrodsRegisterPath() {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
+}
+
 inline bool ChangeMap::Reader::hasEntries() const {
   return !_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
@@ -611,72 +776,38 @@ inline ::capnp::Orphan< ::capnp::List< ::ChangeDescriptor>> ChangeMap::Builder::
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
-inline bool ChangeMap::Reader::hasLustreRootPath() const {
+inline bool ChangeMap::Reader::hasRegisterMap() const {
   return !_reader.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
 }
-inline bool ChangeMap::Builder::hasLustreRootPath() {
+inline bool ChangeMap::Builder::hasRegisterMap() {
   return !_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::Text::Reader ChangeMap::Reader::getLustreRootPath() const {
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_reader.getPointerField(
+inline  ::capnp::List< ::RegisterMapEntry>::Reader ChangeMap::Reader::getRegisterMap() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::RegisterMapEntry>>::get(_reader.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
-inline  ::capnp::Text::Builder ChangeMap::Builder::getLustreRootPath() {
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_builder.getPointerField(
+inline  ::capnp::List< ::RegisterMapEntry>::Builder ChangeMap::Builder::getRegisterMap() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::RegisterMapEntry>>::get(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
-inline void ChangeMap::Builder::setLustreRootPath( ::capnp::Text::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::Text>::set(_builder.getPointerField(
+inline void ChangeMap::Builder::setRegisterMap( ::capnp::List< ::RegisterMapEntry>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::RegisterMapEntry>>::set(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS), value);
 }
-inline  ::capnp::Text::Builder ChangeMap::Builder::initLustreRootPath(unsigned int size) {
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::init(_builder.getPointerField(
+inline  ::capnp::List< ::RegisterMapEntry>::Builder ChangeMap::Builder::initRegisterMap(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::RegisterMapEntry>>::init(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS), size);
 }
-inline void ChangeMap::Builder::adoptLustreRootPath(
-    ::capnp::Orphan< ::capnp::Text>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(_builder.getPointerField(
+inline void ChangeMap::Builder::adoptRegisterMap(
+    ::capnp::Orphan< ::capnp::List< ::RegisterMapEntry>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::RegisterMapEntry>>::adopt(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::Text> ChangeMap::Builder::disownLustreRootPath() {
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::capnp::List< ::RegisterMapEntry>> ChangeMap::Builder::disownRegisterMap() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::RegisterMapEntry>>::disown(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
-}
-
-inline bool ChangeMap::Reader::hasRegisterPath() const {
-  return !_reader.getPointerField(
-      ::capnp::bounded<2>() * ::capnp::POINTERS).isNull();
-}
-inline bool ChangeMap::Builder::hasRegisterPath() {
-  return !_builder.getPointerField(
-      ::capnp::bounded<2>() * ::capnp::POINTERS).isNull();
-}
-inline  ::capnp::Text::Reader ChangeMap::Reader::getRegisterPath() const {
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_reader.getPointerField(
-      ::capnp::bounded<2>() * ::capnp::POINTERS));
-}
-inline  ::capnp::Text::Builder ChangeMap::Builder::getRegisterPath() {
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_builder.getPointerField(
-      ::capnp::bounded<2>() * ::capnp::POINTERS));
-}
-inline void ChangeMap::Builder::setRegisterPath( ::capnp::Text::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::Text>::set(_builder.getPointerField(
-      ::capnp::bounded<2>() * ::capnp::POINTERS), value);
-}
-inline  ::capnp::Text::Builder ChangeMap::Builder::initRegisterPath(unsigned int size) {
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::init(_builder.getPointerField(
-      ::capnp::bounded<2>() * ::capnp::POINTERS), size);
-}
-inline void ChangeMap::Builder::adoptRegisterPath(
-    ::capnp::Orphan< ::capnp::Text>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(_builder.getPointerField(
-      ::capnp::bounded<2>() * ::capnp::POINTERS), kj::mv(value));
-}
-inline ::capnp::Orphan< ::capnp::Text> ChangeMap::Builder::disownRegisterPath() {
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(_builder.getPointerField(
-      ::capnp::bounded<2>() * ::capnp::POINTERS));
 }
 
 inline  ::int64_t ChangeMap::Reader::getResourceId() const {
@@ -695,104 +826,104 @@ inline void ChangeMap::Builder::setResourceId( ::int64_t value) {
 
 inline bool ChangeMap::Reader::hasUpdateStatus() const {
   return !_reader.getPointerField(
-      ::capnp::bounded<3>() * ::capnp::POINTERS).isNull();
+      ::capnp::bounded<2>() * ::capnp::POINTERS).isNull();
 }
 inline bool ChangeMap::Builder::hasUpdateStatus() {
   return !_builder.getPointerField(
-      ::capnp::bounded<3>() * ::capnp::POINTERS).isNull();
+      ::capnp::bounded<2>() * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::Text::Reader ChangeMap::Reader::getUpdateStatus() const {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_reader.getPointerField(
-      ::capnp::bounded<3>() * ::capnp::POINTERS));
+      ::capnp::bounded<2>() * ::capnp::POINTERS));
 }
 inline  ::capnp::Text::Builder ChangeMap::Builder::getUpdateStatus() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_builder.getPointerField(
-      ::capnp::bounded<3>() * ::capnp::POINTERS));
+      ::capnp::bounded<2>() * ::capnp::POINTERS));
 }
 inline void ChangeMap::Builder::setUpdateStatus( ::capnp::Text::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::set(_builder.getPointerField(
-      ::capnp::bounded<3>() * ::capnp::POINTERS), value);
+      ::capnp::bounded<2>() * ::capnp::POINTERS), value);
 }
 inline  ::capnp::Text::Builder ChangeMap::Builder::initUpdateStatus(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::init(_builder.getPointerField(
-      ::capnp::bounded<3>() * ::capnp::POINTERS), size);
+      ::capnp::bounded<2>() * ::capnp::POINTERS), size);
 }
 inline void ChangeMap::Builder::adoptUpdateStatus(
     ::capnp::Orphan< ::capnp::Text>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(_builder.getPointerField(
-      ::capnp::bounded<3>() * ::capnp::POINTERS), kj::mv(value));
+      ::capnp::bounded<2>() * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::Text> ChangeMap::Builder::disownUpdateStatus() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(_builder.getPointerField(
-      ::capnp::bounded<3>() * ::capnp::POINTERS));
+      ::capnp::bounded<2>() * ::capnp::POINTERS));
 }
 
 inline bool ChangeMap::Reader::hasIrodsApiUpdateType() const {
   return !_reader.getPointerField(
-      ::capnp::bounded<4>() * ::capnp::POINTERS).isNull();
+      ::capnp::bounded<3>() * ::capnp::POINTERS).isNull();
 }
 inline bool ChangeMap::Builder::hasIrodsApiUpdateType() {
   return !_builder.getPointerField(
-      ::capnp::bounded<4>() * ::capnp::POINTERS).isNull();
+      ::capnp::bounded<3>() * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::Text::Reader ChangeMap::Reader::getIrodsApiUpdateType() const {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_reader.getPointerField(
-      ::capnp::bounded<4>() * ::capnp::POINTERS));
+      ::capnp::bounded<3>() * ::capnp::POINTERS));
 }
 inline  ::capnp::Text::Builder ChangeMap::Builder::getIrodsApiUpdateType() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_builder.getPointerField(
-      ::capnp::bounded<4>() * ::capnp::POINTERS));
+      ::capnp::bounded<3>() * ::capnp::POINTERS));
 }
 inline void ChangeMap::Builder::setIrodsApiUpdateType( ::capnp::Text::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::set(_builder.getPointerField(
-      ::capnp::bounded<4>() * ::capnp::POINTERS), value);
+      ::capnp::bounded<3>() * ::capnp::POINTERS), value);
 }
 inline  ::capnp::Text::Builder ChangeMap::Builder::initIrodsApiUpdateType(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::init(_builder.getPointerField(
-      ::capnp::bounded<4>() * ::capnp::POINTERS), size);
+      ::capnp::bounded<3>() * ::capnp::POINTERS), size);
 }
 inline void ChangeMap::Builder::adoptIrodsApiUpdateType(
     ::capnp::Orphan< ::capnp::Text>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(_builder.getPointerField(
-      ::capnp::bounded<4>() * ::capnp::POINTERS), kj::mv(value));
+      ::capnp::bounded<3>() * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::Text> ChangeMap::Builder::disownIrodsApiUpdateType() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(_builder.getPointerField(
-      ::capnp::bounded<4>() * ::capnp::POINTERS));
+      ::capnp::bounded<3>() * ::capnp::POINTERS));
 }
 
 inline bool ChangeMap::Reader::hasResourceName() const {
   return !_reader.getPointerField(
-      ::capnp::bounded<5>() * ::capnp::POINTERS).isNull();
+      ::capnp::bounded<4>() * ::capnp::POINTERS).isNull();
 }
 inline bool ChangeMap::Builder::hasResourceName() {
   return !_builder.getPointerField(
-      ::capnp::bounded<5>() * ::capnp::POINTERS).isNull();
+      ::capnp::bounded<4>() * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::Text::Reader ChangeMap::Reader::getResourceName() const {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_reader.getPointerField(
-      ::capnp::bounded<5>() * ::capnp::POINTERS));
+      ::capnp::bounded<4>() * ::capnp::POINTERS));
 }
 inline  ::capnp::Text::Builder ChangeMap::Builder::getResourceName() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_builder.getPointerField(
-      ::capnp::bounded<5>() * ::capnp::POINTERS));
+      ::capnp::bounded<4>() * ::capnp::POINTERS));
 }
 inline void ChangeMap::Builder::setResourceName( ::capnp::Text::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::set(_builder.getPointerField(
-      ::capnp::bounded<5>() * ::capnp::POINTERS), value);
+      ::capnp::bounded<4>() * ::capnp::POINTERS), value);
 }
 inline  ::capnp::Text::Builder ChangeMap::Builder::initResourceName(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::init(_builder.getPointerField(
-      ::capnp::bounded<5>() * ::capnp::POINTERS), size);
+      ::capnp::bounded<4>() * ::capnp::POINTERS), size);
 }
 inline void ChangeMap::Builder::adoptResourceName(
     ::capnp::Orphan< ::capnp::Text>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(_builder.getPointerField(
-      ::capnp::bounded<5>() * ::capnp::POINTERS), kj::mv(value));
+      ::capnp::bounded<4>() * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::Text> ChangeMap::Builder::disownResourceName() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(_builder.getPointerField(
-      ::capnp::bounded<5>() * ::capnp::POINTERS));
+      ::capnp::bounded<4>() * ::capnp::POINTERS));
 }
 
 inline  ::int64_t ChangeMap::Reader::getMaximumRecordsPerSqlCommand() const {

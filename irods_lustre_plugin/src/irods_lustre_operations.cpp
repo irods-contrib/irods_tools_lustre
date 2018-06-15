@@ -190,22 +190,47 @@ int find_irods_path_with_avu(rsComm_t *_conn, const std::string& attr, const std
     return 0;
 }
 
-
-
-
-// Returns the path in irods for a file in lustre.  
+// Returns the path in irods for a file in lustre based on the mapping in register_map.  
+// If the prefix is not in register_map then the function returns -1, otherwise it returns 0.
 // Precondition:  irods_path is a buffer of size MAX_NAME_LEN
-int lustre_path_to_irods_path(const char *lustre_path, const char *lustre_root_path, 
-        const char *register_path, char *irods_path) {
+int lustre_path_to_irods_path(const char *lustre_path, const std::vector<std::pair<std::string, std::string> >& register_map,
+        char *irods_path) {
 
-    // make sure the file is underneath the lustre_root_path
-    if (strncmp(lustre_path, lustre_root_path, strlen(lustre_root_path)) != 0) {
-        return -1;
+    rodsLog(LOG_ERROR, "%s: lustre_path=%s", __FUNCTION__, lustre_path);
+
+    std::string lustre_full_path(lustre_path);
+
+    for (auto& iter : register_map) {
+        const std::string& lustre_path_prefix = iter.first;
+        rodsLog(LOG_ERROR, "%s: lustre_path_prefix=%s", __FUNCTION__, lustre_path_prefix.c_str());
+        if (lustre_full_path.compare(0, lustre_path_prefix.length(), lustre_path_prefix) == 0) {
+            rodsLog(LOG_ERROR, "%s: match!", __FUNCTION__);
+            snprintf(irods_path, MAX_NAME_LEN, "%s%s", iter.second.c_str(), lustre_path + strlen(lustre_path_prefix.c_str()));
+            return 0;
+        }
     }
 
-    snprintf(irods_path, MAX_NAME_LEN, "%s%s", register_path, lustre_path + strlen(lustre_root_path));
+    return -1;
+}
 
-    return 0;
+// Returns the path in lustre for a data object in irods based on the mapping in register_map.  
+// If the prefix is not in register_map then the function returns -1, otherwise it returns 0.
+// Precondition:  lustre_path is a buffer of size MAX_NAME_LEN
+int irods_path_to_lustre_path(const char *irods_path, const std::vector<std::pair<std::string, std::string> >& register_map,
+        char *lustre_path) {
+
+
+    std::string irods_full_path(irods_path);
+
+    for (auto& iter : register_map) {
+        const std::string& irods_path_prefix = iter.second;
+        if (irods_full_path.compare(0, irods_path_prefix.length(), irods_path_prefix) == 0) {
+            snprintf(lustre_path, MAX_NAME_LEN, "%s%s", iter.first.c_str(), irods_path + strlen(irods_path_prefix.c_str()));
+            return 0;
+        }
+    }
+
+    return -1;
 }
 
 int get_user_id(rsComm_t* _comm, icatSessionStruct *icss, rodsLong_t& user_id, bool direct_db_access_flag) {
@@ -219,7 +244,7 @@ int get_user_id(rsComm_t* _comm, icatSessionStruct *icss, rodsLong_t& user_id, b
     return 0;
 }
 
-void handle_create(const std::string& lustre_root_path, const std::string& register_path, 
+void handle_create(const std::vector<std::pair<std::string, std::string> >& register_map, 
         const int64_t& resource_id, const std::string& resource_name, const std::string& fidstr, 
         const std::string& lustre_path, const std::string& object_name, 
         const ChangeDescriptor::ObjectTypeEnum& object_type, const std::string& parent_fidstr, const int64_t& file_size,
@@ -229,9 +254,9 @@ void handle_create(const std::string& lustre_root_path, const std::string& regis
     int status;
    
     char irods_path[MAX_NAME_LEN];
-    if (lustre_path_to_irods_path(lustre_path.c_str(), lustre_root_path.c_str(), register_path.c_str(), irods_path) < 0) {
-        rodsLog(LOG_NOTICE, "Skipping entry because lustre_path [%s] is not within lustre_root_path [%s].",
-                   lustre_path.c_str(), lustre_root_path.c_str()); 
+    if (lustre_path_to_irods_path(lustre_path.c_str(), register_map, irods_path) < 0) {
+        rodsLog(LOG_NOTICE, "Skipping entry because lustre_path [%s] is not in register_map.",
+                   lustre_path.c_str()); 
         return;
     }
 
@@ -343,7 +368,7 @@ void handle_create(const std::string& lustre_root_path, const std::string& regis
     }
 }
 
-void handle_batch_create(const std::string& lustre_root_path, const std::string& register_path, const int64_t& resource_id,
+void handle_batch_create(const std::vector<std::pair<std::string, std::string> >& register_map, const int64_t& resource_id,
         const std::string& resource_name, const std::vector<std::string>& fidstr_list, const std::vector<std::string>& lustre_path_list,
         const std::vector<std::string>& object_name_list, const std::vector<std::string>& parent_fidstr_list,
         const std::vector<int64_t>& file_size_list, const int64_t& maximum_records_per_sql_command, rsComm_t* _comm, icatSessionStruct *icss, const rodsLong_t& user_id) {
@@ -494,7 +519,7 @@ void handle_batch_create(const std::string& lustre_root_path, const std::string&
 }
 
 
-void handle_mkdir(const std::string& lustre_root_path, const std::string& register_path, 
+void handle_mkdir(const std::vector<std::pair<std::string, std::string> >& register_map, 
         const int64_t& resource_id, const std::string& resource_name, const std::string& fidstr, 
         const std::string& lustre_path, const std::string& object_name, 
         const ChangeDescriptor::ObjectTypeEnum& object_type, const std::string& parent_fidstr, const int64_t& file_size,
@@ -504,9 +529,9 @@ void handle_mkdir(const std::string& lustre_root_path, const std::string& regist
     int status;
 
     char irods_path[MAX_NAME_LEN];
-    if (lustre_path_to_irods_path(lustre_path.c_str(), lustre_root_path.c_str(), register_path.c_str(), irods_path) < 0) {
-        rodsLog(LOG_NOTICE, "Skipping mkdir on lustre_path [%s] which is not within lustre_root_path [%s].",
-               lustre_path.c_str(), lustre_root_path.c_str());
+    if (lustre_path_to_irods_path(lustre_path.c_str(), register_map, irods_path) < 0) {
+        rodsLog(LOG_NOTICE, "Skipping mkdir on lustre_path [%s] which is not in register_map.",
+               lustre_path.c_str());
         return;
     }
 
@@ -567,7 +592,7 @@ void handle_mkdir(const std::string& lustre_root_path, const std::string& regist
 
 }
 
-void handle_other(const std::string& lustre_root_path, const std::string& register_path, 
+void handle_other(const std::vector<std::pair<std::string, std::string> >& register_map, 
         const int64_t& resource_id, const std::string& resource_name, const std::string& fidstr, 
         const std::string& lustre_path, const std::string& object_name, 
         const ChangeDescriptor::ObjectTypeEnum& object_type, const std::string& parent_fidstr, const int64_t& file_size,
@@ -625,7 +650,7 @@ void handle_other(const std::string& lustre_root_path, const std::string& regist
 
 }
 
-void handle_rename_file(const std::string& lustre_root_path, const std::string& register_path, 
+void handle_rename_file(const std::vector<std::pair<std::string, std::string> >& register_map, 
         const int64_t& resource_id, const std::string& resource_name, const std::string& fidstr, 
         const std::string& lustre_path, const std::string& object_name, 
         const ChangeDescriptor::ObjectTypeEnum& object_type, const std::string& parent_fidstr, const int64_t& file_size,
@@ -712,7 +737,7 @@ void handle_rename_file(const std::string& lustre_root_path, const std::string& 
 
 }
 
-void handle_rename_dir(const std::string& lustre_root_path, const std::string& register_path, 
+void handle_rename_dir(const std::vector<std::pair<std::string, std::string> >& register_map, 
         const int64_t& resource_id, const std::string& resource_name, const std::string& fidstr, 
         const std::string& lustre_path, const std::string& object_name, 
         const ChangeDescriptor::ObjectTypeEnum& object_type, const std::string& parent_fidstr, const int64_t& file_size,
@@ -784,18 +809,32 @@ void handle_rename_dir(const std::string& lustre_root_path, const std::string& r
 
         try {
 
-            std::string old_lustre_path = lustre_root_path + old_irods_path.substr(register_path.length());
-            std::string new_lustre_path = lustre_root_path + new_irods_path.substr(register_path.length());
-            std::string like_clause = old_lustre_path + "/%";
 
-            rodsLog(LOG_NOTICE, "old_lustre_path = %s", old_lustre_path.c_str());
-            rodsLog(LOG_NOTICE, "new_lustre_path = %s", new_lustre_path.c_str());
-            rodsLog(LOG_NOTICE, "new_lustre_path = %s", new_lustre_path.c_str());
+            //std::string old_lustre_path = lustre_root_path + old_irods_path.substr(register_path.length());
+            //std::string new_lustre_path = lustre_root_path + new_irods_path.substr(register_path.length());
+           
+            char old_lustre_path[MAX_NAME_LEN]; 
+            char new_lustre_path[MAX_NAME_LEN]; 
+
+            if (irods_path_to_lustre_path(old_irods_path.c_str(), register_map, old_lustre_path) < 0) {
+                rodsLog(LOG_ERROR, "%s - could not convert old irods path [%s] to old lustre path .  skipping.\n", old_irods_path.c_str(), old_lustre_path);
+                return;
+            }
+
+            if (irods_path_to_lustre_path(new_irods_path.c_str(), register_map, new_lustre_path) < 0) {
+                rodsLog(LOG_ERROR, "%s - could not convert new irods path [%s] to new lustre path .  skipping.\n", new_irods_path.c_str(), new_lustre_path);
+                return;
+            }
+
+            std::string like_clause = std::string(old_lustre_path) + "/%";
+
+            rodsLog(LOG_NOTICE, "old_lustre_path = %s", old_lustre_path);
+            rodsLog(LOG_NOTICE, "new_lustre_path = %s", new_lustre_path);
 
             // for now, rename all with sql update
 #ifdef POSTGRES_ICAT 
-            cllBindVars[0] = new_lustre_path.c_str();
-            cllBindVars[1] = old_lustre_path.c_str();
+            cllBindVars[0] = new_lustre_path;
+            cllBindVars[1] = old_lustre_path;
             cllBindVars[2] = like_clause.c_str();
             cllBindVarCount = 3;
             status = cmlExecuteNoAnswerSql(update_filepath_on_collection_rename_sql.c_str(), icss);
@@ -850,7 +889,7 @@ void handle_rename_dir(const std::string& lustre_root_path, const std::string& r
 
 }
 
-void handle_unlink(const std::string& lustre_root_path, const std::string& register_path, 
+void handle_unlink(const std::vector<std::pair<std::string, std::string> >& register_map, 
         const int64_t& resource_id, const std::string& resource_name, const std::string& fidstr, 
         const std::string& lustre_path, const std::string& object_name, 
         const ChangeDescriptor::ObjectTypeEnum& object_type, const std::string& parent_fidstr, const int64_t& file_size,
@@ -1037,7 +1076,7 @@ void handle_batch_unlink(const std::vector<std::string>& fidstr_list, const int6
 
 }
 
-void handle_rmdir(const std::string& lustre_root_path, const std::string& register_path, 
+void handle_rmdir(const std::vector<std::pair<std::string, std::string> >& register_map, 
         const int64_t& resource_id, const std::string& resource_name, const std::string& fidstr, 
         const std::string& lustre_path, const std::string& object_name, 
         const ChangeDescriptor::ObjectTypeEnum& object_type, const std::string& parent_fidstr, const int64_t& file_size,

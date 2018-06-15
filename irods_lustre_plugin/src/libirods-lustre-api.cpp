@@ -122,6 +122,16 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
     std::string irods_api_update_type(changeMap.getIrodsApiUpdateType().cStr()); 
     bool direct_db_modification_requested = (irods_api_update_type == "direct");
 
+    // read and populate the register_map which holds a mapping of lustre paths to irods paths
+    std::vector<std::pair<std::string, std::string> > register_map;
+    for (RegisterMapEntry::Reader entry : changeMap.getRegisterMap()) {
+        std::string lustre_path(entry.getLustrePath().cStr());
+        std::string irods_register_path(entry.getIrodsRegisterPath().cStr());
+        register_map.push_back(std::make_pair(lustre_path, irods_register_path));
+    }
+
+
+
     int status;
     icatSessionStruct *icss = nullptr;
 
@@ -181,8 +191,8 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
         }
     }
 
-    std::string lustre_root_path(changeMap.getLustreRootPath().cStr()); 
-    std::string register_path(changeMap.getRegisterPath().cStr()); 
+    //std::string lustre_root_path(changeMap.getLustreRootPath().cStr()); 
+    //std::string register_path(changeMap.getRegisterPath().cStr()); 
     int64_t resource_id = changeMap.getResourceId();
     std::string resource_name(changeMap.getResourceName().cStr());
     int64_t maximum_records_per_sql_command = changeMap.getMaximumRecordsPerSqlCommand(); 
@@ -217,36 +227,36 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
                 parent_fidstr_list.push_back(parent_fidstr);
                 file_size_list.push_back(file_size);
             } else {
-                handle_create(lustre_root_path, register_path, resource_id, resource_name,
+                handle_create(register_map, resource_id, resource_name,
                         fidstr, lustre_path, object_name, object_type, parent_fidstr, file_size,
                         _comm, icss, user_id, direct_db_modification_requested);
             }
         } else if (event_type == ChangeDescriptor::EventTypeEnum::MKDIR) {
-            handle_mkdir(lustre_root_path, register_path, resource_id, resource_name,
+            handle_mkdir(register_map, resource_id, resource_name,
                     fidstr, lustre_path, object_name, object_type, parent_fidstr, file_size,
                     _comm, icss, user_id, direct_db_modification_requested);
         } else if (event_type == ChangeDescriptor::EventTypeEnum::OTHER) {
-            handle_other(lustre_root_path, register_path, resource_id, resource_name,
+            handle_other(register_map, resource_id, resource_name,
                     fidstr, lustre_path, object_name, object_type, parent_fidstr, file_size,
                     _comm, icss, user_id, direct_db_modification_requested);
         } else if (event_type == ChangeDescriptor::EventTypeEnum::RENAME and object_type == ChangeDescriptor::ObjectTypeEnum::FILE) {
-            handle_rename_file(lustre_root_path, register_path, resource_id, resource_name,
+            handle_rename_file(register_map, resource_id, resource_name,
                     fidstr, lustre_path, object_name, object_type, parent_fidstr, file_size,
                     _comm, icss, user_id, direct_db_modification_requested);
         } else if (event_type == ChangeDescriptor::EventTypeEnum::RENAME and object_type == ChangeDescriptor::ObjectTypeEnum::DIR) {
-            handle_rename_dir(lustre_root_path, register_path, resource_id, resource_name,
+            handle_rename_dir(register_map, resource_id, resource_name,
                     fidstr, lustre_path, object_name, object_type, parent_fidstr, file_size,
                     _comm, icss, user_id, direct_db_modification_requested);
         } else if (event_type == ChangeDescriptor::EventTypeEnum::UNLINK) {
             if (direct_db_modification_requested) {
                 fidstr_list_for_unlink.push_back(fidstr);
             } else {
-                handle_unlink(lustre_root_path, register_path, resource_id, resource_name,
+                handle_unlink(register_map, resource_id, resource_name,
                         fidstr, lustre_path, object_name, object_type, parent_fidstr, file_size,
                         _comm, icss, user_id, direct_db_modification_requested);
             }
         } else if (event_type == ChangeDescriptor::EventTypeEnum::RMDIR) {
-            handle_rmdir(lustre_root_path, register_path, resource_id, resource_name,
+            handle_rmdir(register_map, resource_id, resource_name,
                     fidstr, lustre_path, object_name, object_type, parent_fidstr, file_size,
                     _comm, icss, user_id, direct_db_modification_requested);
         }
@@ -260,7 +270,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
         }
  
         if (fidstr_list_for_create.size() > 0) {
-            handle_batch_create(lustre_root_path, register_path, resource_id, resource_name,
+            handle_batch_create(register_map, resource_id, resource_name,
                     fidstr_list_for_create, lustre_path_list, object_name_list, parent_fidstr_list, file_size_list,
                     maximum_records_per_sql_command, _comm, icss, user_id);
         }

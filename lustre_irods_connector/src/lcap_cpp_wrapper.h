@@ -71,5 +71,7 @@ unsigned int get_clf_jobid_mask();
 
 unsigned int get_cl_rename();
 unsigned int get_cl_last();
+unsigned int get_cl_rmdir();
+unsigned int get_cl_unlink();
 
 #endif

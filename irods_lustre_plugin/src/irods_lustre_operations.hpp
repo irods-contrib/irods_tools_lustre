@@ -42,44 +42,44 @@
 #ifndef IRODS_LUSTRE_OPERATIONS_H
 #define IRODS_LUSTRE_OPERATIONS_H
 
-void handle_create(const std::string& lustre_root_path, const std::string& register_path, const int64_t& resource_id, 
+void handle_create(const std::vector<std::pair<std::string, std::string> >& register_map, const int64_t& resource_id, 
         const std::string& resource_name, const std::string& fidstr, const std::string& lustre_path, const std::string& object_name, 
         const ChangeDescriptor::ObjectTypeEnum& object_type, const std::string& parent_fidstr, const int64_t& file_size,
         rsComm_t* _comm, icatSessionStruct *icss, const rodsLong_t& user_id, bool direct_db_access);
 
-void handle_batch_create(const std::string& lustre_root_path, const std::string& register_path, const int64_t& resource_id,
+void handle_batch_create(const std::vector<std::pair<std::string, std::string> >& register_map, const int64_t& resource_id,
         const std::string& resource_name, const std::vector<std::string>& fidstr_list, const std::vector<std::string>& lustre_path_list,
         const std::vector<std::string>& object_name_list, const std::vector<std::string>& parent_fidstr_list,
         const std::vector<int64_t>& file_size_list, const int64_t& maximum_records_per_sql_command, rsComm_t* _comm, icatSessionStruct *icss, const rodsLong_t& user_id);
 
-void handle_mkdir(const std::string& lustre_root_path, const std::string& register_path, const int64_t& resource_id, 
+void handle_mkdir(const std::vector<std::pair<std::string, std::string> >& register_map, const int64_t& resource_id, 
         const std::string& resource_name, const std::string& fidstr, const std::string& lustre_path, const std::string& object_name, 
         const ChangeDescriptor::ObjectTypeEnum& object_type, const std::string& parent_fidstr, const int64_t& file_size,
         rsComm_t* _comm, icatSessionStruct *icss, const rodsLong_t& user_id, bool direct_db_access);
 
-void handle_other(const std::string& lustre_root_path, const std::string& register_path, const int64_t& resource_id, 
+void handle_other(const std::vector<std::pair<std::string, std::string> >& register_map, const int64_t& resource_id, 
         const std::string& resource_name, const std::string& fidstr, const std::string& lustre_path, const std::string& object_name, 
         const ChangeDescriptor::ObjectTypeEnum& object_type, const std::string& parent_fidstr, const int64_t& file_size,
         rsComm_t* _comm, icatSessionStruct *icss, const rodsLong_t& user_id, bool direct_db_access);
 
-void handle_rename_file(const std::string& lustre_root_path, const std::string& register_path, const int64_t& resource_id, 
+void handle_rename_file(const std::vector<std::pair<std::string, std::string> >& register_map, const int64_t& resource_id, 
         const std::string& resource_name, const std::string& fidstr, const std::string& lustre_path, const std::string& object_name, 
         const ChangeDescriptor::ObjectTypeEnum& object_type, const std::string& parent_fidstr, const int64_t& file_size,
         rsComm_t* _comm, icatSessionStruct *icss, const rodsLong_t& user_id, bool direct_db_access);
 
-void handle_rename_dir(const std::string& lustre_root_path, const std::string& register_path, const int64_t& resource_id, 
+void handle_rename_dir(const std::vector<std::pair<std::string, std::string> >& register_map, const int64_t& resource_id, 
         const std::string& resource_name, const std::string& fidstr, const std::string& lustre_path, const std::string& object_name, 
         const ChangeDescriptor::ObjectTypeEnum& object_type, const std::string& parent_fidstr, const int64_t& file_size,
         rsComm_t* _comm, icatSessionStruct *icss, const rodsLong_t& user_id, bool direct_db_access);
 
-void handle_unlink(const std::string& lustre_root_path, const std::string& register_path, const int64_t& resource_id, 
+void handle_unlink(const std::vector<std::pair<std::string, std::string> >& register_map, const int64_t& resource_id, 
         const std::string& resource_name, const std::string& fidstr, const std::string& lustre_path, const std::string& object_name, 
         const ChangeDescriptor::ObjectTypeEnum& object_type, const std::string& parent_fidstr, const int64_t& file_size,
         rsComm_t* _comm, icatSessionStruct *icss, const rodsLong_t& user_id, bool direct_db_access);
 
 void handle_batch_unlink(const std::vector<std::string>& fidstr_list, const int64_t& maximum_records_per_sql_command, rsComm_t* _comm, icatSessionStruct *icss); 
 
-void handle_rmdir(const std::string& lustre_root_path, const std::string& register_path, const int64_t& resource_id, 
+void handle_rmdir(const std::vector<std::pair<std::string, std::string> >& register_map, const int64_t& resource_id, 
         const std::string& resource_name, const std::string& fidstr, const std::string& lustre_path, const std::string& object_name, 
         const ChangeDescriptor::ObjectTypeEnum& object_type, const std::string& parent_fidstr, const int64_t& file_size,
         rsComm_t* _comm, icatSessionStruct *icss, const rodsLong_t& user_id, bool direct_db_access);
