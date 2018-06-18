@@ -345,7 +345,7 @@ void handle_create(const std::vector<std::pair<std::string, std::string> >& regi
         memset(&modAVUMetadataInp, 0, sizeof(modAVUMetadataInp_t)); 
         modAVUMetadataInp.arg0 = "add";
         modAVUMetadataInp.arg1 = "-d";
-        strncpy(modAVUMetadataInp.arg2, irods_path.c_str(), MAX_NAME_LEN);
+        modAVUMetadataInp.arg2 = const_cast<char*>(irods_path.c_str());
         modAVUMetadataInp.arg3 = const_cast<char*>(fidstr_avu_key.c_str());
         modAVUMetadataInp.arg4 = const_cast<char*>(fidstr.c_str());
         status = rsModAVUMetadata(_comm, &modAVUMetadataInp);
@@ -568,7 +568,7 @@ void handle_mkdir(const std::vector<std::pair<std::string, std::string> >& regis
         memset(&modAVUMetadataInp, 0, sizeof(modAVUMetadataInp_t)); 
         modAVUMetadataInp.arg0 = "add";
         modAVUMetadataInp.arg1 = "-C";
-        strncpy(modAVUMetadataInp.arg2, irods_path.c_str(), MAX_NAME_LEN);
+        modAVUMetadataInp.arg2 = const_cast<char*>(irods_path.c_str());
         modAVUMetadataInp.arg3 = const_cast<char*>(fidstr_avu_key.c_str());
         modAVUMetadataInp.arg4 = const_cast<char*>(fidstr.c_str());
         status = rsModAVUMetadata(_comm, &modAVUMetadataInp);
@@ -1133,3 +1133,29 @@ void handle_rmdir(const std::vector<std::pair<std::string, std::string> >& regis
 
     }
 }
+
+void handle_write_fid(const std::vector<std::pair<std::string, std::string> >& register_map, const std::string& lustre_path, 
+                const std::string& fidstr, rsComm_t* _comm) {
+
+    std::string irods_path;
+    if (lustre_path_to_irods_path(lustre_path, register_map, irods_path) < 0) {
+        rodsLog(LOG_NOTICE, "Skipping handle_write_fid on lustre_path [%s] which is not in register_map.",
+               lustre_path.c_str());
+        return;
+    }
+
+    // add lustre_identifier metadata
+    modAVUMetadataInp_t modAVUMetadataInp;
+    memset(&modAVUMetadataInp, 0, sizeof(modAVUMetadataInp_t)); 
+    modAVUMetadataInp.arg0 = "add";
+    modAVUMetadataInp.arg1 = "-C";
+    modAVUMetadataInp.arg2 = const_cast<char*>(irods_path.c_str());
+    modAVUMetadataInp.arg3 = const_cast<char*>(fidstr_avu_key.c_str());
+    modAVUMetadataInp.arg4 = const_cast<char*>(fidstr.c_str());
+
+    // ignore error code because the fid metadata likely already exists on the root collection
+    rsModAVUMetadata(_comm, &modAVUMetadataInp);
+
+}
+
+

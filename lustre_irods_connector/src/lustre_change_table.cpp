@@ -38,6 +38,27 @@ std::string object_type_to_str(ChangeDescriptor::ObjectTypeEnum type);
 //static boost::shared_mutex change_table_mutex;
 static std::mutex change_table_mutex;
 
+int lustre_write_fidstr_to_root_dir(const std::string& lustre_root_path, const std::string& fidstr, change_map_t& change_map) {
+
+    std::lock_guard<std::mutex> lock(change_table_mutex);
+
+    change_descriptor entry{};
+    entry.cr_index = 0;
+    entry.fidstr = fidstr;
+    entry.parent_fidstr = "";
+    entry.object_name = "";
+    entry.object_type = ChangeDescriptor::ObjectTypeEnum::DIR;
+    entry.lustre_path = lustre_root_path;
+    entry.oper_complete = true;
+    entry.timestamp = time(NULL);
+    entry.last_event = ChangeDescriptor::EventTypeEnum::WRITE_FID;
+    change_map.insert(entry);
+
+    return lustre_irods::SUCCESS;
+
+}
+
+
 
 int lustre_close(unsigned long long cr_index, const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
                  const std::string& object_name, const std::string& lustre_path, change_map_t& change_map) {
@@ -701,6 +722,10 @@ std::string event_type_to_str(ChangeDescriptor::EventTypeEnum type) {
         case ChangeDescriptor::EventTypeEnum::RENAME:
             return "RENAME";
             break;
+        case ChangeDescriptor::EventTypeEnum::WRITE_FID:
+            return "WRITE_FID";
+            break;
+
     }
     return "";
 }
@@ -716,6 +741,8 @@ ChangeDescriptor::EventTypeEnum str_to_event_type(const std::string& str) {
         return ChangeDescriptor::EventTypeEnum::MKDIR;
     } else if ("RENAME" == str) {
         return ChangeDescriptor::EventTypeEnum::RENAME;
+    } else if ("WRITE_FID" == str) {
+        return ChangeDescriptor::EventTypeEnum::WRITE_FID;
     }
     return ChangeDescriptor::EventTypeEnum::OTHER;
 }

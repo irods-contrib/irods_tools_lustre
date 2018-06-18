@@ -55,6 +55,19 @@ int llapi_fid2path_wrapper(const char *device, const char *fidstr, char *path,
 }
 
 
+lustre_fid_ptr llapi_path2fid_wrapper(const char *path) {
+
+    lustre_fid *fidptr;
+    fidptr = malloc(sizeof(lustre_fid));
+    int ret = llapi_path2fid(path, fidptr);
+    if (ret != 0) {
+        free(fidptr);
+        return NULL;
+    }
+    return fidptr;
+}
+
+
 changelog_ext_rename_ptr changelog_rec_wrapper_rename(changelog_rec_ptr rec) {
     return (changelog_ext_rename_ptr)changelog_rec_rename((struct changelog_rec *)rec);
 }

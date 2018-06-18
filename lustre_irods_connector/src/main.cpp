@@ -625,6 +625,13 @@ int main(int argc, char *argv[]) {
         fatal_error_detected = true;
     }
 
+    // add in an event for a  mkdir for the lustre_root so that it will get 
+    // populated with the fidstr
+    std::string root_fidstr = get_fidstr_from_path(config_struct.lustre_root_path);
+    LOG(LOG_DBG, "Root fidstr %s\n", root_fidstr.c_str());
+    lustre_write_fidstr_to_root_dir(config_struct.lustre_root_path, root_fidstr, change_map);
+
+
     if (!fatal_error_detected) {
         run_main_changelog_reader_loop(config_struct, change_map, lcap_cl_ctx, publisher, subscriber, sender, active_fidstr_list, last_cr_index);
     }

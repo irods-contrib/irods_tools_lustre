@@ -259,7 +259,10 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
             handle_rmdir(register_map, resource_id, resource_name,
                     fidstr, lustre_path, object_name, object_type, parent_fidstr, file_size,
                     _comm, icss, user_id, direct_db_modification_requested);
+        } else if (event_type == ChangeDescriptor::EventTypeEnum::WRITE_FID) {
+            handle_write_fid(register_map, lustre_path, fidstr, _comm);
         }
+
 
     }
 

@@ -63,6 +63,9 @@ typedef boost::multi_index::multi_index_container<
 > change_map_t;
 
 
+// This is only to faciliate writing the fidstr to the root directory 
+int lustre_write_fidstr_to_root_dir(const std::string& lustre_root_path, const std::string& fidstr, change_map_t& change_map);
+
 int lustre_close(unsigned long long cr_index, const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,
                      const std::string& object_name, const std::string& lustre_path, change_map_t& change_map);
 int lustre_mkdir(unsigned long long cr_index, const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr,

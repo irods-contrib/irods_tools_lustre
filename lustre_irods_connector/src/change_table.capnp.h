@@ -23,6 +23,7 @@ enum class EventTypeEnum_91656da5d3611dc7: uint16_t {
   RMDIR,
   MKDIR,
   RENAME,
+  WRITE_FID,
 };
 CAPNP_DECLARE_ENUM(EventTypeEnum, 91656da5d3611dc7);
 CAPNP_DECLARE_SCHEMA(c18a187835dc7f2b);

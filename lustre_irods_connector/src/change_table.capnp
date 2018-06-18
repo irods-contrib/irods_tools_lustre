@@ -19,6 +19,7 @@ struct ChangeDescriptor {
     rmdir @3;
     mkdir @4;
     rename @5;
+    writeFid @6;
   }
 
   enum ObjectTypeEnum {

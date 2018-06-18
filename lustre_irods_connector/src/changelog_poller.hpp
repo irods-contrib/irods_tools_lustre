@@ -5,7 +5,7 @@ extern "C" {
   #include "lcap_cpp_wrapper.h"
 }
 
-
+std::string get_fidstr_from_path(std::string path);
 int start_lcap_changelog(const std::string&, lcap_cl_ctx_ptr*, unsigned long long start_cr_index);
 int poll_change_log_and_process(const std::string&, const std::string&, 
         const std::vector<std::pair<std::string, std::string> >&,

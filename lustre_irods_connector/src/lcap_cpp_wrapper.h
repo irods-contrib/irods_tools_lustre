@@ -37,6 +37,8 @@ int get_lcap_cl_direct();
 int llapi_fid2path_wrapper(const char *device, const char *fidstr, char *path,
                       int pathlen, long long *recno, int *linkno);
 
+lustre_fid_ptr llapi_path2fid_wrapper(const char *path);
+
 changelog_ext_rename_ptr changelog_rec_wrapper_rename(changelog_rec_ptr rec); 
 
 char *changelog_rec_wrapper_name(changelog_rec_ptr rec);

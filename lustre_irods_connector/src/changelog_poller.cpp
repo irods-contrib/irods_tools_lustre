@@ -52,6 +52,20 @@ std::string convert_to_fidstr(lustre_fid_ptr fid) {
             get_f_ver_from_lustre_fid(fid));
 }
 
+std::string get_fidstr_from_path(std::string path) {
+
+    lustre_fid_ptr fidptr;
+    
+    fidptr = llapi_path2fid_wrapper(path.c_str());
+    if (fidptr != nullptr) {
+        std::string fidstr = convert_to_fidstr(fidptr);
+        free(fidptr);
+        return fidstr;
+    } else {
+        return std::string();
+    }
+}
+
 // for rename - the overwritten file's fidstr
 std::string get_overwritten_fidstr_from_record(changelog_rec_ptr rec) {
     return convert_to_fidstr(get_cr_tfid_from_changelog_rec(rec)); 
@@ -267,8 +281,11 @@ int handle_record(const std::string& lustre_root_path, const std::vector<std::pa
 
         return lustre_rename(cr_index, lustre_root_path, fidstr, parent_fidstr, object_name, lustre_full_path, old_lustre_path, change_map);
     } else {
+        LOG(LOG_INFO, "calling lustre_operators[](%llu, %s, %s, %s, %s, %s, change_map)\n", cr_index, 
+                lustre_root_path.c_str(), fidstr.c_str(), parent_fidstr.c_str(), object_name.c_str(), lustre_full_path.c_str());
         return lustre_operators[get_cr_type_from_changelog_rec(rec)](cr_index, lustre_root_path, fidstr, parent_fidstr, object_name, lustre_full_path, change_map);
     }
+
 }
 
 int start_lcap_changelog(const std::string& mdtname, lcap_cl_ctx_ptr *ctx, unsigned long long start_cr_index) {
