@@ -1135,12 +1135,20 @@ void handle_rmdir(const std::vector<std::pair<std::string, std::string> >& regis
 }
 
 void handle_write_fid(const std::vector<std::pair<std::string, std::string> >& register_map, const std::string& lustre_path, 
-                const std::string& fidstr, rsComm_t* _comm) {
+                const std::string& fidstr, rsComm_t* _comm, icatSessionStruct *icss) {
 
     std::string irods_path;
     if (lustre_path_to_irods_path(lustre_path, register_map, irods_path) < 0) {
         rodsLog(LOG_NOTICE, "Skipping handle_write_fid on lustre_path [%s] which is not in register_map.",
                lustre_path.c_str());
+        return;
+    }
+
+    // query metadata to see if it already exists
+    rodsLong_t coll_id;
+    std::vector<std::string> bindVars;
+    bindVars.push_back(fidstr);
+    if (cmlGetIntegerValueFromSql(get_collection_id_from_fidstr_sql.c_str(), &coll_id, bindVars, icss ) != CAT_NO_ROWS_FOUND) {
         return;
     }
 

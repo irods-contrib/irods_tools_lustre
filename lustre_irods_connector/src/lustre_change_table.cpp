@@ -797,6 +797,12 @@ int serialize_change_map_to_sqlite(change_map_t& change_map) {
 
     for (auto iter = change_map_seq.begin(); iter != change_map_seq.end(); ++iter) {  
 
+        // don't serialize the event that adds the fid to the root directory as this gets generated 
+        // every time on restart
+        if (iter->last_event == ChangeDescriptor::EventTypeEnum::WRITE_FID) {
+            continue;
+        }
+
         sqlite3_stmt *stmt;     
         sqlite3_prepare_v2(db, "insert into change_map (fidstr, parent_fidstr, object_name, lustre_path, last_event, "
                                "timestamp, oper_complete, object_type, file_size, cr_index) values (?1, ?2, ?3, ?4, "
