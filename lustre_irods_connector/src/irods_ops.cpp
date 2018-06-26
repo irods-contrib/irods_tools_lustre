@@ -120,7 +120,7 @@ int lustre_irods_connection::populate_irods_resc_id(lustre_irods_connector_cfg_t
     }
 
     try {
-        config_struct_ptr->irods_resource_id = std::stoi(&(resource_ids->value[0]));
+        config_struct_ptr->irods_resource_id = std::stoll(&(resource_ids->value[0]));
     } catch (std::invalid_argument& e) {
         clearGenQueryInp(&gen_inp);
         freeGenQueryOut(&gen_out);
