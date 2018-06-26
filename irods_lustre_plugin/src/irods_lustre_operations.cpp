@@ -18,6 +18,15 @@
 #include "rsDataObjRename.hpp"
 #include "rsModDataObjMeta.hpp"
 #include "rsPhyPathReg.hpp"
+#include "rodsType.h"
+
+#if defined(COCKROACHDB_ICAT)
+  #include "mid_level_cockroachdb.hpp"
+  #include "low_level_cockroachdb.hpp"
+#else
+  #include "mid_level_other.hpp"
+  #include "low_level_odbc_other.hpp"
+#endif
 
 // =-=-=-=-=-=-=-
 // // boost includes
@@ -127,20 +136,26 @@ const std::string insert_user_ownership_data_object_sql = "insert into R_OBJT_AC
 
 const std::string get_user_id_sql = "select user_id from R_USER_MAIN where user_name = ?";
 
-#ifdef POSTGRES_ICAT
-const std::string update_filepath_on_collection_rename_sql = "update R_DATA_MAIN set data_path = overlay(data_path placing ? from 1 for char_length(?)) where data_path like ?";
+#if defined(POSTGRES_ICAT) 
+    const std::string update_filepath_on_collection_rename_sql = "update R_DATA_MAIN set data_path = overlay(data_path placing ? from 1 for char_length(?)) where data_path like ?";
+#elif defined(COCKROACHDB_ICAT)
+    const std::string update_filepath_on_collection_rename_sql = "update R_DATA_MAIN set data_path = overlay(data_path placing ? from 1 for ?) where data_path like ?";
 #else
-const std::string update_filepath_on_collection_rename_sql = "update R_DATA_MAIN set data_path = replace(data_path, ?, ?) where data_path like ?";
+    const std::string update_filepath_on_collection_rename_sql = "update R_DATA_MAIN set data_path = replace(data_path, ?, ?) where data_path like ?";
 #endif
 
 
 // finds an irods object with the attr/val/unit combination, returns the first entry in the list
+// return values:
+//    1 - no rows found but no other error
+//    0 - row found
+//    -1 - error encountered
 int find_irods_path_with_avu(rsComm_t *_conn, const std::string& attr, const std::string& value, const std::string& unit, bool is_collection, std::string& irods_path) {
 
     genQueryInp_t  gen_inp;
     genQueryOut_t* gen_out = NULL;
     memset(&gen_inp, 0, sizeof(gen_inp));
-
+    
     std::string query_str;
     if (is_collection) {
         query_str = "select COLL_NAME where META_COLL_ATTR_NAME = '" + attr + "' and META_COLL_ATTR_VALUE = '" +
@@ -164,7 +179,7 @@ int find_irods_path_with_avu(rsComm_t *_conn, const std::string& attr, const std
     if ( status < 0 || !gen_out ) {
         freeGenQueryOut(&gen_out);
         clearGenQueryInp(&gen_inp);
-        return -1;
+        return -2;
     }
 
     if (gen_out->rowCnt < 1) {
@@ -229,6 +244,7 @@ int get_user_id(rsComm_t* _comm, icatSessionStruct *icss, rodsLong_t& user_id, b
     bindVars.push_back(_comm->clientUser.userName);
     int status = cmlGetIntegerValueFromSql(get_user_id_sql.c_str(), &user_id, bindVars, icss );
     if (status != 0) {
+       rodsLog(LOG_ERROR, "get_user_id: cmlGetIntegerValueFromSql return %d\n", status);
        return SYS_USER_RETRIEVE_ERR;
     }
     return 0;
@@ -254,8 +270,13 @@ void handle_create(const std::vector<std::pair<std::string, std::string> >& regi
     if (direct_db_access_flag) { 
 
         // register object
-        
+       
+#if defined(COCKROACHDB_ICAT)
+        int seq_no = cmlGetNextSeqVal(icss);
+#else
         int seq_no = cmlGetCurrentSeqVal(icss);
+#endif 
+
         std::string username = _comm->clientUser.userName;
         std::string zone = _comm->clientUser.rodsZone;
         rodsLog(LOG_NOTICE, "seq_no=%i username=%s zone=%s", seq_no, username.c_str(), zone.c_str());
@@ -290,11 +311,14 @@ void handle_create(const std::vector<std::pair<std::string, std::string> >& regi
             return;
         }
 
+
+#if !defined(COCKROACHDB_ICAT)
         status =  cmlExecuteNoAnswerSql("commit", icss);
         if (status != 0) {
             rodsLog(LOG_ERROR, "Error committing insertion of new data_object %s.  Error is %i", fidstr.c_str(), status);
             return;
         } 
+#endif
 
         // insert user ownership
         cllBindVars[0] = std::to_string(seq_no).c_str();
@@ -306,11 +330,13 @@ void handle_create(const std::vector<std::pair<std::string, std::string> >& regi
             return;
         }
 
+#if !defined(COCKROACHDB_ICAT)
         status =  cmlExecuteNoAnswerSql("commit", icss);
         if (status != 0) {
             rodsLog(LOG_ERROR, "Error committing ownership of new data_object %s.  Error is %i", fidstr.c_str(), status);
             return;
         }
+#endif
 
         // add lustre_identifier metadata
         keyValPair_t reg_param;
@@ -441,7 +467,7 @@ void handle_batch_create(const std::vector<std::pair<std::string, std::string> >
             insert_sql += ", ";
         }
     }
- 
+
     cllBindVarCount = 0;
     status = cmlExecuteNoAnswerSql(insert_sql.c_str(), icss);
     if (status != 0) {
@@ -449,11 +475,13 @@ void handle_batch_create(const std::vector<std::pair<std::string, std::string> >
         return;
     }
 
+#if !defined(COCKROACHDB_ICAT)
     status =  cmlExecuteNoAnswerSql("commit", icss);
     if (status != 0) {
         rodsLog(LOG_ERROR, "Error committing insert into R_META_MAIN.  Error is %i", status);
         return;
     } 
+#endif
 
 
     // Insert into R_OBJT_METMAP
@@ -475,11 +503,13 @@ void handle_batch_create(const std::vector<std::pair<std::string, std::string> >
         return;
     }
 
+#if !defined(COCKROACHDB_ICAT)
     status =  cmlExecuteNoAnswerSql("commit", icss);
     if (status != 0) {
         rodsLog(LOG_ERROR, "Error committing insert into R_OBJT_METAMAP.  Error is %i", status);
         return;
     } 
+#endif
 
     // insert user ownership
     //insert into R_OBJT_ACCESS (object_id, user_id, access_type_id) values (?, ?, 1200) 
@@ -500,12 +530,13 @@ void handle_batch_create(const std::vector<std::pair<std::string, std::string> >
         return;
     }
 
+#if !defined(COCKROACHDB_ICAT)
     status =  cmlExecuteNoAnswerSql("commit", icss);
     if (status != 0) {
         rodsLog(LOG_ERROR, "Error committing insert into R_OBJT_ACCESS.  Error is %i", status);
         return;
     } 
-
+#endif
 }
 
 
@@ -604,12 +635,14 @@ void handle_other(const std::vector<std::pair<std::string, std::string> >& regis
             return;
         }
 
+#if !defined(COCKROACHDB_ICAT)
         status =  cmlExecuteNoAnswerSql("commit", icss);
 
         if (status != 0) {
             rodsLog(LOG_ERROR, "Error committing update to data_object_size for data_object %s.  Error is %i", fidstr.c_str(), status);
             return;
         } 
+#endif
 
     } else {
 
@@ -664,12 +697,14 @@ void handle_rename_file(const std::vector<std::pair<std::string, std::string> >&
             return;
         }
 
+#if !defined(COCKROACHDB_ICAT)
         status =  cmlExecuteNoAnswerSql("commit", icss);
 
         if (status != 0) {
             rodsLog(LOG_ERROR, "Error committing update to data object rename for data_object %s.  Error is %i", fidstr.c_str(), status);
             return;
         }
+#endif
     } else {
 
         std::string old_irods_path;
@@ -775,7 +810,7 @@ void handle_rename_dir(const std::vector<std::pair<std::string, std::string> >& 
 
         collection_path = parent_path + irods::get_virtual_path_separator().c_str() + object_name;
 
-        rodsLog(LOG_NOTICE, "collection path = %s\tparent_path = %s", collection_path.c_str(), parent_path.c_str());
+        rodsLog(LOG_DEBUG, "collection path = %s\tparent_path = %s", collection_path.c_str(), parent_path.c_str());
           
 
         // update coll_name, parent_coll_name, and coll_id
@@ -791,12 +826,14 @@ void handle_rename_dir(const std::vector<std::pair<std::string, std::string> >& 
             return;
         }
 
+#if !defined(COCKROACHDB_ICAT)
         status =  cmlExecuteNoAnswerSql("commit", icss);
 
         if (status != 0) {
             rodsLog(LOG_ERROR, "Error committing update to collection rename for collection %s.  Error is %i", fidstr.c_str(), status);
             return;
         }
+#endif
 
         try {
 
@@ -819,13 +856,20 @@ void handle_rename_dir(const std::vector<std::pair<std::string, std::string> >& 
 
             std::string like_clause = old_lustre_path + "/%";
 
-            rodsLog(LOG_NOTICE, "old_lustre_path = %s", old_lustre_path.c_str());
-            rodsLog(LOG_NOTICE, "new_lustre_path = %s", new_lustre_path.c_str());
+            rodsLog(LOG_DEBUG, "old_lustre_path = %s", old_lustre_path.c_str());
+            rodsLog(LOG_DEBUG, "new_lustre_path = %s", new_lustre_path.c_str());
 
             // for now, rename all with sql update
-#ifdef POSTGRES_ICAT 
+#if defined(POSTGRES_ICAT)
             cllBindVars[0] = new_lustre_path.c_str();
             cllBindVars[1] = old_lustre_path.c_str();
+            cllBindVars[2] = like_clause.c_str();
+            cllBindVarCount = 3;
+            status = cmlExecuteNoAnswerSql(update_filepath_on_collection_rename_sql.c_str(), icss);
+#elif defined(COCKROACHDB_ICAT)
+            cllBindVars[0] = new_lustre_path.c_str();
+            std::string old_path_len_str = std::to_string(old_lustre_path.length());
+            cllBindVars[1] = old_path_len_str.c_str();
             cllBindVars[2] = like_clause.c_str();
             cllBindVarCount = 3;
             status = cmlExecuteNoAnswerSql(update_filepath_on_collection_rename_sql.c_str(), icss);
@@ -844,12 +888,13 @@ void handle_rename_dir(const std::vector<std::pair<std::string, std::string> >& 
                 return;
             }
 
+#if !defined(COCKROACHDB_ICAT)
             status =  cmlExecuteNoAnswerSql("commit", icss);
             if (status != 0) {
                 rodsLog(LOG_ERROR, "Error committing data object update after collection move for collection %s.  Error is %i", fidstr.c_str(), status);
                 return;
             } 
-
+#endif
 
         } catch(const std::out_of_range& e) {
             rodsLog(LOG_ERROR, "Error updating data objects after collection move for collection %s.  Error is %i", fidstr.c_str(), status);
@@ -859,6 +904,7 @@ void handle_rename_dir(const std::vector<std::pair<std::string, std::string> >& 
 
     } else {
 
+rodsLog(LOG_ERROR, "--- %s:%d ---", __FUNCTION__, __LINE__);
         // rename the data object 
         dataObjCopyInp_t dataObjRenameInp;
         memset( &dataObjRenameInp, 0, sizeof( dataObjRenameInp ) );
@@ -867,8 +913,9 @@ void handle_rename_dir(const std::vector<std::pair<std::string, std::string> >& 
         strncpy(dataObjRenameInp.destDataObjInp.objPath, new_irods_path.c_str(), MAX_NAME_LEN);
         dataObjRenameInp.srcDataObjInp.oprType = dataObjRenameInp.destDataObjInp.oprType = RENAME_COLL;
 
+rodsLog(LOG_ERROR, "--- %s:%d ---", __FUNCTION__, __LINE__);
         status = rsDataObjRename( _comm, &dataObjRenameInp );
-
+rodsLog(LOG_ERROR, "--- %s:%d ---", __FUNCTION__, __LINE__);
         if ( status < 0 ) {
             rodsLog(LOG_ERROR, "Error updating data object rename for data_object %s.  Error is %i", fidstr.c_str(), status);
             return;
@@ -911,12 +958,14 @@ void handle_unlink(const std::vector<std::pair<std::string, std::string> >& regi
         }
 
 
+#if !defined(COCKROACHDB_ICAT)
         status =  cmlExecuteNoAnswerSql("commit", icss);
 
         if (status != 0) {
             rodsLog(LOG_ERROR, "Error committing delete for data object %s.  Error is %i", fidstr.c_str(), status);
             return;
         }
+#endif
 
     } else {
 
@@ -947,22 +996,24 @@ void handle_unlink(const std::vector<std::pair<std::string, std::string> >& regi
     }
 }
 
-void handle_batch_unlink(const std::vector<std::string>& fidstr_list, const int64_t& maximum_records_per_sql_command, rsComm_t* _comm, icatSessionStruct *icss) {
+#if !defined(COCKROACHDB_ICAT)
 
-    //size_t transactions_per_update = 1;
-    int64_t delete_count = fidstr_list.size();
-    int status;
+    void handle_batch_unlink(const std::vector<std::string>& fidstr_list, const int64_t& maximum_records_per_sql_command, rsComm_t* _comm, icatSessionStruct *icss) {
 
-    // delete from R_DATA_MAIN
+        //size_t transactions_per_update = 1;
+        int64_t delete_count = fidstr_list.size();
+        int status;
 
-    std::string query_objects_sql(220 + maximum_records_per_sql_command*20, 0); 
-    std::string delete_sql(50 + maximum_records_per_sql_command*20, 0);
+        // delete from R_DATA_MAIN
 
-    // Do deletion in batches of size maximum_records_per_sql_command.  
-    
-    // batch_begin is start of current batch
-    int64_t batch_begin = 0;
-    while (batch_begin < delete_count) {
+        std::string query_objects_sql(220 + maximum_records_per_sql_command*20, 0); 
+        std::string delete_sql(50 + maximum_records_per_sql_command*20, 0);
+
+        // Do deletion in batches of size maximum_records_per_sql_command.  
+        
+        // batch_begin is start of current batch
+        int64_t batch_begin = 0;
+        while (batch_begin < delete_count) {
 
         // Build up a list of object id's to be deleted on this pass
         // Note:  Doing this in code rather than in a subquery seems to free up DB processing and
@@ -971,14 +1022,14 @@ void handle_batch_unlink(const std::vector<std::string>& fidstr_list, const int6
         std::vector<std::string> object_id_list;
 
         std::string query_objects_sql = "select R_OBJT_METAMAP.object_id from R_OBJT_METAMAP inner join R_META_MAIN on R_META_MAIN.meta_id = R_OBJT_METAMAP.meta_id "
-                                        "where R_META_MAIN.meta_attr_name = 'lustre_identifier' and R_META_MAIN.meta_attr_value in (";
-     
+                        "where R_META_MAIN.meta_attr_name = 'lustre_identifier' and R_META_MAIN.meta_attr_value in (";
+         
         for (int64_t i = 0; batch_begin + i < delete_count && i < maximum_records_per_sql_command; ++i) {
             query_objects_sql += "'" + fidstr_list[batch_begin + i] + "'";
             if (batch_begin + i == delete_count - 1 || maximum_records_per_sql_command - 1 == i) {
-                query_objects_sql += ")";
+            query_objects_sql += ")";
             } else {
-                query_objects_sql += ", ";
+            query_objects_sql += ", ";
             }
         }
 
@@ -992,6 +1043,7 @@ void handle_batch_unlink(const std::vector<std::string>& fidstr_list, const int6
         }
 
         size_t nCols = icss->stmtPtr[stmt_num]->numOfCols;
+
         if (nCols != 1) {
             rodsLog(LOG_ERROR, "cmlGetFirstRowFromSqlBV for query %s, unexpected number of columns %d", query_objects_sql.c_str(), nCols);
             cllFreeStatement(icss, stmt_num);
@@ -1001,10 +1053,12 @@ void handle_batch_unlink(const std::vector<std::string>& fidstr_list, const int6
         object_id_list.push_back(icss->stmtPtr[stmt_num]->resultValue[0]);
 
         while (cmlGetNextRowFromStatement( stmt_num, icss ) == 0) {
+
             object_id_list.push_back(icss->stmtPtr[stmt_num]->resultValue[0]);
         }
- 
+
         cllFreeStatement(icss, stmt_num);
+
 
         // Now do the delete
         
@@ -1018,7 +1072,7 @@ void handle_batch_unlink(const std::vector<std::string>& fidstr_list, const int6
             }
         }
 
-        rodsLog(LOG_NOTICE, "delete sql is %s", delete_sql.c_str());
+        rodsLog(LOG_DEBUG, "delete sql is %s", delete_sql.c_str());
 
         cllBindVarCount = 0;
         status = cmlExecuteNoAnswerSql(delete_sql.c_str(), icss);
@@ -1033,20 +1087,19 @@ void handle_batch_unlink(const std::vector<std::string>& fidstr_list, const int6
             return;
         }
 
-
         // delete from R_OBJT_METAMAP
 
         delete_sql = "delete from R_OBJT_METAMAP where object_id in (";
         for (size_t i = 0; i < object_id_list.size(); ++i) {
             delete_sql += object_id_list[i];
             if (i == object_id_list.size() - 1) {
-                delete_sql += ")";
+            delete_sql += ")";
             } else {
-                delete_sql += ", ";
+            delete_sql += ", ";
             }
         }
 
-        rodsLog(LOG_NOTICE, "delete sql is %s", delete_sql.c_str());
+        rodsLog(LOG_DEBUG, "delete sql is %s", delete_sql.c_str());
 
         cllBindVarCount = 0;
         status = cmlExecuteNoAnswerSql(delete_sql.c_str(), icss);
@@ -1061,11 +1114,140 @@ void handle_batch_unlink(const std::vector<std::string>& fidstr_list, const int6
             return;
         }
 
+
         batch_begin += maximum_records_per_sql_command;
+
+        }
 
     }
 
-}
+#endif // !defined(COCKROACHDB_ICAT)
+
+#if defined(COCKROACHDB_ICAT)
+
+    void handle_batch_unlink(const std::vector<std::string>& fidstr_list, const int64_t& maximum_records_per_sql_command, rsComm_t* _comm, icatSessionStruct *icss) {
+
+        //size_t transactions_per_update = 1;
+        int64_t delete_count = fidstr_list.size();
+        int status;
+
+        // delete from R_DATA_MAIN
+
+        std::string query_objects_sql(220 + maximum_records_per_sql_command*20, 0); 
+        std::string delete_sql(50 + maximum_records_per_sql_command*20, 0);
+
+        // Do deletion in batches of size maximum_records_per_sql_command.  
+        
+        // batch_begin is start of current batch
+        int64_t batch_begin = 0;
+        while (batch_begin < delete_count) {
+
+            // Build up a list of object id's to be deleted on this pass
+            // Note:  Doing this in code rather than in a subquery seems to free up DB processing and
+            //   also resolves deadlock potential.
+
+            std::vector<std::string> object_id_list;
+
+            std::string query_objects_sql = "select R_OBJT_METAMAP.object_id from R_OBJT_METAMAP inner join R_META_MAIN on R_META_MAIN.meta_id = R_OBJT_METAMAP.meta_id "
+                                            "where R_META_MAIN.meta_attr_name = 'lustre_identifier' and R_META_MAIN.meta_attr_value in (";
+         
+            for (int64_t i = 0; batch_begin + i < delete_count && i < maximum_records_per_sql_command; ++i) {
+                query_objects_sql += "'" + fidstr_list[batch_begin + i] + "'";
+                if (batch_begin + i == delete_count - 1 || maximum_records_per_sql_command - 1 == i) {
+                    query_objects_sql += ")";
+                } else {
+                    query_objects_sql += ", ";
+                }
+            }
+
+            std::vector<std::string> emptyBindVars;
+            int stmt_num;
+            status = cmlGetFirstRowFromSqlBV(query_objects_sql.c_str(), emptyBindVars, &stmt_num, icss);
+             if ( status < 0 ) {
+                rodsLog(LOG_ERROR, "retrieving object for unlink - query %s, failure %d", query_objects_sql.c_str(), status);
+                cllFreeStatement(stmt_num);
+                return;
+            }
+
+            
+            size_t nCols = result_sets[stmt_num]->row_size();
+
+            if (nCols != 1) {
+                rodsLog(LOG_ERROR, "cmlGetFirstRowFromSqlBV for query %s, unexpected number of columns %d", query_objects_sql.c_str(), nCols);
+                cllFreeStatement(stmt_num);
+                return;
+            }
+
+            object_id_list.push_back(result_sets[stmt_num]->get_value(0));
+
+            while (cmlGetNextRowFromStatement( stmt_num, icss ) == 0) {
+
+                object_id_list.push_back(result_sets[stmt_num]->get_value(0));
+            }
+
+            cllFreeStatement(stmt_num);
+
+            // Now do the delete
+            
+            delete_sql = "delete from R_DATA_MAIN where data_id in (";
+            for (size_t i = 0; i < object_id_list.size(); ++i) {
+                delete_sql += object_id_list[i];
+                if (i == object_id_list.size() - 1) {
+                    delete_sql += ")";
+                } else {
+                    delete_sql += ", ";
+                }
+            }
+
+            rodsLog(LOG_DEBUG, "delete sql is %s", delete_sql.c_str());
+
+            cllBindVarCount = 0;
+            status = cmlExecuteNoAnswerSql(delete_sql.c_str(), icss);
+            if (status != 0) {
+                rodsLog(LOG_ERROR, "Error performing batch delete from R_DATA_MAIN.  Error is %i.  SQL is %s.", status, delete_sql.c_str());
+                return;
+            }
+
+//            status =  cmlExecuteNoAnswerSql("commit", icss);
+//            if (status != 0) {
+//                rodsLog(LOG_ERROR, "Error committing batched deletion from R_DATA_MAIN.  Error is %i", status);
+//                return;
+//            }
+
+
+            // delete from R_OBJT_METAMAP
+
+            delete_sql = "delete from R_OBJT_METAMAP where object_id in (";
+            for (size_t i = 0; i < object_id_list.size(); ++i) {
+                delete_sql += object_id_list[i];
+                if (i == object_id_list.size() - 1) {
+                    delete_sql += ")";
+                } else {
+                    delete_sql += ", ";
+                }
+            }
+
+            rodsLog(LOG_DEBUG, "delete sql is %s", delete_sql.c_str());
+
+            cllBindVarCount = 0;
+            status = cmlExecuteNoAnswerSql(delete_sql.c_str(), icss);
+            if (status != 0) {
+                rodsLog(LOG_ERROR, "Error performing batch delete from R_DATA_MAIN.  Error is %i.  SQL is %s.", status, delete_sql.c_str());
+                return;
+            }
+
+//            status =  cmlExecuteNoAnswerSql("commit", icss);
+//            if (status != 0) {
+//                rodsLog(LOG_ERROR, "Error committing batched deletion of data objects.  Error is %i", status);
+//                return;
+//            }
+
+            batch_begin += maximum_records_per_sql_command;
+
+        }
+
+    }
+#endif // defined(COCKROACHDB_ICAT)
 
 void handle_rmdir(const std::vector<std::pair<std::string, std::string> >& register_map, 
         const int64_t& resource_id, const std::string& resource_name, const std::string& fidstr, 
@@ -1098,12 +1280,14 @@ void handle_rmdir(const std::vector<std::pair<std::string, std::string> >& regis
             rodsLog(LOG_ERROR, "Error deleting metadata from collection %s.  Error is %i", fidstr.c_str(), status);
         }
 
+#if !defined(COCKROACHDB_ICAT)
         status =  cmlExecuteNoAnswerSql("commit", icss);
 
         if (status != 0) {
             rodsLog(LOG_ERROR, "Error committing delete for collection %s.  Error is %i", fidstr.c_str(), status);
             return;
         }
+#endif
 
     } else {
 
@@ -1135,7 +1319,7 @@ void handle_rmdir(const std::vector<std::pair<std::string, std::string> >& regis
 }
 
 void handle_write_fid(const std::vector<std::pair<std::string, std::string> >& register_map, const std::string& lustre_path, 
-                const std::string& fidstr, rsComm_t* _comm, icatSessionStruct *icss) {
+                const std::string& fidstr, rsComm_t* _comm, icatSessionStruct *icss, bool direct_db_access_flag) {
 
     std::string irods_path;
     if (lustre_path_to_irods_path(lustre_path, register_map, irods_path) < 0) {
@@ -1145,11 +1329,19 @@ void handle_write_fid(const std::vector<std::pair<std::string, std::string> >& r
     }
 
     // query metadata to see if it already exists
-    rodsLong_t coll_id;
-    std::vector<std::string> bindVars;
-    bindVars.push_back(fidstr);
-    if (cmlGetIntegerValueFromSql(get_collection_id_from_fidstr_sql.c_str(), &coll_id, bindVars, icss ) != CAT_NO_ROWS_FOUND) {
-        return;
+    if (direct_db_access_flag) {
+        rodsLong_t coll_id;
+        std::vector<std::string> bindVars;
+        bindVars.push_back(fidstr);
+        if (cmlGetIntegerValueFromSql(get_collection_id_from_fidstr_sql.c_str(), &coll_id, bindVars, icss ) != CAT_NO_ROWS_FOUND) {
+            return;
+        }
+    } else {
+        int status = find_irods_path_with_avu(_comm, fidstr_avu_key, fidstr, "", true, irods_path); 
+        if (status == 0) {
+            // found a row which means the avu is already there, just return     
+            return;
+        } 
     }
 
     // add lustre_identifier metadata

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.5.0 FATAL_ERROR) #CPACK_DEBIAN_<COMPONENT>_PACK
 
 project(irods-lustre-api C CXX)
 
-find_package(IRODS 4.2.2 EXACT REQUIRED)
+find_package(IRODS 4.3.0 EXACT REQUIRED)
 
 if (NOT ODBC_LIBRARY)
   find_library(ODBC_LIBRARY odbc)
@@ -62,6 +62,11 @@ endif()
 if (EXISTS "/usr/lib/irods/plugins/database/liboracle.so")
   list(APPEND IRODS_DATABASE_PLUGINS oracle)
 endif()
+
+if (EXISTS "/usr/lib/irods/plugins/database/libcockroachdb.so")
+  list(APPEND IRODS_DATABASE_PLUGINS cockroachdb)
+endif()
+
 
 #set(
 #  IRODS_DATABASE_PLUGINS

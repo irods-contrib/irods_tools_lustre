@@ -9,6 +9,7 @@
 #include "irods_virtual_path.hpp"
 #include "miscServerFunct.hpp"
 #include "irods_configuration_keywords.hpp"
+#include "rodsType.h"
 
 #include "boost/lexical_cast.hpp"
 #include "boost/filesystem.hpp"
@@ -85,7 +86,7 @@ void handle_rmdir(const std::vector<std::pair<std::string, std::string> >& regis
         rsComm_t* _comm, icatSessionStruct *icss, const rodsLong_t& user_id, bool direct_db_access);
 
 void handle_write_fid(const std::vector<std::pair<std::string, std::string> >& register_map, const std::string& lustre_path, 
-        const std::string& fidstr, rsComm_t* _comm, icatSessionStruct *icss);
+        const std::string& fidstr, rsComm_t* _comm, icatSessionStruct *icss, bool direct_db_access);
 
 
 

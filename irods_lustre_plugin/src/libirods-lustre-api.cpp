@@ -10,6 +10,14 @@
 #include "miscServerFunct.hpp"
 #include "irods_configuration_keywords.hpp"
 
+#if defined(COCKROACHDB_ICAT)
+  #include "mid_level_cockroachdb.hpp"
+  #include "low_level_cockroachdb.hpp"
+#else
+  #include "mid_level_other.hpp"
+  #include "low_level_odbc_other.hpp"
+#endif
+
 #include "boost/lexical_cast.hpp"
 #include "boost/filesystem.hpp"
 
@@ -260,7 +268,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
                     fidstr, lustre_path, object_name, object_type, parent_fidstr, file_size,
                     _comm, icss, user_id, direct_db_modification_requested);
         } else if (event_type == ChangeDescriptor::EventTypeEnum::WRITE_FID) {
-            handle_write_fid(register_map, lustre_path, fidstr, _comm, icss);
+            handle_write_fid(register_map, lustre_path, fidstr, _comm, icss, direct_db_modification_requested);
         }
 
 
