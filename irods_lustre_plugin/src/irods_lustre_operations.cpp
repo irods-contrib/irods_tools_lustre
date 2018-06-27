@@ -455,6 +455,14 @@ void handle_batch_create(const std::vector<std::pair<std::string, std::string> >
         return;
     }
 
+#if !defined(COCKROACHDB_ICAT)
+    status =  cmlExecuteNoAnswerSql("commit", icss);
+    if (status != 0) {
+        rodsLog(LOG_ERROR, "Error committing insert into R_META_MAIN.  Error is %i", status);
+        return;
+    } 
+#endif
+
     // Insert into R_META_MAIN
     
     insert_sql = "insert into R_META_MAIN (meta_id, meta_attr_name, meta_attr_value) values ";
@@ -904,7 +912,6 @@ void handle_rename_dir(const std::vector<std::pair<std::string, std::string> >& 
 
     } else {
 
-rodsLog(LOG_ERROR, "--- %s:%d ---", __FUNCTION__, __LINE__);
         // rename the data object 
         dataObjCopyInp_t dataObjRenameInp;
         memset( &dataObjRenameInp, 0, sizeof( dataObjRenameInp ) );
@@ -913,9 +920,7 @@ rodsLog(LOG_ERROR, "--- %s:%d ---", __FUNCTION__, __LINE__);
         strncpy(dataObjRenameInp.destDataObjInp.objPath, new_irods_path.c_str(), MAX_NAME_LEN);
         dataObjRenameInp.srcDataObjInp.oprType = dataObjRenameInp.destDataObjInp.oprType = RENAME_COLL;
 
-rodsLog(LOG_ERROR, "--- %s:%d ---", __FUNCTION__, __LINE__);
         status = rsDataObjRename( _comm, &dataObjRenameInp );
-rodsLog(LOG_ERROR, "--- %s:%d ---", __FUNCTION__, __LINE__);
         if ( status < 0 ) {
             rodsLog(LOG_ERROR, "Error updating data object rename for data_object %s.  Error is %i", fidstr.c_str(), status);
             return;

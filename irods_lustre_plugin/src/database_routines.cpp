@@ -25,6 +25,27 @@
 #include <iostream>
 #include <vector>
 
+#if defined (MY_ICAT)
+
+rodsLong_t cmlGetCurrentSeqValMySQL( icatSessionStruct *icss ) {
+
+    int status;
+    rodsLong_t seq_no;
+
+    std::string sql = "select R_ObjectId_nextval()";
+
+    std::vector<std::string> emptyBindVars;
+    status = cmlGetIntegerValueFromSql(sql.c_str(), &seq_no, emptyBindVars, icss);
+    if ( status < 0 ) {
+        rodsLog(LOG_NOTICE, "cmlGetCurrentSeqValMySQL cmlGetIntegerValueFromSql failure %d", status);
+        return status;
+    }
+    return seq_no;
+}
+
+
+#endif
+
 #if !defined(COCKROACHDB_ICAT)
 
     int cmlGetNSeqVals( icatSessionStruct *icss, size_t n, std::vector<rodsLong_t>& sequences ) {
@@ -47,7 +68,7 @@
         // for mysql, the query must be executed n times
          for (size_t i = 0; i < n; ++i) {
 
-            status =  cmlGetCurrentSeqVal(icss); 
+            status =  cmlGetCurrentSeqValMySQL(icss); 
             if ( status < 0 ) {
                 rodsLog(LOG_ERROR, "cmlGetNSeqVals cmlGetCurrentSeqVal failure %d", status);
                 return status;
