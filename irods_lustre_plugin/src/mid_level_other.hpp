@@ -78,8 +78,8 @@ int cmlGetMultiRowStringValuesFromSql( const char *sql,
 
 int cmlGetIntegerValueFromSql( const char *sql,
                                rodsLong_t *iVal,
-                               const std::vector<std::string> &bindVars,
-                               const icatSessionStruct *icss );
+                               std::vector<std::string> &bindVars,
+                               icatSessionStruct *icss );
 
 int cmlGetIntegerValueFromSqlV3( const char *sql,
                                  rodsLong_t *iVal,

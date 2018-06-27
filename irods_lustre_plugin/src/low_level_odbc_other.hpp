@@ -12,7 +12,7 @@
 #include "sqlext.h"
 
 #include "rods.h"
-#include "mid_level.hpp"
+#include "mid_level_other.hpp"
 
 #include <vector>
 #include <string>
