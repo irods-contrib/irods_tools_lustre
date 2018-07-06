@@ -5,6 +5,7 @@ This is a connector to synchronize Lustre files with iRODS using the Lustre chan
 # Prerequisites
 
 - The computer where this will run is a Lustre client and has a mount point to Lustre.
+  Note:  If the Lustre connector is to be run by a non-privileged account, mount the file system using the `-o user_fid2path`.  Example: `mount -o user_fid2path -t lustre mds1@tcp1:/lustre01 /lustreResc/lustre01`
 - iRODS is installed (either locally or remotely) and is accessible from this computer.
 - The account that will run this connector has the iRODS connection configured (via iinit). 
 - The iRODS externals packages have been installed.  See https://packages.irods.org/.  
