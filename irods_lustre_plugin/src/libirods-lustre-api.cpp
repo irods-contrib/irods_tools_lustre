@@ -145,7 +145,10 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
 
     // Bulk request must be performed on an iCAT server if doing direct DB access.  If this is not the iCAT, 
     // forward this request to it.
-    if (direct_db_modification_requested) {
+   
+    // Because the directory rename must be done with a direct db access **for now**, even when policy is 
+    // enabled, we need a connection to the DB.
+    // if (direct_db_modification_requested) {
 
         rodsServerHost_t *rodsServerHost;
         status = getAndConnRcatHost(_comm, MASTER_RCAT, (const char*)nullptr, &rodsServerHost);
@@ -182,7 +185,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
         // avoid deadlocks 
         setMysqlIsolationLevelReadCommitted(icss);
 #endif
-    }
+//    }
 
     // setup the output struct
     ( *_out ) = ( irodsLustreApiOut_t* )malloc( sizeof( irodsLustreApiOut_t ) );

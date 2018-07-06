@@ -665,11 +665,24 @@ void handle_other(const std::vector<std::pair<std::string, std::string> >& regis
         memset( &modDataObjMetaInp, 0, sizeof( modDataObjMetaInp ) );
         memset( &dataObjInfo, 0, sizeof( dataObjInfo ) );
 
+        keyValPair_t reg_param;
+        memset( &reg_param, 0, sizeof( reg_param ) );
+        char tmpStr[MAX_NAME_LEN];
+        snprintf( tmpStr, sizeof( tmpStr ), "%ji", ( intmax_t ) file_size );
+        addKeyVal( &reg_param, DATA_SIZE_KW, tmpStr );
+        modDataObjMetaInp.regParam = &reg_param;
+
 
         modDataObjMetaInp.dataObjInfo = &dataObjInfo;
         dataObjInfo.dataSize = file_size; 
         strncpy(dataObjInfo.filePath, lustre_path.c_str(), MAX_NAME_LEN);
+        strncpy(dataObjInfo.objPath, irods_path.c_str(), MAX_NAME_LEN);
 
+rodsLog(LOG_ERROR, "rsModDataObjMeta( %p, %p )", _comm, &modDataObjMetaInp);
+rodsLog(LOG_ERROR, "modDataObjMetaInp.dataObjInfo->dataSize = %d", modDataObjMetaInp.dataObjInfo->dataSize);
+rodsLog(LOG_ERROR, "modDataObjMetaInp.dataObjInfo->filePath = %s", modDataObjMetaInp.dataObjInfo->filePath);
+rodsLog(LOG_ERROR, "modDataObjMetaInp.dataObjInfo->objPath = %s", modDataObjMetaInp.dataObjInfo->objPath);
+rodsLog(LOG_ERROR, "modDataObjMetaInp.regParam->len= %d", modDataObjMetaInp.regParam->len);
         status = rsModDataObjMeta( _comm, &modDataObjMetaInp );
 
         if ( status < 0 ) {
@@ -686,6 +699,8 @@ void handle_rename_file(const std::vector<std::pair<std::string, std::string> >&
         const std::string& lustre_path, const std::string& object_name, 
         const ChangeDescriptor::ObjectTypeEnum& object_type, const std::string& parent_fidstr, const int64_t& file_size,
         rsComm_t* _comm, icatSessionStruct *icss, const rodsLong_t& user_id, bool direct_db_access_flag) {
+
+rodsLog(LOG_ERROR, "lustre_path: %s", lustre_path.c_str());
 
     int status;
 
@@ -734,29 +749,19 @@ void handle_rename_file(const std::vector<std::pair<std::string, std::string> >&
 
         std::string new_irods_path = new_parent_irods_path + "/" + object_name;
 
-        // rename the data object 
-        dataObjCopyInp_t dataObjRenameInp;
-        memset( &dataObjRenameInp, 0, sizeof( dataObjRenameInp ) );
-
-        strncpy(dataObjRenameInp.srcDataObjInp.objPath, old_irods_path.c_str(), MAX_NAME_LEN);
-        strncpy(dataObjRenameInp.destDataObjInp.objPath, new_irods_path.c_str(), MAX_NAME_LEN);
-
-        dataObjRenameInp.srcDataObjInp.oprType = dataObjRenameInp.destDataObjInp.oprType = RENAME_DATA_OBJ;
-
-        if ( status < 0 ) {
-            rodsLog(LOG_ERROR, "Error updating data object rename for data_object %s.  Error is %i", fidstr.c_str(), status);
-            return;
-        }
-
         // modify the file path
         modDataObjMeta_t modDataObjMetaInp;
         dataObjInfo_t dataObjInfo;
         memset( &modDataObjMetaInp, 0, sizeof( modDataObjMetaInp ) );
         memset( &dataObjInfo, 0, sizeof( dataObjInfo ) );
 
+        keyValPair_t reg_param;
+        memset( &reg_param, 0, sizeof( reg_param ) );
+        addKeyVal( &reg_param, FILE_PATH_KW, lustre_path.c_str());
+        modDataObjMetaInp.regParam = &reg_param;
+
         modDataObjMetaInp.dataObjInfo = &dataObjInfo;
-        strncpy(dataObjInfo.objPath, new_irods_path.c_str(), MAX_NAME_LEN);
-        strncpy(dataObjInfo.filePath, lustre_path.c_str(), MAX_NAME_LEN);
+        strncpy(dataObjInfo.objPath, old_irods_path.c_str(), MAX_NAME_LEN);
 
         status = rsModDataObjMeta( _comm, &modDataObjMetaInp );
 
@@ -765,6 +770,22 @@ void handle_rename_file(const std::vector<std::pair<std::string, std::string> >&
             return;
         }
 
+        // rename the data object 
+        // Note:  rsModDataObjMeta does not have an option to update the object path 
+        dataObjCopyInp_t dataObjRenameInp;
+        memset( &dataObjRenameInp, 0, sizeof( dataObjRenameInp ) );
+
+        strncpy(dataObjRenameInp.srcDataObjInp.objPath, old_irods_path.c_str(), MAX_NAME_LEN);
+        strncpy(dataObjRenameInp.destDataObjInp.objPath, new_irods_path.c_str(), MAX_NAME_LEN);
+        dataObjRenameInp.srcDataObjInp.oprType = dataObjRenameInp.destDataObjInp.oprType = RENAME_DATA_OBJ;
+        addKeyVal(&dataObjRenameInp.srcDataObjInp.condInput, FORCE_FLAG_KW, "");
+        addKeyVal(&dataObjRenameInp.destDataObjInp.condInput, FORCE_FLAG_KW, "");
+        status = rsDataObjRename(_comm, &dataObjRenameInp);
+
+        if ( status < 0 ) {
+            rodsLog(LOG_ERROR, "Error updating data object rename for data_object %s.  Error is %i", fidstr.c_str(), status);
+            return;
+        }
 
     }
 
@@ -800,8 +821,10 @@ void handle_rename_dir(const std::vector<std::pair<std::string, std::string> >& 
     // use object_name to get new irods path
     new_irods_path = new_parent_irods_path + "/" + object_name;
 
- 
-    if (direct_db_access_flag) { 
+
+    // until issue 6 is resolved, just do all directory renames as direct db access 
+    if (true) {
+    //if (direct_db_access_flag) { 
 
         char parent_path_cstr[MAX_NAME_LEN];
         std::string collection_path;
@@ -809,7 +832,11 @@ void handle_rename_dir(const std::vector<std::pair<std::string, std::string> >& 
         // get the parent's path - using parent's fidstr
         std::vector<std::string> bindVars;
         bindVars.push_back(parent_fidstr);
+rodsLog(LOG_ERROR, "%s:%i - %s()", __FILE__, __LINE__, __FUNCTION__);
+rodsLog(LOG_ERROR, "parent_fidstr=%s", parent_fidstr.c_str());
+rodsLog(LOG_ERROR, "cmlGetStringValueFromSql(%s, parent_path_cstr, %d, bindVars[%s], icss)", get_collection_path_from_fidstr_sql.c_str(), MAX_NAME_LEN, parent_fidstr.c_str());
         status = cmlGetStringValueFromSql(get_collection_path_from_fidstr_sql.c_str(), parent_path_cstr, MAX_NAME_LEN, bindVars, icss);
+rodsLog(LOG_ERROR, "%s:%i - %s()", __FILE__, __LINE__, __FUNCTION__);
         std::string parent_path(parent_path_cstr);
         if (status != 0) {
             rodsLog(LOG_ERROR, "Error looking up parent collection for rename for collection %s.  Error is %i", fidstr.c_str(), status);
