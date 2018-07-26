@@ -118,6 +118,12 @@ This will create an executable called lustre_irods_connector and a configuration
 - register_map - an array of lustre_path to irods_path mappings
 - thread_{n}_connection_paramters - irods_host and irods_port that thread n connects to.  If this is not defined the local iRODS environment (iinit) is used.
 
+11.  Add the irods user on the MDS server with the same user ID and group ID as exists on the iRODS server.  Here is an example entry in /etc/passwd.
+
+```
+irods:x:498:498::/:/sbin/nologin
+```
+
 # Running the LCAPD daemon and running the connector.
 
 1.  Update the changelog mask in Lustre so that we get all of the required events.  Perform the following on the MDT server.
@@ -135,7 +141,7 @@ sudo lctl set_param mdd.lustre01-MDT0000.changelog_mask="MARK CREAT MKDIR HLINK 
 
 3.  Perform iinit to connect to the default iRODS host..
 
-4.  Run the iRODS/Lustre connector.
+4.  Run the Lustre/iRODS connector.
 
 ```
 /path/to/lustre_irods_connector
@@ -154,4 +160,33 @@ If the configuration file has been renamed or is not in the current location, us
 ```
 
 5.  Make changes to Lustre and detect that these changes are picked up by the connector and files are registered/deregistered/etc. in iRODS.
+
+
+Note:  If you are using a cluster that has multiple MDT servers perform the following tasks:
+
+1.  Make sure each MDT server is defined in /etc/lcapd.conf
+
+2.  For any directory created with a command like "lfs mkdir -i 3 dir3", you must create that collection in iRODS and assign metadata on that collection to identify the directory's Lustre identifier.
+
+Example setup:
+
+```
+$ lfs mkdir -i 3 dir3
+$ lfs path2fid dir3
+[0x280000400:0xd:0x0]
+$ imkdir /tempZone/lustre01/dir3
+$ imeta add -C /tempZone/lustre01/dir3 lustre_identifier 0x280000400:0xd:0x0
+```
+
+
+3.  Create separate lustre iRODS connector configuration files for each MDT with the mdtname paramter set to the MDT name.
+
+4.  Start up the Lustre/iRODS connector multiple times specifying a unique configuration file each time.  
+
+Example:
+
+```
+path/to/lustre_irods_connector -c/path/to/config/file/lustre_irods_connector_config_MDT0000.json
+path/to/lustre_irods_connector -c/path/to/config/file/lustre_irods_connector_config_MDT0001.json
+```
 

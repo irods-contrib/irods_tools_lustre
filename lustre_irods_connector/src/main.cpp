@@ -539,7 +539,7 @@ int main(int argc, char *argv[]) {
     }
 
     LOG(LOG_DBG, "initializing change_map serialized database\n");
-    if (initiate_change_map_serialization_database() < 0) {
+    if (initiate_change_map_serialization_database(config_struct.mdtname) < 0) {
         LOG(LOG_ERR, "failed to initialize serialization database\n");
         return EX_SOFTWARE;
     }
@@ -548,7 +548,7 @@ int main(int argc, char *argv[]) {
     change_map_t change_map;
 
     LOG(LOG_DBG, "reading change_map from serialized database\n");
-    if (deserialize_change_map_from_sqlite(change_map) < 0) {
+    if (deserialize_change_map_from_sqlite(change_map, config_struct.mdtname) < 0) {
         LOG(LOG_ERR, "failed to deserialize change map on startup\n");
         return EX_SOFTWARE;
     }
@@ -556,7 +556,7 @@ int main(int argc, char *argv[]) {
     lustre_print_change_table(change_map);
 
     unsigned long long last_cr_index = 0;
-    if (get_cr_index(last_cr_index) < 0) {
+    if (get_cr_index(last_cr_index, config_struct.mdtname) < 0) {
         LOG(LOG_ERR, "failed to get last cr_index.  continuing with 0 as index.\n");
     }
 
@@ -649,12 +649,12 @@ int main(int argc, char *argv[]) {
     accumulator_thread.join();
 
     LOG(LOG_DBG, "serializing change_map to database\n");
-    if (serialize_change_map_to_sqlite(change_map) < 0) {
+    if (serialize_change_map_to_sqlite(change_map, config_struct.mdtname) < 0) {
         LOG(LOG_ERR, "failed to serialize change_map upon exit\n");
         fatal_error_detected = true;
     }
 
-    if (write_cr_index_to_sqlite(last_cr_index) < 0) {
+    if (write_cr_index_to_sqlite(last_cr_index, config_struct.mdtname) < 0) {
         LOG(LOG_ERR, "failed to write cr_index to database upon exit\n");
         fatal_error_detected = true;
     }
@@ -672,7 +672,6 @@ int main(int argc, char *argv[]) {
         fclose(dbgstream);
     }
 
-    LOG(LOG_DBG,"this ran\n");
     if (fatal_error_detected) {
         return EX_SOFTWARE;
     }

@@ -90,9 +90,9 @@ int remove_fidstr_from_table(const std::string& fidstr, change_map_t& change_map
 
 void lustre_print_change_table(const change_map_t& change_map);
 bool entries_ready_to_process(change_map_t& change_map);
-int serialize_change_map_to_sqlite(change_map_t& change_map);
-int deserialize_change_map_from_sqlite(change_map_t& change_map);
-int initiate_change_map_serialization_database();
+int serialize_change_map_to_sqlite(change_map_t& change_map, const std::string& db_file);
+int deserialize_change_map_from_sqlite(change_map_t& change_map, const std::string& db_file);
+int initiate_change_map_serialization_database(const std::string& db_file);
 int set_update_status_in_capnproto_buf(unsigned char*& buf, size_t& buflen, const std::string& new_status);
 int get_update_status_from_capnproto_buf(unsigned char* buf, size_t buflen, std::string& update_status);
 void add_entries_back_to_change_table(change_map_t& change_map, std::shared_ptr<change_map_t>& removed_entries);
@@ -100,8 +100,8 @@ int add_capnproto_buffer_back_to_change_table(unsigned char* buf, size_t buflen,
 void remove_fidstr_from_active_list(unsigned char* buf, size_t buflen, std::set<std::string>& current_active_fidstr_list);
 int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *config_struct_ptr, void*& buf, size_t& buflen,
                                           change_map_t& change_map, std::set<std::string>& current_active_fidstr_list); 
-int get_cr_index(unsigned long long& cr_index);
-int write_cr_index_to_sqlite(unsigned long long cr_index);
+int get_cr_index(unsigned long long& cr_index, const std::string& db_file);
+int write_cr_index_to_sqlite(unsigned long long cr_index, const std::string& db_file);
 
 
 #endif

@@ -778,17 +778,19 @@ bool entries_ready_to_process(change_map_t& change_map) {
     return ready; 
 }
 
-int serialize_change_map_to_sqlite(change_map_t& change_map) {
+int serialize_change_map_to_sqlite(change_map_t& change_map, const std::string& db_file) {
 
     std::lock_guard<std::mutex> lock(change_table_mutex);
 
     sqlite3 *db;
     int rc;
 
-    rc = sqlite3_open("change_map.db", &db);
+    std::string serialize_file = db_file + ".db";
+
+    rc = sqlite3_open(serialize_file.c_str(), &db);
 
     if (rc) {
-        LOG(LOG_ERR, "Can't open change_map.db for serialization.\n");
+        LOG(LOG_ERR, "Can't open %s for serialization.\n", serialize_file.c_str());
         return lustre_irods::SQLITE_DB_ERROR;
     }
 
@@ -907,17 +909,18 @@ static int query_callback_cr_index(void *cr_index_void_ptr, int argc, char** arg
     return lustre_irods::SUCCESS;
 }
 
-int write_cr_index_to_sqlite(unsigned long long cr_index) {
+int write_cr_index_to_sqlite(unsigned long long cr_index, const std::string& db_file) {
 
     LOG(LOG_DBG, "%s: cr_index=%llu\n", __FUNCTION__, cr_index);
 
     sqlite3 *db;
     int rc;
 
-    rc = sqlite3_open("change_map.db", &db);
+    std::string serialize_file = db_file + ".db";
+    rc = sqlite3_open(serialize_file.c_str(), &db);
 
     if (rc) {
-        LOG(LOG_ERR, "Can't open change_map.db for serialization.\n");
+        LOG(LOG_ERR, "Can't open %s for serialization.\n", serialize_file.c_str());
         return lustre_irods::SQLITE_DB_ERROR;
     }
 
@@ -939,16 +942,17 @@ int write_cr_index_to_sqlite(unsigned long long cr_index) {
 }
 
 
-int get_cr_index(unsigned long long& cr_index) {
+int get_cr_index(unsigned long long& cr_index, const std::string& db_file) {
 
     sqlite3 *db;
     char *zErrMsg = 0;
     int rc;
 
-    rc = sqlite3_open("change_map.db", &db);
+    std::string serialize_file = db_file + ".db";
+    rc = sqlite3_open(serialize_file.c_str(), &db);
 
     if (rc) {
-        LOG(LOG_ERR, "Can't open change_map.db to read changemap index.\n");
+        LOG(LOG_ERR, "Can't open %s to read changemap index.\n", serialize_file.c_str());
         return lustre_irods::SQLITE_DB_ERROR;
     }
 
@@ -966,16 +970,17 @@ int get_cr_index(unsigned long long& cr_index) {
 }
 
 
-int deserialize_change_map_from_sqlite(change_map_t& change_map) {
+int deserialize_change_map_from_sqlite(change_map_t& change_map, const std::string& db_file) {
 
     sqlite3 *db;
     char *zErrMsg = 0;
     int rc;
 
-    rc = sqlite3_open("change_map.db", &db);
+    std::string serialize_file = db_file + ".db";
+    rc = sqlite3_open(serialize_file.c_str(), &db);
 
     if (rc) {
-        LOG(LOG_ERR, "Can't open change_map.db for de-serialization.\n");
+        LOG(LOG_ERR, "Can't open %s for de-serialization.\n", serialize_file.c_str());
         return lustre_irods::SQLITE_DB_ERROR;
     }
 
@@ -1002,7 +1007,7 @@ int deserialize_change_map_from_sqlite(change_map_t& change_map) {
     return lustre_irods::SUCCESS;
 }
 
-int initiate_change_map_serialization_database() {
+int initiate_change_map_serialization_database(const std::string& db_file) {
 
     sqlite3 *db;
     char *zErrMsg = 0;
@@ -1024,10 +1029,11 @@ int initiate_change_map_serialization_database() {
     const char *create_last_cr_index_table = "create table if not exists last_cr_index ("
        "cr_index integer primary key)";
 
-    rc = sqlite3_open("change_map.db", &db);
+    std::string serialize_file = db_file + ".db";
+    rc = sqlite3_open(serialize_file.c_str(), &db);
 
     if (rc) {
-        LOG(LOG_ERR, "Can't create or open change_map.db.\n");
+        LOG(LOG_ERR, "Can't create or open %s.\n", serialize_file.c_str());
         return lustre_irods::SQLITE_DB_ERROR;
     }
 
