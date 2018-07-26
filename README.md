@@ -162,9 +162,11 @@ If the configuration file has been renamed or is not in the current location, us
 5.  Make changes to Lustre and detect that these changes are picked up by the connector and files are registered/deregistered/etc. in iRODS.
 
 
-Note:  If you are using a cluster that has multiple MDT servers perform the following tasks:
+# Running Multiple Connectors for Clusters with Multiple MDT's.
 
-1.  Make sure each MDT server is defined in /etc/lcapd.conf
+If you have multiple MDT's, you can run multiple connectors with each assigned to a unique MDT. 
+
+1.  Make sure each MDT server is defined in /etc/lcapd.conf prior to starting up lcapd.
 
 2.  For any directory created with a command like "lfs mkdir -i 3 dir3", you must create that collection in iRODS and assign metadata on that collection to identify the directory's Lustre identifier.
 
@@ -177,7 +179,6 @@ $ lfs path2fid dir3
 $ imkdir /tempZone/lustre01/dir3
 $ imeta add -C /tempZone/lustre01/dir3 lustre_identifier 0x280000400:0xd:0x0
 ```
-
 
 3.  Create separate lustre iRODS connector configuration files for each MDT with the mdtname paramter set to the MDT name.
 
