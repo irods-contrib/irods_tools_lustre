@@ -187,7 +187,7 @@ $ imeta add -C /tempZone/lustre01/dir3 lustre_identifier 0x280000400:0xd:0x0
 Example:
 
 ```
-path/to/lustre_irods_connector -c/path/to/config/file/lustre_irods_connector_config_MDT0000.json&
-path/to/lustre_irods_connector -c/path/to/config/file/lustre_irods_connector_config_MDT0001.json&
+path/to/lustre_irods_connector -c /path/to/config/file/lustre_irods_connector_config_MDT0000.json&
+path/to/lustre_irods_connector -c /path/to/config/file/lustre_irods_connector_config_MDT0001.json&
 ```
 
