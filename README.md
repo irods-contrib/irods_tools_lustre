@@ -166,7 +166,7 @@ If the configuration file has been renamed or is not in the current location, us
 
 If you have multiple MDT's, you can run multiple connectors with each assigned to a unique MDT. 
 
-1.  Make sure each MDT server is defined in /etc/lcapd.conf prior to starting up lcapd.
+1.  Make sure each MDT is defined in /etc/lcapd.conf prior to starting up lcapd.
 
 2.  For any directory created with a command like "lfs mkdir -i 3 dir3", you must create that collection in iRODS and assign metadata on that collection to identify the directory's Lustre identifier.
 
