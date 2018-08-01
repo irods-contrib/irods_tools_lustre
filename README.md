@@ -126,22 +126,32 @@ irods:x:498:498::/:/sbin/nologin
 
 # Running the LCAPD daemon and running the connector.
 
-1.  Update the changelog mask in Lustre so that we get all of the required events.  Perform the following on the MDT server.
+1.  Update the changelog mask in Lustre so that we get all of the required events.  Perform the following for each MDT on the MDS server(s).
 
 ```
 sudo lctl set_param mdd.lustre01-MDT0000.changelog_mask="MARK CREAT MKDIR HLINK SLINK MKNOD UNLNK RMDIR RENME RNMTO OPEN LYOUT TRUNC SATTR XATTR HSM MTIME CTIME CLOSE"
+sudo lctl set_param mdd.lustre01-MDT0001.changelog_mask="MARK CREAT MKDIR HLINK SLINK MKNOD UNLNK RMDIR RENME RNMTO OPEN LYOUT TRUNC SATTR XATTR HSM MTIME CTIME CLOSE"
 ```
 
-2.  Start the LCAPD daemon.
+2.  On the MDS server(s), register a changelog listener for each MDT.
+
+Example:
+
+```
+lctl --device lustre01-MDT0000 changelog_register
+lctl --device lustre01-MDT0001 changelog_register
+```
+
+3.  Start the LCAPD daemon.
 
 ```
 /location/to/lcap/src/lcapd/lcapd -c /etc/lcapd.conf&
 
 ```
 
-3.  Perform iinit to connect to the default iRODS host..
+4.  Perform iinit to connect to the default iRODS host..
 
-4.  Run the Lustre/iRODS connector.
+5.  Run the Lustre/iRODS connector.
 
 ```
 /path/to/lustre_irods_connector
@@ -159,7 +169,7 @@ If the configuration file has been renamed or is not in the current location, us
 /path/to/lustre_irods_connector -c /path/to/config/file/lustre_irods_connector_config.json
 ```
 
-5.  Make changes to Lustre and detect that these changes are picked up by the connector and files are registered/deregistered/etc. in iRODS.
+6.  Make changes to Lustre and detect that these changes are picked up by the connector and files are registered/deregistered/etc. in iRODS.
 
 
 # Running Multiple Connectors for Clusters with Multiple MDT's.
