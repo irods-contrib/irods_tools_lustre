@@ -55,7 +55,8 @@ class Test_Lustre(unittest.TestCase):
 
         super(Test_Lustre, self).tearDown()
 
-    def clean_up_lustre_files(self):
+    @staticmethod
+    def clean_up_lustre_files():
         for path in glob.glob("/lustreResc/lustre01/*"):
             # don't remove the subdirectory that is assigned to MDT3
             if path == '/lustreResc/lustre01/MDT0001dir':
@@ -72,17 +73,19 @@ class Test_Lustre(unittest.TestCase):
                 shutil.rmtree(path)
 
 
-
-    def write_to_file(self, filename, contents):
+    @staticmethod
+    def write_to_file(filename, contents):
         with open(filename, 'wt') as f:
             f.write(contents)
 
-    def append_to_file_with_newline(self, filename, contents):
+    @staticmethod
+    def append_to_file_with_newline(filename, contents):
         with open(filename, 'a') as f:
             f.write('\n')
             f.write(contents)
 
-    def setup_configuration_file(self, filename, mode, mdtname, begin_port):
+    @staticmethod
+    def setup_configuration_file(filename, mode, mdtname, begin_port):
         register_map1 = {
             'lustre_path': '/lustreResc/lustre01/home',
             'irods_register_path': '/tempZone/home'
@@ -172,16 +175,16 @@ class Test_Lustre(unittest.TestCase):
         self.admin.assert_icommand(['ils', '/tempZone/lustre01/MDT0001dir/file1'], 'STDOUT_MULTILINE', ['  /tempZone/lustre01/MDT0001dir/file1'])
 
     def test_lustre_direct(self):
-        config_file = 'MDT0000.json' 
+        config_file = 'MDT0000.json'
         self.setup_configuration_file(config_file, 'direct', 'lustre01-MDT0000', 5555)
-        self.connector_list.append(subprocess.Popen(['./lustre_irods_connector',  '-c', config_file]))
+        self.connector_list.append(subprocess.Popen(['./lustre_irods_connector',  '-c', config_file], shell=False))
         time.sleep(10)
         self.perform_standard_tests()
 
     def test_lustre_policy(self):
         config_file = 'MDT0000.json'
         self.setup_configuration_file(config_file, 'policy', 'lustre01-MDT0000', 5555)
-        self.connector_list.append(subprocess.Popen(['./lustre_irods_connector',  '-c', config_file]))
+        self.connector_list.append(subprocess.Popen(['./lustre_irods_connector',  '-c', config_file], shell=False))
         time.sleep(10)
         self.perform_standard_tests()
         #self.connector_process.send_signal(signal.SIGINT) 
@@ -189,9 +192,9 @@ class Test_Lustre(unittest.TestCase):
     def test_lustre_multi_mdt(self):
         config_file1 = 'MDT0000.json'
         self.setup_configuration_file(config_file1, 'direct', 'lustre01-MDT0000', 5555)
-        self.connector_list.append(subprocess.Popen(['./lustre_irods_connector',  '-c', config_file1]))
+        self.connector_list.append(subprocess.Popen(['./lustre_irods_connector',  '-c', config_file1], shell=False))
         config_file2 = 'MDT0001.json'
         self.setup_configuration_file(config_file2, 'direct', 'lustre01-MDT0001', 5565)
-        self.connector_list.append(subprocess.Popen(['./lustre_irods_connector',  '-c', config_file2]))
+        self.connector_list.append(subprocess.Popen(['./lustre_irods_connector',  '-c', config_file2], shell=False))
         time.sleep(10)
         self.perform_multi_mdt_tests()
