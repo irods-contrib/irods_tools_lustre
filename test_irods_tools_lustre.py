@@ -175,16 +175,16 @@ class Test_Lustre(unittest.TestCase):
         self.admin.assert_icommand(['ils', '/tempZone/lustre01/MDT0001dir/file1'], 'STDOUT_MULTILINE', ['  /tempZone/lustre01/MDT0001dir/file1'])
 
     def test_lustre_direct(self):
-        config_file = 'MDT0000.json'
+        config_file = '/etc/irods/MDT0000.json'
         self.setup_configuration_file(config_file, 'direct', 'lustre01-MDT0000', 5555)
-        self.connector_list.append(subprocess.Popen(['./lustre_irods_connector',  '-c', config_file], shell=False))
+        self.connector_list.append(subprocess.Popen(['/bin/lustre_irods_connector',  '-c', config_file], shell=False))
         time.sleep(10)
         self.perform_standard_tests()
 
     def test_lustre_policy(self):
-        config_file = 'MDT0000.json'
+        config_file = '/etc/irods/MDT0000.json'
         self.setup_configuration_file(config_file, 'policy', 'lustre01-MDT0000', 5555)
-        self.connector_list.append(subprocess.Popen(['./lustre_irods_connector',  '-c', config_file], shell=False))
+        self.connector_list.append(subprocess.Popen(['/bin/lustre_irods_connector',  '-c', config_file], shell=False))
         time.sleep(10)
         self.perform_standard_tests()
         #self.connector_process.send_signal(signal.SIGINT) 
@@ -192,9 +192,9 @@ class Test_Lustre(unittest.TestCase):
     def test_lustre_multi_mdt(self):
         config_file1 = '/etc/irods/MDT0000.json'
         self.setup_configuration_file(config_file1, 'direct', 'lustre01-MDT0000', 5555)
-        self.connector_list.append(subprocess.Popen(['./lustre_irods_connector',  '-c', config_file1], shell=False))
+        self.connector_list.append(subprocess.Popen(['/bin/lustre_irods_connector',  '-c', config_file1], shell=False))
         config_file2 = '/etc/irods/MDT0001.json'
         self.setup_configuration_file(config_file2, 'direct', 'lustre01-MDT0001', 5565)
-        self.connector_list.append(subprocess.Popen(['./lustre_irods_connector',  '-c', config_file2], shell=False))
+        self.connector_list.append(subprocess.Popen(['/bin/lustre_irods_connector',  '-c', config_file2], shell=False))
         time.sleep(10)
         self.perform_multi_mdt_tests()
