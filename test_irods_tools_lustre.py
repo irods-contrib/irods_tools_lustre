@@ -169,7 +169,7 @@ class Test_Lustre(unittest.TestCase):
         self.admin.assert_icommand(['ils', '/tempZone/lustre01/file1'], 'STDOUT_MULTILINE', ['  /tempZone/lustre01/file1'])
         self.admin.assert_icommand(['iget', '/tempZone/lustre01/file1', '-'], 'STDOUT_MULTILINE', ['contents of file1'])
 
-        lib.execute_command(['mv',  '/lustreResc/lustre01/file1', '/lustreResc/lustre01/MDT0001dir'])
+        lib.execute_command(['mv',  '/lustreResc/lustre01/file1', '/lustreResc/lustre01/MDT0001dir/file1'])
         time.sleep(3)
         self.admin.assert_icommand(['ils', '/tempZone/lustre01/file1'], 'STDERR_SINGLELINE', 'does not exist')
         self.admin.assert_icommand(['ils', '/tempZone/lustre01/MDT0001dir/file1'], 'STDOUT_MULTILINE', ['  /tempZone/lustre01/MDT0001dir/file1'])
@@ -190,10 +190,10 @@ class Test_Lustre(unittest.TestCase):
         #self.connector_process.send_signal(signal.SIGINT) 
 
     def test_lustre_multi_mdt(self):
-        config_file1 = 'MDT0000.json'
+        config_file1 = '/etc/irods/MDT0000.json'
         self.setup_configuration_file(config_file1, 'direct', 'lustre01-MDT0000', 5555)
         self.connector_list.append(subprocess.Popen(['./lustre_irods_connector',  '-c', config_file1], shell=False))
-        config_file2 = 'MDT0001.json'
+        config_file2 = '/etc/irods/MDT0001.json'
         self.setup_configuration_file(config_file2, 'direct', 'lustre01-MDT0001', 5565)
         self.connector_list.append(subprocess.Popen(['./lustre_irods_connector',  '-c', config_file2], shell=False))
         time.sleep(10)
