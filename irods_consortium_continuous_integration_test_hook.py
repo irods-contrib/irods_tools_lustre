@@ -1,11 +1,7 @@
 from __future__ import print_function
 
 import optparse
-import os
 import shutil
-import glob
-import time
-import tempfile
 import irods_python_ci_utilities
 import subprocess
 import signal
@@ -26,7 +22,7 @@ def main():
     mds_ip_address = options.mds_ip_address
     lustre_filesystem_name = options.lustre_filesystem_name
 
-    # start lcap 
+    # start lcap
     lcap_process = subprocess.Popen(['/lcap/src/lcapd/lcapd',  '-c', '/etc/lcapd.conf'], shell=False)
 
     # remove existing mount and all lustre files
@@ -46,7 +42,7 @@ def main():
         if output_root_directory:
             irods_python_ci_utilities.gather_files_satisfying_predicate('/var/lib/irods/log', output_root_directory, lambda x: True)
             shutil.copy('/var/lib/irods/log/test_output.log', output_root_directory)
-        
+
         lcap_process.send_signal(signal.SIGINT)
 
 
