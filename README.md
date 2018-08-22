@@ -12,6 +12,7 @@ This is a connector to synchronize Lustre files with iRODS using the Lustre chan
 - ODBC Dev has been installed:
    sudo yum install unixODBC-devel
    sudo apt-get install unixodbc unixodbc-dev
+- If running on RHEL, install the package rpm-build. 
 
 # Build Instructions
 
