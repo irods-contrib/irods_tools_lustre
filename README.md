@@ -29,7 +29,7 @@ cd ..
 2. Clone the jeayeson repository - https://github.com/jeaye/jeayeson.  Install the jeayeson header by running the following in the jeayeson directory:
 
 ```
-sudo make install
+sudo ./configure && sudo make install
 ```
 
 3. Install capnproto as described in https://capnproto.org/install.html.  
