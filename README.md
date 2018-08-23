@@ -14,7 +14,7 @@ This is a connector to synchronize Lustre files with iRODS using the Lustre chan
    sudo apt-get install unixodbc unixodbc-dev
 - If running on RHEL, install the package rpm-build. 
 
-# Build Instructions
+# Build Instructions  
 
 1. Build and install zeromq.
 
@@ -71,7 +71,7 @@ LogType         stderr
 git clone https://github.com/irods-contrib/irods_tools_lustre
 ```
 
-7.  Build the Lustre plugin for irods.
+7.  Build the Lustre plugin for irods.  (Currently this build needs to be run on the iCAT server.)
 
 ```
 cd irods_tools_lustre/irods_lustre_plugin
@@ -80,7 +80,7 @@ cd bld
 cmake ..
 make package
 ```
-8.  Install the plugin.  Use the package version that applies to the database type you have for irods (postgres, mysql, or oracle).
+8.  Install the plugin on the iCAT server(s).  Use the package version that applies to the database type you have for irods (postgres, mysql, or oracle).
 
 Example for DEB and Postgres:
 
