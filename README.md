@@ -44,6 +44,7 @@ for ac_prog in g++ c++ gpp aCC CC cxx cc++ cl.exe FCC KCC RCC xlC_r xlC
 
 new:
 
+export LD_LIBRARY_PATH=/opt/irods-externals/clang-runtime3.8-0/lib/:/opt/irods-externals/zeromq4-14.1.3-0/lib/
 for ac_prog in clang++ g++ c++ gpp aCC CC cxx cc++ cl.exe FCC KCC RCC xlC_r xlC
 ```
 
@@ -74,6 +75,7 @@ git clone https://github.com/irods-contrib/irods_tools_lustre
 7.  Build the Lustre plugin for irods.  (Currently this build needs to be run on the iCAT server.)
 
 ```
+export LD_LIBRARY_PATH=/opt/irods-externals/clang-runtime3.8-0/lib/:/opt/irods-externals/zeromq4-14.1.3-0/lib/
 cd irods_tools_lustre/irods_lustre_plugin
 mkdir bld
 cd bld
@@ -97,6 +99,7 @@ sudo rpm -i irods-lustre-api-4.2.2-Linux-mysql.rpm
 9.  Build the Lustre-iRODS connector:
 
 ```
+export LD_LIBRARY_PATH=/opt/irods-externals/clang-runtime3.8-0/lib/:/opt/irods-externals/zeromq4-14.1.3-0/lib/
 cd irods_tools_lustre/lustre_irods_connector
 mkdir bld
 cd bld
@@ -146,6 +149,7 @@ lctl --device lustre01-MDT0001 changelog_register
 3.  Start the LCAPD daemon.
 
 ```
+export LD_LIBRARY_PATH=/opt/irods-externals/clang-runtime3.8-0/lib/:/opt/irods-externals/zeromq4-14.1.3-0/lib/
 /location/to/lcap/src/lcapd/lcapd -c /etc/lcapd.conf&
 
 ```

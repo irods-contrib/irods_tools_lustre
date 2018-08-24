@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.5.0 FATAL_ERROR) #CPACK_DEBIAN_<COMPONENT>_PACK
 
 project(irods-lustre-api C CXX)
 
-find_package(IRODS 4.2.3 EXACT REQUIRED)
+find_package(IRODS 4.2.2 EXACT REQUIRED)
 
 if (NOT ODBC_LIBRARY)
   find_library(ODBC_LIBRARY odbc)
@@ -12,7 +12,6 @@ if (NOT ODBC_LIBRARY)
     message(FATAL_ERROR "odbc library not found")
   endif()
 endif()
-
 
 set(CMAKE_C_COMPILER ${IRODS_EXTERNALS_FULLPATH_CLANG}/bin/clang)
 set(CMAKE_CXX_COMPILER ${IRODS_EXTERNALS_FULLPATH_CLANG}/bin/clang++)
@@ -65,6 +64,11 @@ endif()
 
 if (EXISTS "/usr/lib/irods/plugins/database/libcockroachdb.so")
   list(APPEND IRODS_DATABASE_PLUGINS cockroachdb)
+endif()
+
+if (NOT IRODS_DATABASE_PLUGINS)
+    message(STATUS "No database plugin encountered.  Building for all database types.")
+    set(IRODS_DATABASE_PLUGINS postgres mysql oracle cockroachdb)
 endif()
 
 
@@ -136,5 +140,8 @@ if (NOT CPACK_GENERATOR)
 endif()
 
 endforeach()
+
+add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/../lustre_irods_connector/src/change_table.capnp.h 
+    COMMAND capnp compile -oc++ ${CMAKE_SOURCE_DIR}/../lustre_irods_connector/src/change_table.capnp)
 
 include(CPack) 

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.5.0 FATAL_ERROR) 
 
-find_package(IRODS 4.2.3 EXACT REQUIRED)
+find_package(IRODS 4.2.2 EXACT REQUIRED)
 
 set(CMAKE_C_COMPILER ${IRODS_EXTERNALS_FULLPATH_CLANG}/bin/clang)
 set(CMAKE_CXX_COMPILER ${IRODS_EXTERNALS_FULLPATH_CLANG}/bin/clang++)
@@ -26,6 +26,7 @@ endif()
 
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 set(CMAKE_INSTALL_RPATH ${IRODS_EXTERNALS_FULLPATH_CLANG_RUNTIME}/lib)
+
 
 link_directories(${IRODS_EXTERNALS_FULLPATH_CLANG_RUNTIME}/lib /usr/local/lib)
 
@@ -86,3 +87,9 @@ set_target_properties(lustre_irods_connector PROPERTIES LINKER_LANGUAGE CXX)
 add_custom_command(TARGET lustre_irods_connector PRE_BUILD
                        COMMAND ${CMAKE_COMMAND} -E copy
                        ${CMAKE_SOURCE_DIR}/src/lustre_irods_connector_config.json ${CMAKE_CURRENT_BINARY_DIR}/lustre_irods_connector_config.json)
+
+add_custom_command(OUTPUT ${PROJECT_SOURCE_DIR}/src/change_table.capnp.c++  ${PROJECT_SOURCE_DIR}/src/change_table.capnp.h
+    COMMAND capnp compile -oc++ ${PROJECT_SOURCE_DIR}/src/change_table.capnp)
+
+#add_dependencies(lustre_irods_connector ${PROJECT_SOURCE_DIR}/src/change_table.capnp.c++ ${PROJECT_SOURCE_DIR}/src/change_table.capnp.h)
+

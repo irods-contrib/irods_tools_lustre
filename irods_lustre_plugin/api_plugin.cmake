@@ -29,6 +29,7 @@ set(
   ${CMAKE_SOURCE_DIR}/src/libirods-lustre-api.cpp
   ${CMAKE_SOURCE_DIR}/src/database_routines.cpp
   ${CMAKE_SOURCE_DIR}/src/irods_lustre_operations.cpp
+  ${CMAKE_SOURCE_DIR}/../lustre_irods_connector/src/change_table.capnp.h
   )
 
 set(
@@ -36,6 +37,7 @@ set(
   ${CMAKE_SOURCE_DIR}/src/libirods-lustre-api.cpp
   ${CMAKE_SOURCE_DIR}/src/database_routines.cpp
   ${CMAKE_SOURCE_DIR}/src/irods_lustre_operations.cpp
+  ${CMAKE_SOURCE_DIR}/../lustre_irods_connector/src/change_table.capnp.h
   )
 
 set(
