@@ -6,7 +6,6 @@ This is a connector to synchronize Lustre files with iRODS using the Lustre chan
 
 - The computer where this will run is a Lustre client and has a mount point to Lustre.
   Note:  If the Lustre connector is to be run by a non-privileged account, mount the file system using the `-o user_fid2path`.  Example: `mount -o user_fid2path -t lustre mds1@tcp1:/lustre01 /lustreResc/lustre01`
-- iRODS is installed (either locally or remotely) and is accessible from this computer.
 - The account that will run this connector has the iRODS connection configured (via iinit). 
 - The iRODS externals packages have been installed.  See https://packages.irods.org/.  
 - ODBC Dev has been installed:
@@ -15,6 +14,11 @@ This is a connector to synchronize Lustre files with iRODS using the Lustre chan
 - If running on RHEL, install the package rpm-build. 
 
 # Build Instructions  
+
+The connector and plugin must be built on a server that has iRODS installed.  Refer to [iRODS Docs](https://docs.irods.org/) for instructions on installing iRODS.  In addition the irods-dev (DEB) or irods-devel (RPM) package needs to be installed.
+
+It is not required that iRODS be configured or running on the build server but the irods-server and an iRODS database plugin package is required to be installed.
+
 
 1. Build and install zeromq.
 
@@ -72,10 +76,11 @@ LogType         stderr
 git clone https://github.com/irods-contrib/irods_tools_lustre
 ```
 
-7.  Build the Lustre plugin for irods.  (Currently this build needs to be run on the iCAT server.)
+7.  Build the Lustre plugin for irods.   
 
 ```
 export LD_LIBRARY_PATH=/opt/irods-externals/clang-runtime3.8-0/lib/:/opt/irods-externals/zeromq4-14.1.3-0/lib/
+export PATH=/opt/irods-externals/cmake3.5.2-0/bin:$PATH
 cd irods_tools_lustre/irods_lustre_plugin
 mkdir bld
 cd bld
@@ -100,6 +105,7 @@ sudo rpm -i irods-lustre-api-4.2.2-Linux-mysql.rpm
 
 ```
 export LD_LIBRARY_PATH=/opt/irods-externals/clang-runtime3.8-0/lib/:/opt/irods-externals/zeromq4-14.1.3-0/lib/
+export PATH=/opt/irods-externals/cmake3.5.2-0/bin:$PATH
 cd irods_tools_lustre/lustre_irods_connector
 mkdir bld
 cd bld

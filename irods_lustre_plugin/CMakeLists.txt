@@ -67,8 +67,7 @@ if (EXISTS "/usr/lib/irods/plugins/database/libcockroachdb.so")
 endif()
 
 if (NOT IRODS_DATABASE_PLUGINS)
-    message(STATUS "No database plugin encountered.  Building for all database types.")
-    set(IRODS_DATABASE_PLUGINS postgres mysql oracle cockroachdb)
+    message(FATAL_ERROR "No database plugin encountered.  You must install an irods database plugin to build the connector.  Please install one of the following packages.\nirods-database-plugin-postgres\nirods-database-plugin-mysql\nirods-database-plugin-oracle\nor build and install the cockroachdb plugin.")
 endif()
 
 
