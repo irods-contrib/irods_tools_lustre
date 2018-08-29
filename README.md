@@ -17,7 +17,7 @@ This is a connector to synchronize Lustre files with iRODS using the Lustre chan
 
 The connector and plugin must be built on a server that has iRODS installed.  Refer to [iRODS Docs](https://docs.irods.org/) for instructions on installing iRODS.  In addition the irods-dev (DEB) or irods-devel (RPM) package needs to be installed.
 
-It is not required that iRODS be configured or running on the build server but the irods-server and an iRODS database plugin package is required to be installed.
+It is not required that iRODS be configured or running on the build server but the irods-server and an iRODS database plugin package are required to be installed.
 
 
 1. Build and install zeromq.
