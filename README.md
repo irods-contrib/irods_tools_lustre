@@ -1,6 +1,6 @@
 # Description
 
-This is a connector to synchronize Lustre files with iRODS using the Lustre changelog and LCAPD.  This is currently in a prototype stage.  
+This is a connector to synchronize Lustre files with iRODS using the Lustre changelog.  This is currently in a prototype stage.  
 
 # Prerequisites
 
@@ -52,31 +52,13 @@ export LD_LIBRARY_PATH=/opt/irods-externals/clang-runtime3.8-0/lib/:/opt/irods-e
 for ac_prog in clang++ g++ c++ gpp aCC CC cxx cc++ cl.exe FCC KCC RCC xlC_r xlC
 ```
 
-3. Clone the LCAP repository.
-
-```
-git clone https://github.com/cea-hpc/lcap
-```
-
-4. Build LCAP as described in the LCAP README.md file.
-
-5.  Create an LCAPD configuration file in /etc/lcapd.config.  The following is a sample file.  Update the MDT name as necessary.
-
-```
-MDTDevice   lustre01-MDT0000
-CLReader        cl1
-Batch_Records   8192
-Max_Buckets     256
-LogType         stderr
-```
-
-6. Clone this repository. 
+4. Clone this repository. 
 
 ```
 git clone https://github.com/irods-contrib/irods_tools_lustre
 ```
 
-7.  Build the Lustre plugin for irods.   
+5.  Build the Lustre plugin for irods.   
 
 ```
 export LD_LIBRARY_PATH=/opt/irods-externals/clang-runtime3.8-0/lib/:/opt/irods-externals/zeromq4-14.1.3-0/lib/
@@ -87,7 +69,7 @@ cd bld
 cmake ..
 make package
 ```
-8.  Install the plugin on the iCAT server(s).  Use the package version that applies to the database type you have for irods (postgres, mysql, or oracle).
+6.  Install the plugin on the iCAT server(s).  Use the package version that applies to the database type you have for irods (postgres, mysql, or oracle).
 
 Example for DEB and Postgres:
 
@@ -101,7 +83,7 @@ Example for RPM and MySQL:
 sudo rpm -i irods-lustre-api-4.2.2-Linux-mysql.rpm
 ```
 
-9.  Build the Lustre-iRODS connector:
+7.  Build the Lustre-iRODS connector:
 
 ```
 export LD_LIBRARY_PATH=/opt/irods-externals/clang-runtime3.8-0/lib/:/opt/irods-externals/zeromq4-14.1.3-0/lib/
@@ -115,9 +97,10 @@ make
 
 This will create an executable called lustre_irods_connector and a configuration file called lustre_irods_connector_config.json.  These can be copied to any desired location.
 
-10.  Update lustre_irods_connector_config.json and set the following:
+8.  Update lustre_irods_connector_config.json and set the following:
 
 - mdtname - the name of the MDT in Lustre.
+- changelog_reader - the changelog listener registerd on the MDS with the "lctl --device <mdt> changelog_register" command (example cl1)
 - lustre_root_path - the local mount point into Lustre
 - irods_resource_name - the resource in iRODS
 - resource_id
@@ -128,13 +111,13 @@ This will create an executable called lustre_irods_connector and a configuration
 - register_map - an array of lustre_path to irods_path mappings
 - thread_{n}_connection_paramters - irods_host and irods_port that thread n connects to.  If this is not defined the local iRODS environment (iinit) is used.
 
-11.  Add the irods user on the MDS server with the same user ID and group ID as exists on the iRODS server.  Here is an example entry in /etc/passwd.
+9.  Add the irods user on the MDS server with the same user ID and group ID as exists on the iRODS server.  Here is an example entry in /etc/passwd.
 
 ```
 irods:x:498:498::/:/sbin/nologin
 ```
 
-# Running the LCAPD daemon and running the connector.
+# Running the connector.
 
 1.  Update the changelog mask in Lustre so that we get all of the required events.  Perform the following for each MDT on the MDS server(s).
 
@@ -152,17 +135,9 @@ lctl --device lustre01-MDT0000 changelog_register
 lctl --device lustre01-MDT0001 changelog_register
 ```
 
-3.  Start the LCAPD daemon.
+3.  Perform iinit to connect to the default iRODS host..
 
-```
-export LD_LIBRARY_PATH=/opt/irods-externals/clang-runtime3.8-0/lib/:/opt/irods-externals/zeromq4-14.1.3-0/lib/
-/location/to/lcap/src/lcapd/lcapd -c /etc/lcapd.conf&
-
-```
-
-4.  Perform iinit to connect to the default iRODS host..
-
-5.  Run the Lustre/iRODS connector.
+4.  Run the Lustre/iRODS connector.
 
 ```
 /path/to/lustre_irods_connector
@@ -180,7 +155,7 @@ If the configuration file has been renamed or is not in the current location, us
 /path/to/lustre_irods_connector -c /path/to/config/file/lustre_irods_connector_config.json
 ```
 
-6.  Make changes to Lustre and detect that these changes are picked up by the connector and files are registered/deregistered/etc. in iRODS.
+5.  Make changes to Lustre and detect that these changes are picked up by the connector and files are registered/deregistered/etc. in iRODS.
 
 
 # Running Multiple Connectors for Clusters with Multiple MDT's.
