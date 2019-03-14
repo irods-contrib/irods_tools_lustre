@@ -1,5 +1,5 @@
-/* This is a wrapper around the Lustre/LCAP interface which can be called directly from C++ source code.
-   The standard Lustre headers (called by LCAP) can not be included in C++ due to errors converting 
+/* This is a wrapper around the Lustre interface which can be called directly from C++ source code.
+   The standard Lustre headers can not be included in C++ due to errors converting 
    enums to ints.
 */
 
@@ -8,34 +8,34 @@
 #include <lustre/lustre_user.h>
 #include <lustre/lustreapi.h>
 
-//#include <lcap_client.h>
-//#include <lcap_config.h>
+//#include <client.h>
+//#include <config.h>
 
 #include <stdlib.h>
 #include <asm/types.h>
 
-int lcap_changelog_wrapper_start(void **ctx, int flags,
+int changelog_wrapper_start(cl_ctx_ptr *ctx, int flags,
                                  const char *mdtname, long long startrec) {
     return llapi_changelog_start(ctx, flags, mdtname, startrec);
 }
 
 
-int lcap_changelog_wrapper_fini(void **ctx) {
+int changelog_wrapper_fini(cl_ctx_ptr *ctx) {
     return llapi_changelog_fini(ctx);
 }
 
-int lcap_changelog_wrapper_recv(void *ctx,
-                                void **cr) {
+int changelog_wrapper_recv(cl_ctx_ptr ctx,
+                                changelog_rec_ptr *cr) {
 
     return llapi_changelog_recv(ctx, (struct changelog_rec **)cr);
 }
 
-int lcap_changelog_wrapper_free(void **cr) {
+int changelog_wrapper_free(changelog_rec_ptr *cr) {
 
     return llapi_changelog_free((struct changelog_rec **)cr);
 }
 
-int lcap_changelog_wrapper_clear(const char *mdtname, const char *id,
+int changelog_wrapper_clear(const char *mdtname, const char *id,
                                  long long endrec) {
 
     return llapi_changelog_clear(mdtname, id, endrec);

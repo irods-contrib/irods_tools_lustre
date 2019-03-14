@@ -288,13 +288,13 @@ int handle_record(const std::string& lustre_root_path, const std::vector<std::pa
 
 }
 
-int start_lcap_changelog(const std::string& mdtname, void **ctx, unsigned long long start_cr_index) {
+int start_changelog(const std::string& mdtname, cl_ctx_ptr *ctx, unsigned long long start_cr_index) {
     // TODO passing start_cr_index seems to not work
-    return lcap_changelog_wrapper_start(ctx, get_cl_block(), mdtname.c_str(), start_cr_index);
+    return changelog_wrapper_start(ctx, get_cl_block(), mdtname.c_str(), start_cr_index);
 }
 
-int finish_lcap_changelog(void **ctx) {
-    return lcap_changelog_wrapper_fini(ctx);
+int finish_changelog(cl_ctx_ptr *ctx) {
+    return changelog_wrapper_fini(ctx);
 }
 
 // Poll the change log and process.
@@ -302,10 +302,10 @@ int finish_lcap_changelog(void **ctx) {
 //   mdtname - the name of the mdt
 //   lustre_root_path - the root path of the lustre mount point
 //   change_map - the change map
-//   ctx - the lcap context (lcap_cl_ctx) 
+//   ctx - the lustre changelog context 
 int poll_change_log_and_process(const std::string& mdtname, const std::string& changelog_reader, const std::string& lustre_root_path, 
         const std::vector<std::pair<std::string, std::string> >& register_map,
-        change_map_t& change_map, void **ctx, 
+        change_map_t& change_map, cl_ctx_ptr *ctx, 
         int max_records_to_retrieve, unsigned long long& last_cr_index) {
 
     LOG(LOG_DBG, "poll_change_log_and_process: max_records_to_retrieve = %d\n", max_records_to_retrieve);
@@ -320,18 +320,18 @@ int poll_change_log_and_process(const std::string& mdtname, const std::string& c
     while (cntr < max_records_to_retrieve) {
 
         if (nullptr == *ctx) {
-            rc = start_lcap_changelog(mdtname, ctx, last_cr_index+1);
+            rc = start_changelog(mdtname, ctx, last_cr_index+1);
         }
         if (rc < 0) {
-            LOG(LOG_ERR, "lcap_changelog_start: %s\n", zmq_strerror(-rc));
+            LOG(LOG_ERR, "changelog_start: %s\n", zmq_strerror(-rc));
             return lustre_irods::CHANGELOG_START_ERROR;
             break;
         }
 
 
-        rc = lcap_changelog_wrapper_recv(*ctx, &rec);
+        rc = changelog_wrapper_recv(*ctx, &rec);
         if (1 == rc ||-EAGAIN == rc || -EPROTO == rc) {
-             finish_lcap_changelog(ctx);
+             finish_changelog(ctx);
              *ctx = nullptr;
              break;
         } else if (0 != rc) {
@@ -414,15 +414,15 @@ int poll_change_log_and_process(const std::string& mdtname, const std::string& c
         }
 
         last_cr_index = get_cr_index_from_changelog_rec(rec);
-        rc = lcap_changelog_wrapper_clear(mdtname.c_str(), changelog_reader.c_str(), get_cr_index_from_changelog_rec(rec));
+        rc = changelog_wrapper_clear(mdtname.c_str(), changelog_reader.c_str(), get_cr_index_from_changelog_rec(rec));
         if (rc < 0) {
-            LOG(LOG_ERR, "lcap_changelog_clear: %s\n", zmq_strerror(-rc));
+            LOG(LOG_ERR, "changelog_clear: %s\n", zmq_strerror(-rc));
             return rc;
         }
 
-        rc = lcap_changelog_wrapper_free(&rec);
+        rc = changelog_wrapper_free(&rec);
         if (rc < 0) {
-            LOG(LOG_ERR, "lcap_changelog_free: %s\n", zmq_strerror(-rc));
+            LOG(LOG_ERR, "changelog_free: %s\n", zmq_strerror(-rc));
             return rc;
         }
 

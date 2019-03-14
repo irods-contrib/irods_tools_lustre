@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.5.0 FATAL_ERROR) 
 
-find_package(IRODS 4.2.2 EXACT REQUIRED)
+find_package(IRODS 4.2.5 EXACT REQUIRED)
 
 set(CMAKE_C_COMPILER ${IRODS_EXTERNALS_FULLPATH_CLANG}/bin/clang)
 set(CMAKE_CXX_COMPILER ${IRODS_EXTERNALS_FULLPATH_CLANG}/bin/clang++)
@@ -9,8 +9,6 @@ set (CMAKE_CXX_STANDARD 14)
 project(lustre-irods-connector C CXX)
 
 find_package(Threads REQUIRED)
-
-#set(LCAP_ROOT /lcap)
 
 include(${IRODS_TARGETS_PATH})
 
@@ -63,7 +61,6 @@ include_directories(/usr/include/irods
     ${IRODS_EXTERNALS_FULLPATH_CLANG}/include/c++/v1 
     ${IRODS_EXTERNALS_FULLPATH_BOOST}/include
     ${CMAKE_SOURCE_DIR}/src/
-    #${LCAP_ROOT}/src/include
     /opt/irods-externals/cppzmq4.1-0/include)
 
 set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-z,defs")

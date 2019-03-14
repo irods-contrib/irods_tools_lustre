@@ -1,5 +1,5 @@
-/* This is a wrapper around the Lustre/LCAP interface which can be called directly from C++ source code.
-   The standard Lustre headers (called by LCAP) can not be included in C++ due to errors converting 
+/* This is a wrapper around the Lustre interface which can be called directly from C++ source code.
+   The standard Lustre headers can not be included in C++ due to errors converting 
    ints to enums.
 */
 
@@ -13,23 +13,23 @@
 
 typedef void* changelog_rec_ptr;
 typedef void* changelog_ext_rename_ptr;
-typedef void* lcap_cl_ctx_ptr;
+typedef void* cl_ctx_ptr;
 typedef void* lustre_fid_ptr;
 typedef void* changelog_ext_jobid_ptr;
 
-int lcap_changelog_wrapper_start(void **ctx, int flags,
+int changelog_wrapper_start(cl_ctx_ptr *ctx, int flags,
                                  const char *mdtname, long long startrec); 
 
-int lcap_changelog_wrapper_fini(void **ctx); 
+int changelog_wrapper_fini(cl_ctx_ptr *ctx); 
 
-int lcap_changelog_wrapper_recv(void *ctx,
+int changelog_wrapper_recv(cl_ctx_ptr ctx,
                                 //changelog_rec **cr
-                                void **cr); 
+                                changelog_rec_ptr *cr); 
 
 
-int lcap_changelog_wrapper_free(void **cr); 
+int changelog_wrapper_free(changelog_rec_ptr *cr); 
 
-int lcap_changelog_wrapper_clear(const char *mdtname, const char *id,
+int changelog_wrapper_clear(const char *mdtname, const char *id,
                                  long long endrec); 
 
 int get_cl_block();

@@ -40,10 +40,6 @@
 #define LPX64   "%#llx"
 #endif
 
-#ifndef LCAP_CL_BLOCK
-#define LCAP_CL_BLOCK   (0x01 << 1)
-#endif
-
 extern "C" {
   #include "llapi_cpp_wrapper.h"
 }
@@ -182,7 +178,7 @@ int read_and_process_command_line_options(int argc, char *argv[], std::string& c
 // this is the main changelog reader loop.  It reads changelogs, writes the records to an internal data structure, 
 // and sends groups of changelog records to client updater threads.
 void run_main_changelog_reader_loop(const lustre_irods_connector_cfg_t& config_struct, change_map_t& change_map, 
-        void **ctx, zmq::socket_t& publisher, zmq::socket_t& subscriber, zmq::socket_t& sender,
+        cl_ctx_ptr *ctx, zmq::socket_t& publisher, zmq::socket_t& subscriber, zmq::socket_t& sender,
         std::set<std::string>& active_fidstr_list, unsigned long long& last_cr_index) {
     
     // create a vector holding the status of the client's connection to irods - true is up, false is down
@@ -512,7 +508,7 @@ int main(int argc, char *argv[]) {
     std::string config_file = "lustre_irods_connector_config.json";
     std::string log_file;
     bool fatal_error_detected = false;
-    void *reader_ctx;
+    cl_ctx_ptr reader_ctx;
 
     signal(SIGPIPE, SIG_IGN);
     
@@ -616,11 +612,11 @@ int main(int argc, char *argv[]) {
         //irods_api_client_connection_status.push_back(true);
     }
 
-    LOG(LOG_DBG, "before start_lcap_changelog\n");
-    rc = start_lcap_changelog(config_struct.mdtname, &reader_ctx, last_cr_index+1);
-    LOG(LOG_DBG, "after start_lcap_changelog reader_ctx=%p\n", reader_ctx);
+    LOG(LOG_DBG, "before start_changelog\n");
+    rc = start_changelog(config_struct.mdtname, &reader_ctx, last_cr_index+1);
+    LOG(LOG_DBG, "after start_changelog reader_ctx=%p\n", reader_ctx);
     if (rc < 0) {
-        LOG(LOG_ERR, "lcap_changelog_start: %s\n", zmq_strerror(-rc));
+        LOG(LOG_ERR, "changelog_start: %s\n", zmq_strerror(-rc));
         reader_ctx = nullptr;
         fatal_error_detected = true;
     }
@@ -660,13 +656,13 @@ int main(int argc, char *argv[]) {
     }
 
     if (reader_ctx != nullptr) {
-        LOG(LOG_DBG, "finish_lcap_changelog RAN!!!!!!!!!!\n");
-        rc = finish_lcap_changelog(&reader_ctx);
+        LOG(LOG_DBG, "finish_changelog RAN!!!!!!!!!!\n");
+        rc = finish_changelog(&reader_ctx);
         if (rc) {
-            LOG(LOG_ERR, "lcap_changelog_fini: %s\n", zmq_strerror(-rc));
+            LOG(LOG_ERR, "changelog_fini: %s\n", zmq_strerror(-rc));
             fatal_error_detected = true;
         } else {
-            LOG(LOG_ERR, "finish_lcap_changelog exited normally\n");
+            LOG(LOG_ERR, "finish_changelog exited normally\n");
         }
     }
 
