@@ -45,9 +45,8 @@
 #endif
 
 extern "C" {
-  #include "lcap_cpp_wrapper.h"
+  #include "llapi_cpp_wrapper.h"
 }
-
 
 namespace po = boost::program_options;
 
@@ -183,7 +182,7 @@ int read_and_process_command_line_options(int argc, char *argv[], std::string& c
 // this is the main changelog reader loop.  It reads changelogs, writes the records to an internal data structure, 
 // and sends groups of changelog records to client updater threads.
 void run_main_changelog_reader_loop(const lustre_irods_connector_cfg_t& config_struct, change_map_t& change_map, 
-        lcap_cl_ctx_ptr& ctx, zmq::socket_t& publisher, zmq::socket_t& subscriber, zmq::socket_t& sender,
+        void **ctx, zmq::socket_t& publisher, zmq::socket_t& subscriber, zmq::socket_t& sender,
         std::set<std::string>& active_fidstr_list, unsigned long long& last_cr_index) {
     
     // create a vector holding the status of the client's connection to irods - true is up, false is down
@@ -239,8 +238,8 @@ void run_main_changelog_reader_loop(const lustre_irods_connector_cfg_t& config_s
 
         if (!pause_reading) {
             LOG(LOG_DBG,"changelog client polling changelog\n");
-            poll_change_log_and_process(config_struct.mdtname, config_struct.lustre_root_path, config_struct.register_map, 
-                    change_map, ctx, max_number_of_changelog_records - change_map.size(), last_cr_index);
+            poll_change_log_and_process(config_struct.mdtname, config_struct.changelog_reader, config_struct.lustre_root_path, 
+                    config_struct.register_map, change_map, ctx, max_number_of_changelog_records - change_map.size(), last_cr_index);
 
             LOG(LOG_DBG, "change_map size: %lu\n", change_map.size());
 
@@ -513,7 +512,7 @@ int main(int argc, char *argv[]) {
     std::string config_file = "lustre_irods_connector_config.json";
     std::string log_file;
     bool fatal_error_detected = false;
-    lcap_cl_ctx_ptr lcap_cl_ctx = nullptr;
+    void *reader_ctx;
 
     signal(SIGPIPE, SIG_IGN);
     
@@ -618,10 +617,11 @@ int main(int argc, char *argv[]) {
     }
 
     LOG(LOG_DBG, "before start_lcap_changelog\n");
-    rc = start_lcap_changelog(config_struct.mdtname, &lcap_cl_ctx, last_cr_index+1);
-    LOG(LOG_DBG, "after start_lcap_changelog\n");
+    rc = start_lcap_changelog(config_struct.mdtname, &reader_ctx, last_cr_index+1);
+    LOG(LOG_DBG, "after start_lcap_changelog reader_ctx=%p\n", reader_ctx);
     if (rc < 0) {
         LOG(LOG_ERR, "lcap_changelog_start: %s\n", zmq_strerror(-rc));
+        reader_ctx = nullptr;
         fatal_error_detected = true;
     }
 
@@ -633,7 +633,7 @@ int main(int argc, char *argv[]) {
 
 
     if (!fatal_error_detected) {
-        run_main_changelog_reader_loop(config_struct, change_map, lcap_cl_ctx, publisher, subscriber, sender, active_fidstr_list, last_cr_index);
+        run_main_changelog_reader_loop(config_struct, change_map, &reader_ctx, publisher, subscriber, sender, active_fidstr_list, last_cr_index);
     }
 
     // send message to threads to terminate
@@ -659,12 +659,15 @@ int main(int argc, char *argv[]) {
         fatal_error_detected = true;
     }
 
-    rc = finish_lcap_changelog(lcap_cl_ctx);
-    if (rc) {
-        LOG(LOG_ERR, "lcap_changelog_fini: %s\n", zmq_strerror(-rc));
-        fatal_error_detected = true;
-    } else {
-        LOG(LOG_ERR, "finish_lcap_changelog exited normally\n");
+    if (reader_ctx != nullptr) {
+        LOG(LOG_DBG, "finish_lcap_changelog RAN!!!!!!!!!!\n");
+        rc = finish_lcap_changelog(&reader_ctx);
+        if (rc) {
+            LOG(LOG_ERR, "lcap_changelog_fini: %s\n", zmq_strerror(-rc));
+            fatal_error_detected = true;
+        } else {
+            LOG(LOG_ERR, "finish_lcap_changelog exited normally\n");
+        }
     }
 
     LOG(LOG_DBG,"changelog client exiting\n");

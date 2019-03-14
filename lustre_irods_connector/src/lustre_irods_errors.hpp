@@ -17,6 +17,7 @@ const int INVALID_CR_TYPE_ERROR = -10;
 const int SQLITE_DB_ERROR = -11;
 const int QUIT = -12;
 const int COLLISION_IN_FIDSTR = -13;
+const int CHANGELOG_START_ERROR = -14;
 
 }
 

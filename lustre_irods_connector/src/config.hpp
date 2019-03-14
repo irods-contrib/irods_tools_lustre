@@ -13,6 +13,7 @@ typedef struct irods_connection_cfg {
 
 typedef struct lustre_irods_connector_cfg {
     std::string mdtname;
+    std::string changelog_reader;
     std::string lustre_root_path;
     //std::string irods_register_path;
     std::string irods_resource_name;

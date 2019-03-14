@@ -32,13 +32,13 @@ int read_key_from_map(const json_map& config_map, const std::string &key, std::s
 void set_log_level(const std::string& log_level_str) {
     if ("LOG_FATAL" == log_level_str) {
         log_level = LOG_FATAL; 
-    } else if ("LOG_ERR" == log_level_str) {
+    } else if ("LOG_ERR" == log_level_str || "LOG_ERROR" == log_level_str) {
         log_level = LOG_ERR;
     } else if ("LOG_WARN" == log_level_str) {
         log_level = LOG_WARN;
     } else if ("LOG_INFO" == log_level_str) {
         log_level = LOG_INFO;
-    } else if ("LOG_DBG" == log_level_str) {
+    } else if ("LOG_DBG" == log_level_str || "LOG_DEBUG" == log_level_str)  {
         log_level = LOG_DBG;
     }
 }   
@@ -84,6 +84,11 @@ int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *
 
         if (0 != read_key_from_map(config_map, "mdtname", config_struct->mdtname)) {
             LOG(LOG_ERR, "Key mdtname missing from %s\n", filename.c_str());
+            return lustre_irods::CONFIGURATION_ERROR;
+        }
+
+        if (0 != read_key_from_map(config_map, "changelog_reader", config_struct->changelog_reader)) {
+            LOG(LOG_ERR, "Key changelog_reader missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
         }
 

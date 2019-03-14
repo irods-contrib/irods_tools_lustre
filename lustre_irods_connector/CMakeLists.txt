@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.5.0 FATAL_ERROR) 
 
-find_package(IRODS 4.2.3 EXACT REQUIRED)
+find_package(IRODS 4.2.2 EXACT REQUIRED)
 
 set(CMAKE_C_COMPILER ${IRODS_EXTERNALS_FULLPATH_CLANG}/bin/clang)
 set(CMAKE_CXX_COMPILER ${IRODS_EXTERNALS_FULLPATH_CLANG}/bin/clang++)
@@ -10,7 +10,7 @@ project(lustre-irods-connector C CXX)
 
 find_package(Threads REQUIRED)
 
-set(LCAP_ROOT /lcap)
+#set(LCAP_ROOT /lcap)
 
 include(${IRODS_TARGETS_PATH})
 
@@ -48,7 +48,6 @@ link_libraries(c++abi
     irods_plugin_dependencies
     lustreapi
     capnp
-    lcap
     kj
     zmq
     sqlite3
@@ -64,12 +63,12 @@ include_directories(/usr/include/irods
     ${IRODS_EXTERNALS_FULLPATH_CLANG}/include/c++/v1 
     ${IRODS_EXTERNALS_FULLPATH_BOOST}/include
     ${CMAKE_SOURCE_DIR}/src/
-    ${LCAP_ROOT}/src/include
+    #${LCAP_ROOT}/src/include
     /opt/irods-externals/cppzmq4.1-0/include)
 
 set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-z,defs")
 
-add_executable(lustre_irods_connector ${PROJECT_SOURCE_DIR}/src/change_table.capnp.c++ ${PROJECT_SOURCE_DIR}/src/lustre_change_table.cpp ${PROJECT_SOURCE_DIR}/src/irods_ops.cpp ${PROJECT_SOURCE_DIR}/src/config.cpp ${PROJECT_SOURCE_DIR}/src/changelog_poller.cpp ${PROJECT_SOURCE_DIR}/src/lcap_cpp_wrapper.c ${PROJECT_SOURCE_DIR}/src/main.cpp)
+add_executable(lustre_irods_connector ${PROJECT_SOURCE_DIR}/src/change_table.capnp.c++ ${PROJECT_SOURCE_DIR}/src/lustre_change_table.cpp ${PROJECT_SOURCE_DIR}/src/irods_ops.cpp ${PROJECT_SOURCE_DIR}/src/config.cpp ${PROJECT_SOURCE_DIR}/src/changelog_poller.cpp ${PROJECT_SOURCE_DIR}/src/llapi_cpp_wrapper.c ${PROJECT_SOURCE_DIR}/src/main.cpp)
 
 #target_link_libraries(
     #lustre_irods_connector

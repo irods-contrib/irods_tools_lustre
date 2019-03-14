@@ -1,5 +1,6 @@
 {
         "mdtname": "lustre01-MDT0000",
+        "changelog_reader": "cl1",
         "lustre_root_path": "/lustreResc/lustre01",
         "irods_resource_name": "lustreResc",
         "irods_api_update_type": "direct",
@@ -27,7 +28,7 @@
             },
             {
                 "lustre_path": "/lustreResc/lustre01",
-                "irods_register_path": "/tempZone/lustre"
+                "irods_register_path": "/tempZone/lustre01"
             }
         ],
 

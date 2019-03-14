@@ -602,6 +602,14 @@ int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *conf
             entries[cnt].setEventType(iter->last_event);
             entries[cnt].setFileSize(iter->file_size);
 
+            // **** debug **** 
+            std::string fidstr(entries[cnt].getFidstr().cStr());
+            std::string lustre_path(entries[cnt].getLustrePath().cStr());
+            std::string object_name(entries[cnt].getObjectName().cStr());
+            std::string parent_fidstr(entries[cnt].getParentFidstr().cStr());
+            LOG(LOG_DBG, "Entry: [fidstr=%s][parent_fidstr=%s][object_name=%s][lustre_path=%s]", fidstr.c_str(), fidstr.c_str(), object_name.c_str(), lustre_path.c_str());
+            // *************
+
             // before deleting write the entry to removed_entries 
             //removed_entries->insert(*iter);
 

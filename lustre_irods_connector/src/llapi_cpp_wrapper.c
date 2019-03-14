@@ -3,49 +3,46 @@
    enums to ints.
 */
 
-#include "lcap_cpp_wrapper.h"
+#include "llapi_cpp_wrapper.h"
 
-#include <lcap_client.h>
-#include <lcap_config.h>
+#include <lustre/lustre_user.h>
+#include <lustre/lustreapi.h>
+
+//#include <lcap_client.h>
+//#include <lcap_config.h>
 
 #include <stdlib.h>
 #include <asm/types.h>
 
-int lcap_changelog_wrapper_start(lcap_cl_ctx_ptr *pctx, int flags,
+int lcap_changelog_wrapper_start(void **ctx, int flags,
                                  const char *mdtname, long long startrec) {
-    return lcap_changelog_start((struct lcap_cl_ctx **)pctx, flags, mdtname, startrec);
+    return llapi_changelog_start(ctx, flags, mdtname, startrec);
 }
 
 
-int lcap_changelog_wrapper_fini(lcap_cl_ctx_ptr ctx) {
-    return lcap_changelog_fini((struct lcap_cl_ctx *)ctx);
+int lcap_changelog_wrapper_fini(void **ctx) {
+    return llapi_changelog_fini(ctx);
 }
 
-int lcap_changelog_wrapper_recv(lcap_cl_ctx_ptr ctx,
-                                changelog_rec_ptr *cr) {
+int lcap_changelog_wrapper_recv(void *ctx,
+                                void **cr) {
 
-    return lcap_changelog_recv((struct lcap_cl_ctx *)ctx, (struct changelog_rec **)cr);
+    return llapi_changelog_recv(ctx, (struct changelog_rec **)cr);
 }
 
-int lcap_changelog_wrapper_free(lcap_cl_ctx_ptr ctx,
-                                changelog_rec_ptr *cr) {
+int lcap_changelog_wrapper_free(void **cr) {
 
-    return lcap_changelog_free((struct lcap_cl_ctx *)ctx, (struct changelog_rec **)cr);
+    return llapi_changelog_free((struct changelog_rec **)cr);
 }
 
-int lcap_changelog_wrapper_clear(lcap_cl_ctx_ptr ctx,
-                                 const char *mdtname, const char *id,
+int lcap_changelog_wrapper_clear(const char *mdtname, const char *id,
                                  long long endrec) {
 
-    return lcap_changelog_clear((struct lcap_cl_ctx *)ctx, mdtname, id, endrec);
+    return llapi_changelog_clear(mdtname, id, endrec);
 }
 
-int get_lcap_cl_block() {
-    return LCAP_CL_BLOCK;
-}
-
-int get_lcap_cl_direct() {
-    return LCAP_CL_DIRECT;
+int get_cl_block() {
+    return CHANGELOG_FLAG_BLOCK;
 }
 
 int llapi_fid2path_wrapper(const char *device, const char *fidstr, char *path,

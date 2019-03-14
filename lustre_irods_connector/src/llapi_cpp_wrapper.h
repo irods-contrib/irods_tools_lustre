@@ -4,11 +4,12 @@
 */
 
 
-#ifndef LCAP_CPP_WRAPPER_H
-#define LCAP_CPP_WRAPPER_H
+#ifndef LLAPI_CPP_WRAPPER_H
+#define LLAPI_CPP_WRAPPER_H
 
 #include <stdlib.h>
 #include <asm/types.h>
+//#include <lustre/lustre_user.h>
 
 typedef void* changelog_rec_ptr;
 typedef void* changelog_ext_rename_ptr;
@@ -16,23 +17,22 @@ typedef void* lcap_cl_ctx_ptr;
 typedef void* lustre_fid_ptr;
 typedef void* changelog_ext_jobid_ptr;
 
-int lcap_changelog_wrapper_start(lcap_cl_ctx_ptr* pctx, int flags,
+int lcap_changelog_wrapper_start(void **ctx, int flags,
                                  const char *mdtname, long long startrec); 
 
-int lcap_changelog_wrapper_fini(lcap_cl_ctx_ptr ctx); 
+int lcap_changelog_wrapper_fini(void **ctx); 
 
-int lcap_changelog_wrapper_recv(lcap_cl_ctx_ptr ctx,
-                                changelog_rec_ptr *cr);
+int lcap_changelog_wrapper_recv(void *ctx,
+                                //changelog_rec **cr
+                                void **cr); 
 
-int lcap_changelog_wrapper_free(lcap_cl_ctx_ptr ctx,
-                                changelog_rec_ptr *cr);
 
-int lcap_changelog_wrapper_clear(lcap_cl_ctx_ptr ctx,
-                                 const char *mdtname, const char *id,
+int lcap_changelog_wrapper_free(void **cr); 
+
+int lcap_changelog_wrapper_clear(const char *mdtname, const char *id,
                                  long long endrec); 
 
-int get_lcap_cl_block();
-int get_lcap_cl_direct();
+int get_cl_block();
 
 int llapi_fid2path_wrapper(const char *device, const char *fidstr, char *path,
                       int pathlen, long long *recno, int *linkno);
