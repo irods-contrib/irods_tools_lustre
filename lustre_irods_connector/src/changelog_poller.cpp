@@ -338,13 +338,6 @@ int poll_change_log_and_process(const std::string& mdtname, const std::string& c
             break;
         }
 
-
-        // TODO workaround because the start changelog start with startrec does not appear to be working
-        if (get_cr_index_from_changelog_rec(rec) < last_cr_index) {
-            cntr = 0;
-            continue;
-        } 
-         
         cntr++;
 
         time_t      secs;
