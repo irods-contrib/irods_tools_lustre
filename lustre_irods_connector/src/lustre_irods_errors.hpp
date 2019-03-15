@@ -18,7 +18,7 @@ const int SQLITE_DB_ERROR = -11;
 const int QUIT = -12;
 const int COLLISION_IN_FIDSTR = -13;
 const int CHANGELOG_START_ERROR = -14;
-
+const int SKIP_RECORD = -15;
 }
 
 #endif

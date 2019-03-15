@@ -233,7 +233,7 @@ int handle_record(const std::string& lustre_root_path, const std::vector<std::pa
     // just skip if the path is not in the register map.  For deletes the path will not be there.
     if (!in_register_map && cr_type != get_cl_rename() && cr_type != get_cl_unlink() && cr_type != get_cl_rmdir()) {
         LOG(LOG_DBG, "Skipping %s because it is not on the register map.\n", lustre_full_path.c_str());
-        return lustre_irods::SUCCESS;
+        return lustre_irods::SKIP_RECORD;
     }
 
     std::string parent_fidstr = convert_to_fidstr(get_cr_pfid_from_changelog_rec(rec));
@@ -396,7 +396,11 @@ int poll_change_log_and_process(const std::string& mdtname, const std::string& c
 
         LOG(LOG_INFO, "\n");
 
-        if ((rc = handle_record(lustre_root_path, register_map, rec, change_map)) < 0) {
+        rc = handle_record(lustre_root_path, register_map, rec, change_map);
+        if (rc == lustre_irods::SKIP_RECORD) {
+            // if the record is skipped, don't count this against max records t
+            cntr--;
+        } else if (rc < 0) {
             lustre_fid_ptr cr_tfid_ptr = get_cr_tfid_from_changelog_rec(rec);
             LOG(LOG_ERR, "handle record failed for %s %#llx:0x%x:0x%x rc = %i\n", 
                     changelog_type2str_wrapper(get_cr_type_from_changelog_rec(rec)), 
@@ -410,13 +414,11 @@ int poll_change_log_and_process(const std::string& mdtname, const std::string& c
         rc = changelog_wrapper_clear(mdtname.c_str(), changelog_reader.c_str(), get_cr_index_from_changelog_rec(rec));
         if (rc < 0) {
             LOG(LOG_ERR, "changelog_clear: %s\n", zmq_strerror(-rc));
-            return rc;
         }
 
         rc = changelog_wrapper_free(&rec);
         if (rc < 0) {
             LOG(LOG_ERR, "changelog_free: %s\n", zmq_strerror(-rc));
-            return rc;
         }
 
     }
