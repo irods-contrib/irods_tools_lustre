@@ -411,17 +411,17 @@ int poll_change_log_and_process(const std::string& mdtname, const std::string& c
         }
 
         last_cr_index = get_cr_index_from_changelog_rec(rec);
-        rc = changelog_wrapper_clear(mdtname.c_str(), changelog_reader.c_str(), get_cr_index_from_changelog_rec(rec));
-        if (rc < 0) {
-            LOG(LOG_ERR, "changelog_clear: %s\n", zmq_strerror(-rc));
-        }
-
         rc = changelog_wrapper_free(&rec);
         if (rc < 0) {
             LOG(LOG_ERR, "changelog_free: %s\n", zmq_strerror(-rc));
         }
-
     }
+
+    rc = changelog_wrapper_clear(mdtname.c_str(), changelog_reader.c_str(), last_cr_index);
+    if (rc < 0) {
+        LOG(LOG_ERR, "changelog_clear: %s\n", zmq_strerror(-rc));
+    }
+
 
     return lustre_irods::SUCCESS;
 }
