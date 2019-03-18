@@ -316,6 +316,7 @@ int poll_change_log_and_process(const std::string& mdtname, const std::string& c
     changelog_rec_ptr rec;
 
     int cntr = 0;
+    int skipped_records = 0;
 
     while (cntr < max_records_to_retrieve) {
 
@@ -400,6 +401,7 @@ int poll_change_log_and_process(const std::string& mdtname, const std::string& c
         if (rc == lustre_irods::SKIP_RECORD) {
             // if the record is skipped, don't count this against max records t
             cntr--;
+            skipped_records++;
         } else if (rc < 0) {
             lustre_fid_ptr cr_tfid_ptr = get_cr_tfid_from_changelog_rec(rec);
             LOG(LOG_ERR, "handle record failed for %s %#llx:0x%x:0x%x rc = %i\n", 
@@ -415,6 +417,17 @@ int poll_change_log_and_process(const std::string& mdtname, const std::string& c
         if (rc < 0) {
             LOG(LOG_ERR, "changelog_free: %s\n", zmq_strerror(-rc));
         }
+
+        // if we are skipping a bunch of records, go ahead and confirm them periodically
+        if (skipped_records > max_records_to_retrieve) {
+            skipped_records = 0;
+            LOG(LOG_DBG, "changelog_clear(%llu)\n", last_cr_index);
+            rc = changelog_wrapper_clear(mdtname.c_str(), changelog_reader.c_str(), last_cr_index);
+            if (rc < 0) {
+                LOG(LOG_ERR, "changelog_clear: %s\n", zmq_strerror(-rc));
+            }
+        }
+ 
     }
 
     rc = changelog_wrapper_clear(mdtname.c_str(), changelog_reader.c_str(), last_cr_index);
