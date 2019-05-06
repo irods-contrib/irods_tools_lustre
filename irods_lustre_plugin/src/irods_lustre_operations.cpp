@@ -358,7 +358,8 @@ void handle_create(const std::vector<std::pair<std::string, std::string> >& regi
         addKeyVal(&dataObjInp.condInput, RESC_NAME_KW, resource_name.c_str());
         addKeyVal(&dataObjInp.condInput, RESC_HIER_STR_KW, resource_name.c_str());
 
-        status = filePathReg(_comm, &dataObjInp, resource_name.c_str());
+        status = rsPhyPathReg(_comm, &dataObjInp);
+        //status = filePathReg(_comm, &dataObjInp, resource_name.c_str());
         if (status != 0) {
             rodsLog(LOG_ERROR, "Error registering object %s.  Error is %i", fidstr.c_str(), status);
             return;
