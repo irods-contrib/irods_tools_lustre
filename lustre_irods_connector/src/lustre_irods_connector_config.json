@@ -17,6 +17,9 @@
         "maximum_records_to_receive_from_lustre_changelog": 500,
         "message_receive_timeout_msec": 2000,
 
+        "set_metadata_for_storage_tiering_time_violation": "true",
+        "metadata_key_for_storage_tiering_time_violation": "irods::access_time",
+
         "register_map": [
             {
                 "lustre_path": "/lustreResc/lustre01/home",

@@ -207,6 +207,10 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
     int64_t resource_id = changeMap.getResourceId();
     std::string resource_name(changeMap.getResourceName().cStr());
     int64_t maximum_records_per_sql_command = changeMap.getMaximumRecordsPerSqlCommand(); 
+    bool set_metadata_for_storage_tiering_time_violation = changeMap.getSetMetadataForStorageTieringTimeViolation();
+    std::string metadata_key_for_storage_tiering_time_violation = changeMap.getMetadataKeyForStorageTieringTimeViolation();
+
+    rodsLog(LOG_NOTICE, "metadata_key_for_storage_tiering_time_violation=%s", metadata_key_for_storage_tiering_time_violation.c_str());
 
     // for batched file inserts 
     std::vector<std::string> fidstr_list_for_create;
@@ -286,7 +290,8 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
         if (fidstr_list_for_create.size() > 0) {
             handle_batch_create(register_map, resource_id, resource_name,
                     fidstr_list_for_create, lustre_path_list, object_name_list, parent_fidstr_list, file_size_list,
-                    maximum_records_per_sql_command, _comm, icss, user_id);
+                    maximum_records_per_sql_command, _comm, icss, user_id, set_metadata_for_storage_tiering_time_violation,
+                    metadata_key_for_storage_tiering_time_violation);
         }
     }
 

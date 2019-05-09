@@ -44,6 +44,9 @@ extern "C" {
   #include "llapi_cpp_wrapper.h"
 }
 
+static std::mutex inflight_messages_mutex;
+unsigned int number_inflight_messages = 0;
+
 namespace po = boost::program_options;
 
 std::atomic<bool> keep_running(true);
@@ -178,12 +181,14 @@ int read_and_process_command_line_options(int argc, char *argv[], std::string& c
 // this is the main changelog reader loop.  It reads changelogs, writes the records to an internal data structure, 
 // and sends groups of changelog records to client updater threads.
 void run_main_changelog_reader_loop(const lustre_irods_connector_cfg_t& config_struct, change_map_t& change_map, 
-        cl_ctx_ptr *ctx, zmq::socket_t& publisher, zmq::socket_t& subscriber, zmq::socket_t& sender,
+        cl_ctx_ptr* ctx, zmq::socket_t& publisher, zmq::socket_t& subscriber, zmq::socket_t& sender,
         std::set<std::string>& active_fidstr_list, unsigned long long& last_cr_index) {
     
     // create a vector holding the status of the client's connection to irods - true is up, false is down
     std::vector<bool> irods_api_client_connection_status(config_struct.irods_updater_thread_count, true);   
     unsigned int failed_connections_to_irods_count = 0;
+
+    unsigned int number_inflight_messages_limit = config_struct.irods_updater_thread_count * 2;
 
     bool pause_reading = false;
     unsigned int sleep_period = config_struct.changelog_poll_interval_seconds;
@@ -233,13 +238,26 @@ void run_main_changelog_reader_loop(const lustre_irods_connector_cfg_t& config_s
         pause_reading = (failed_connections_to_irods_count >= irods_api_client_connection_status.size()); 
 
         if (!pause_reading) {
-            LOG(LOG_DBG,"changelog client polling changelog\n");
+            LOG(LOG_INFO,"changelog client polling changelog\n");
             poll_change_log_and_process(config_struct.mdtname, config_struct.changelog_reader, config_struct.lustre_root_path, 
                     config_struct.register_map, change_map, ctx, max_number_of_changelog_records - change_map.size(), last_cr_index);
 
             LOG(LOG_DBG, "change_map size: %lu\n", change_map.size());
 
+            // read log entries and put them on ZMQ queue
             while (entries_ready_to_process(change_map)) {
+
+                // only allow number_inflight_messages_limit outstanding messages on ZMQ queue
+                {
+                    std::lock_guard<std::mutex> lock(inflight_messages_mutex);
+                    if (number_inflight_messages > number_inflight_messages_limit) { 
+                        break;
+                    }
+                    number_inflight_messages++;
+                }
+
+                LOG(LOG_DBG, "number of inflight messages on ZMQ queue: %d\n", number_inflight_messages);
+
                 // get records ready to be processed into buf and buflen
                 void *buf = nullptr;
                 size_t buflen;
@@ -259,6 +277,7 @@ void run_main_changelog_reader_loop(const lustre_irods_connector_cfg_t& config_s
                 }
 
                 // send inp to irods updaters
+                LOG(LOG_DBG,"sending to readers\n");
                 zmq::message_t message(buflen);
                 memcpy(message.data(), buf, buflen);
                 sender.send(message);
@@ -314,11 +333,17 @@ void result_accumulator_main(const lustre_irods_connector_cfg_t *config_struct_p
         }
 
         if (bytes_received > 0) {
+
+            {
+                std::lock_guard<std::mutex> lock(inflight_messages_mutex);
+                number_inflight_messages--;
+            }
+
             LOG(LOG_DBG, "accumulator received message of size: %lu.\n", message.size());
             unsigned char *buf = static_cast<unsigned char*>(message.data());
             std::string update_status;
             get_update_status_from_capnproto_buf(buf, message.size(), update_status);
-            LOG(LOG_DBG, "update status received is %s\n", update_status.c_str());
+            LOG(LOG_INFO, "accumulator received update status of %s\n", update_status.c_str());
 
             if (update_status == "FAIL") {
                 add_capnproto_buffer_back_to_change_table(buf, message.size(), *change_map, *active_fidstr_list);
@@ -612,11 +637,9 @@ int main(int argc, char *argv[]) {
         //irods_api_client_connection_status.push_back(true);
     }
 
-    LOG(LOG_DBG, "before start_changelog\n");
     rc = start_changelog(config_struct.mdtname, &reader_ctx, last_cr_index+1);
-    LOG(LOG_DBG, "after start_changelog reader_ctx=%p\n", reader_ctx);
     if (rc < 0) {
-        LOG(LOG_ERR, "changelog_start: %s\n", zmq_strerror(-rc));
+        LOG(LOG_ERR, "changelog_start: %s  [rc=%d]\n", zmq_strerror(-rc), rc);
         reader_ctx = nullptr;
         fatal_error_detected = true;
     }
@@ -625,6 +648,7 @@ int main(int argc, char *argv[]) {
     // populated with the fidstr
     std::string root_fidstr = get_fidstr_from_path(config_struct.lustre_root_path);
     LOG(LOG_DBG, "Root fidstr %s\n", root_fidstr.c_str());
+    LOG(LOG_INFO, "lustre_write_fidstr_to_root_dir [lustre_root_path=%s][root_fidstr=%s]\n", config_struct.lustre_root_path.c_str(), root_fidstr.c_str());
     lustre_write_fidstr_to_root_dir(config_struct.lustre_root_path, root_fidstr, change_map);
 
 

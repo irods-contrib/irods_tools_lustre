@@ -14,11 +14,17 @@
 FILE *dbgstream = stdout;
 int  log_level = LOG_INFO;
 
-int read_key_from_map(const json_map& config_map, const std::string &key, std::string& value) {
+int read_key_from_map(const json_map& config_map, const std::string &key, std::string& value, bool required = true) {
     auto entry = config_map.find(key);
     if (entry == config_map.end()) {
-       LOG(LOG_ERR, "Could not find key %s in configuration\n", key.c_str());
-       return lustre_irods::CONFIGURATION_ERROR;
+       if (required) {
+           LOG(LOG_ERR, "Could not find key %s in configuration\n", key.c_str());
+           return lustre_irods::CONFIGURATION_ERROR;
+       } else {
+           // return error here just indicates the caller should
+           // set a default value
+           return lustre_irods::CONFIGURATION_ERROR;
+       }
     }
     std::stringstream tmp;
     tmp << entry->second;
@@ -78,6 +84,7 @@ int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *
     std::string maximum_records_per_sql_command_str;
     std::string maximum_records_to_receive_from_lustre_changelog_str;
     std::string message_receive_timeout_msec_str;
+    std::string time_violation_setting_str;
 
     try {
         json_map config_map{ json_file{ filename.c_str() } };
@@ -159,6 +166,23 @@ int read_config_file(const std::string& filename, lustre_irods_connector_cfg_t *
             LOG(LOG_ERR, "Key message_receive_timeout_msec missing from %s\n", filename.c_str());
             return lustre_irods::CONFIGURATION_ERROR;
         }
+
+        if (0 != read_key_from_map(config_map, "set_metadata_for_storage_tiering_time_violation", time_violation_setting_str, false)) {
+            config_struct->set_metadata_for_storage_tiering_time_violation = false;
+        } else {
+            std::transform(time_violation_setting_str.begin(), time_violation_setting_str.end(), time_violation_setting_str.begin(), ::tolower);
+            if (time_violation_setting_str == "true") {
+                config_struct->set_metadata_for_storage_tiering_time_violation = true;
+            } else {
+                config_struct->set_metadata_for_storage_tiering_time_violation = false;
+            }
+        }
+
+
+        if (0 != read_key_from_map(config_map, "metadata_key_for_storage_tiering_time_violation", config_struct->metadata_key_for_storage_tiering_time_violation, false)) {
+            config_struct->metadata_key_for_storage_tiering_time_violation = "irods::access_time";
+        } 
+        LOG(LOG_INFO, "set metadata_key_for_storage_tiering_time_violation=%s\n", config_struct->metadata_key_for_storage_tiering_time_violation.c_str());
 
         // read register_map
         try {

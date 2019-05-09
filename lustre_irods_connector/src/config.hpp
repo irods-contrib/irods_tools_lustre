@@ -30,6 +30,12 @@ typedef struct lustre_irods_connector_cfg {
     unsigned int maximum_records_per_update_to_irods;
     unsigned int maximum_records_to_receive_from_lustre_changelog;
     unsigned int message_receive_timeout_msec;
+
+    // optional parameters for using storage tiering time violation
+    bool set_metadata_for_storage_tiering_time_violation;
+    std::string metadata_key_for_storage_tiering_time_violation;
+
+
     std::map<int, irods_connection_cfg_t> irods_connection_list;
 
     // map the lustre path to irods path

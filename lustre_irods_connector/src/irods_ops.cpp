@@ -55,10 +55,8 @@ int lustre_irods_connection::send_change_map_to_irods(irodsLustreApiInp_t *inp) 
     init_api_table( api_tbl, pk_tbl );
 
     void *tmp_out = nullptr;
-    LOG(LOG_INFO,"Before procApiRequest\n");
     int status = procApiRequest( irods_conn, 15001, inp, NULL,
                              &tmp_out, NULL );
-    LOG(LOG_INFO,"After procApiRequest.  status=%i\n", status);
 
     int returnVal;
 
@@ -67,7 +65,6 @@ int lustre_irods_connection::send_change_map_to_irods(irodsLustreApiInp_t *inp) 
         returnVal = lustre_irods::IRODS_ERROR;
     } else {
         irodsLustreApiOut_t* out = static_cast<irodsLustreApiOut_t*>( tmp_out );
-        LOG(LOG_INFO,"status is %i\n", out->status);
         returnVal = out->status;
     }
 

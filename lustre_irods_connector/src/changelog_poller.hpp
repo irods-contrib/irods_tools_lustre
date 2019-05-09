@@ -15,7 +15,7 @@ int poll_change_log_and_process(const std::string& mdtname,
         const std::vector<std::pair<std::string, 
         std::string> >& register_map,
         change_map_t& change_map, 
-        cl_ctx_ptr *ctx, 
+        cl_ctx_ptr*& ctx, 
         int max_records_to_retrieve, 
         unsigned long long& last_cr_index); 
 

@@ -38,6 +38,12 @@ std::string object_type_to_str(ChangeDescriptor::ObjectTypeEnum type);
 //static boost::shared_mutex change_table_mutex;
 static std::mutex change_table_mutex;
 
+size_t get_change_table_size(change_map_t& change_map) {
+    std::lock_guard<std::mutex> lock(change_table_mutex);
+    return change_map.size();
+}
+    
+
 int lustre_write_fidstr_to_root_dir(const std::string& lustre_root_path, const std::string& fidstr, change_map_t& change_map) {
 
     std::lock_guard<std::mutex> lock(change_table_mutex);
@@ -541,6 +547,8 @@ int write_change_table_to_capnproto_buf(const lustre_irods_connector_cfg_t *conf
     changeMap.setUpdateStatus("PENDING");
     changeMap.setIrodsApiUpdateType(config_struct_ptr->irods_api_update_type);
     changeMap.setMaximumRecordsPerSqlCommand(config_struct_ptr->maximum_records_per_sql_command);
+    changeMap.setSetMetadataForStorageTieringTimeViolation(config_struct_ptr->set_metadata_for_storage_tiering_time_violation);
+    changeMap.setMetadataKeyForStorageTieringTimeViolation(config_struct_ptr->metadata_key_for_storage_tiering_time_violation);
 
     // build the register map
     capnp::List<RegisterMapEntry>::Builder reg_map = changeMap.initRegisterMap(config_struct_ptr->register_map.size());

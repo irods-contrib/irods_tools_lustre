@@ -92,46 +92,11 @@ int get_fidstr_from_record(changelog_rec_ptr rec, std::string& fidstr) {
 
 }
 
-
-// Determines if the object (file, dir) from the changelog record still exists in Lustre.
-bool object_exists_in_lustre(const std::string& root_path, changelog_rec_ptr rec) {
-
-    if (nullptr == rec) {
-        LOG(LOG_ERR, "Null rec sent to %s - %d\n", __FUNCTION__, __LINE__);
-        return lustre_irods::INVALID_OPERAND_ERROR;
-    }
-
-    std::string fidstr;
-    char lustre_full_path[MAX_NAME_LEN] = "";
-    long long recno = -1;
-    int linkno = 0;
-
-    int rc;
-
-    // TODO is there a better way than llapi_fid2path to see if file exists
-    get_fidstr_from_record(rec, fidstr);
-
-    rc = llapi_fid2path_wrapper(root_path.c_str(), fidstr.c_str(), lustre_full_path, MAX_NAME_LEN, &recno, &linkno);
-
-    if (rc < 0) {
-        return false;
-    }
-
-    return true;
-}
-
-
 int get_full_path_from_record(const std::string& root_path, changelog_rec_ptr rec, std::string& lustre_full_path) {
 
     if (nullptr == rec) {
         LOG(LOG_ERR, "Null rec sent to %s - %d\n", __FUNCTION__, __LINE__);
         return lustre_irods::INVALID_OPERAND_ERROR;
-    }
-
-    // this is not necessarily an error.  on a rename or delete the object will
-    // no longer exist in lustre
-    if (!object_exists_in_lustre(root_path, rec)) {
-        return lustre_irods::LUSTRE_OBJECT_DNE_ERROR;        
     }
 
     std::string fidstr;
@@ -151,8 +116,7 @@ int get_full_path_from_record(const std::string& root_path, changelog_rec_ptr re
     rc = llapi_fid2path_wrapper(root_path.c_str(), fidstr.c_str(), lustre_full_path_cstr, MAX_NAME_LEN, &recno, &linkno);
 
     if (rc < 0) {
-        LOG(LOG_ERR, "llapi_fid2path in get_full_path_from_record() returned an error.");
-        return lustre_irods::LLAPI_FID2PATH_ERROR;
+        return lustre_irods::LUSTRE_OBJECT_DNE_ERROR;        
     }
 
     // add root path to lustre_full_path
@@ -163,7 +127,6 @@ int get_full_path_from_record(const std::string& root_path, changelog_rec_ptr re
 
 int not_implemented(unsigned long long cr_index, const std::string& lustre_root_path, const std::string& fidstr, const std::string& parent_fidstr, 
         const std::string& object_path, const std::string& lustre_path, change_map_t& change_map) {
-    LOG(LOG_DBG, "OPERATION NOT IMPLEMENTED\n");
     return lustre_irods::SUCCESS;
 }
 
@@ -281,7 +244,7 @@ int handle_record(const std::string& lustre_root_path, const std::vector<std::pa
 
         return lustre_rename(cr_index, lustre_root_path, fidstr, parent_fidstr, object_name, lustre_full_path, old_lustre_path, change_map);
     } else {
-        LOG(LOG_INFO, "calling lustre_operators[](%llu, %s, %s, %s, %s, %s, change_map)\n", cr_index, 
+        LOG(LOG_DBG, "calling lustre_operators[](%llu, %s, %s, %s, %s, %s, change_map)\n", cr_index, 
                 lustre_root_path.c_str(), fidstr.c_str(), parent_fidstr.c_str(), object_name.c_str(), lustre_full_path.c_str());
         return lustre_operators[get_cr_type_from_changelog_rec(rec)](cr_index, lustre_root_path, fidstr, parent_fidstr, object_name, lustre_full_path, change_map);
     }
@@ -305,10 +268,8 @@ int finish_changelog(cl_ctx_ptr *ctx) {
 //   ctx - the lustre changelog context 
 int poll_change_log_and_process(const std::string& mdtname, const std::string& changelog_reader, const std::string& lustre_root_path, 
         const std::vector<std::pair<std::string, std::string> >& register_map,
-        change_map_t& change_map, cl_ctx_ptr *ctx, 
+        change_map_t& change_map, cl_ctx_ptr*& ctx, 
         int max_records_to_retrieve, unsigned long long& last_cr_index) {
-
-    LOG(LOG_DBG, "poll_change_log_and_process: max_records_to_retrieve = %d\n", max_records_to_retrieve);
 
     int                    rc;
     //char                   clid[64] = {0};
@@ -320,18 +281,20 @@ int poll_change_log_and_process(const std::string& mdtname, const std::string& c
 
     while (cntr < max_records_to_retrieve) {
 
+        LOG(LOG_DBG, " change_table size is %zu\n", get_change_table_size(change_map));
+
         if (nullptr == *ctx) {
             rc = start_changelog(mdtname, ctx, last_cr_index+1);
-        }
-        if (rc < 0) {
-            LOG(LOG_ERR, "changelog_start: %s\n", zmq_strerror(-rc));
-            return lustre_irods::CHANGELOG_START_ERROR;
-            break;
-        }
 
+            if (rc < 0) {
+                LOG(LOG_ERR, "changelog_start: %s\n", zmq_strerror(-rc));
+                return lustre_irods::CHANGELOG_START_ERROR;
+            }
+        }
 
         rc = changelog_wrapper_recv(*ctx, &rec);
-        if (1 == rc ||-EAGAIN == rc || -EPROTO == rc) {
+
+        if (1 == rc || -EAGAIN == rc || -EPROTO == rc) {
              finish_changelog(ctx);
              *ctx = nullptr;
              break;
@@ -399,7 +362,7 @@ int poll_change_log_and_process(const std::string& mdtname, const std::string& c
 
         rc = handle_record(lustre_root_path, register_map, rec, change_map);
         if (rc == lustre_irods::SKIP_RECORD) {
-            // if the record is skipped, don't count this against max records t
+            // if the record is skipped, don't count this against max records
             cntr--;
             skipped_records++;
         } else if (rc < 0) {
@@ -427,7 +390,7 @@ int poll_change_log_and_process(const std::string& mdtname, const std::string& c
                 LOG(LOG_ERR, "changelog_clear: %s\n", zmq_strerror(-rc));
             }
         }
- 
+
     }
 
     rc = changelog_wrapper_clear(mdtname.c_str(), changelog_reader.c_str(), last_cr_index);

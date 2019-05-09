@@ -87,6 +87,7 @@ int lustre_trunc(unsigned long long cr_index, const std::string& lustre_root_pat
 
 int remove_fidstr_from_table(const std::string& fidstr, change_map_t& change_map);
 
+size_t get_change_table_size(change_map_t& change_map);
 
 void lustre_print_change_table(const change_map_t& change_map);
 bool entries_ready_to_process(change_map_t& change_map);

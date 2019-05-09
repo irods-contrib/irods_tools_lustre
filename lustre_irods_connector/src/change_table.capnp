@@ -42,6 +42,8 @@ struct ChangeMap {
   irodsApiUpdateType @4 :Text;
   resourceName @5 :Text;
   maximumRecordsPerSqlCommand @6 :Int64;
+  setMetadataForStorageTieringTimeViolation @7 :Bool;
+  metadataKeyForStorageTieringTimeViolation @8 :Text;
 }
 
 

@@ -388,7 +388,8 @@ void handle_create(const std::vector<std::pair<std::string, std::string> >& regi
 void handle_batch_create(const std::vector<std::pair<std::string, std::string> >& register_map, const int64_t& resource_id,
         const std::string& resource_name, const std::vector<std::string>& fidstr_list, const std::vector<std::string>& lustre_path_list,
         const std::vector<std::string>& object_name_list, const std::vector<std::string>& parent_fidstr_list,
-        const std::vector<int64_t>& file_size_list, const int64_t& maximum_records_per_sql_command, rsComm_t* _comm, icatSessionStruct *icss, const rodsLong_t& user_id) {
+        const std::vector<int64_t>& file_size_list, const int64_t& maximum_records_per_sql_command, rsComm_t* _comm, icatSessionStruct *icss, 
+        const rodsLong_t& user_id, bool set_metadata_for_storage_tiering_time_violation, const std::string& metadata_key_for_storage_tiering_time_violation) {
 
     size_t insert_count = fidstr_list.size();
     int status;
@@ -407,7 +408,12 @@ void handle_batch_create(const std::vector<std::pair<std::string, std::string> >
     std::vector<rodsLong_t> data_obj_sequences;
     std::vector<rodsLong_t> metadata_sequences;
     cmlGetNSeqVals(icss, insert_count, data_obj_sequences);
-    cmlGetNSeqVals(icss, insert_count, metadata_sequences);
+
+    if (set_metadata_for_storage_tiering_time_violation) {
+        cmlGetNSeqVals(icss, insert_count+1, metadata_sequences);
+    } else {
+        cmlGetNSeqVals(icss, insert_count, metadata_sequences);
+    }
 
     // insert into R_DATA_MAIN
  
@@ -492,6 +498,35 @@ void handle_batch_create(const std::vector<std::pair<std::string, std::string> >
     } 
 #endif
 
+    // if we are setting the access time metadata for storage tiering
+    if (set_metadata_for_storage_tiering_time_violation) {
+        // Insert access time into R_META_MAIN
+
+        time_t now = time(NULL);
+	    
+        insert_sql = "insert into R_META_MAIN (meta_id, meta_attr_name, meta_attr_value) values (" +
+                     std::to_string(metadata_sequences[insert_count])  + ", '" + 
+                     metadata_key_for_storage_tiering_time_violation + "', '" +
+                     std::to_string(now) + "')";
+
+	cllBindVarCount = 0;
+	status = cmlExecuteNoAnswerSql(insert_sql.c_str(), icss);
+	if (status != 0) {
+	    rodsLog(LOG_ERROR, "Error inserting metadata into R_META_MAIN for %s.  Error is %i.  SQL is %s.", 
+                    metadata_key_for_storage_tiering_time_violation.c_str(), status, insert_sql.c_str());
+	    return;
+	}
+
+#if !defined(COCKROACHDB_ICAT)
+        status =  cmlExecuteNoAnswerSql("commit", icss);
+        if (status != 0) {
+   	    rodsLog(LOG_ERROR, "Error committing insert into R_META_MAIN.  Error is %i", status);
+	    return;
+	} 
+#endif
+
+    } // set_metadata_for_storage_tiering_time_violation
+
 
     // Insert into R_OBJT_METMAP
 
@@ -519,6 +554,38 @@ void handle_batch_create(const std::vector<std::pair<std::string, std::string> >
         return;
     } 
 #endif
+
+    
+    // if we are setting the access time metadata for storage tiering
+    if (set_metadata_for_storage_tiering_time_violation) {
+
+        insert_sql = "insert into R_OBJT_METAMAP (object_id, meta_id) values ";
+
+        for (size_t i = 0; i < insert_count; ++i) {
+            insert_sql += "(" + std::to_string(data_obj_sequences[i]) + ", " + std::to_string(metadata_sequences[insert_count]) + ")";
+
+            if (i < insert_count - 1) {
+                insert_sql += ", ";
+            }
+        }
+ 
+        cllBindVarCount = 0;
+        status = cmlExecuteNoAnswerSql(insert_sql.c_str(), icss);
+        if (status != 0) {
+            rodsLog(LOG_ERROR, "Error performing batch insert into R_OBJT_METAMAP.  Error is %i.  SQL is %s.", status, insert_sql.c_str());
+            return;
+        }
+
+#if !defined(COCKROACHDB_ICAT)
+        status =  cmlExecuteNoAnswerSql("commit", icss);
+        if (status != 0) {
+            rodsLog(LOG_ERROR, "Error committing insert into R_OBJT_METAMAP for storage tiering time metadata.  Error is %i", status);
+            return;
+        } 
+#endif
+
+    } // set_metadata_for_storage_tiering_time_violation
+
 
     // insert user ownership
     //insert into R_OBJT_ACCESS (object_id, user_id, access_type_id) values (?, ?, 1200) 
