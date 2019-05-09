@@ -109,6 +109,8 @@ This will create an executable called lustre_irods_connector and a configuration
     - direct - iRODS plugin uses direct DB access for all changes
     - policy - iRODS plugin uses the iRODS API's for all changes
 - register_map - an array of lustre_path to irods_path mappings
+    - The lustre_root_path needs to be in the register_map and must be the last entry in this map.
+    - The entries must be ordered from more specific to less specific.  For example, "/mnt/dir1" should appear in the map before "/mnt"
 - thread_{n}_connection_paramters - irods_host and irods_port that thread n connects to.  If this is not defined the local iRODS environment (iinit) is used.
 
 9.  Add the irods user on the MDS server with the same user ID and group ID as exists on the iRODS server.  Here is an example entry in /etc/passwd.
@@ -122,8 +124,8 @@ irods:x:498:498::/:/sbin/nologin
 1.  Update the changelog mask in Lustre so that we get all of the required events.  Perform the following for each MDT on the MDS server(s).
 
 ```
-sudo lctl set_param mdd.lustre01-MDT0000.changelog_mask="MARK CREAT MKDIR HLINK SLINK MKNOD UNLNK RMDIR RENME RNMTO OPEN LYOUT TRUNC SATTR XATTR HSM MTIME CTIME CLOSE"
-sudo lctl set_param mdd.lustre01-MDT0001.changelog_mask="MARK CREAT MKDIR HLINK SLINK MKNOD UNLNK RMDIR RENME RNMTO OPEN LYOUT TRUNC SATTR XATTR HSM MTIME CTIME CLOSE"
+sudo lctl set_param mdd.lustre01-MDT0000.changelog_mask="CREAT CLOSE RENME UNLNK MKDIR RMDIR"
+sudo lctl set_param mdd.lustre01-MDT0001.changelog_mask="CREAT CLOSE RENME UNLNK MKDIR RMDIR"
 ```
 
 2.  On the MDS server(s), register a changelog listener for each MDT.
