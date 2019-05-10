@@ -210,8 +210,6 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
     bool set_metadata_for_storage_tiering_time_violation = changeMap.getSetMetadataForStorageTieringTimeViolation();
     std::string metadata_key_for_storage_tiering_time_violation = changeMap.getMetadataKeyForStorageTieringTimeViolation();
 
-    rodsLog(LOG_NOTICE, "metadata_key_for_storage_tiering_time_violation=%s", metadata_key_for_storage_tiering_time_violation.c_str());
-
     // for batched file inserts 
     std::vector<std::string> fidstr_list_for_create;
     std::vector<std::string> lustre_path_list;
@@ -284,7 +282,7 @@ int rs_handle_lustre_records( rsComm_t* _comm, irodsLustreApiInp_t* _inp, irodsL
     if (direct_db_modification_requested) {
 
         if (fidstr_list_for_unlink.size() > 0) {
-            handle_batch_unlink(fidstr_list_for_unlink, maximum_records_per_sql_command, _comm, icss);
+            handle_batch_unlink(fidstr_list_for_unlink, resource_id, maximum_records_per_sql_command, _comm, icss);
         }
  
         if (fidstr_list_for_create.size() > 0) {

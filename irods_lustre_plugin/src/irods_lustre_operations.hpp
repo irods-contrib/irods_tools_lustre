@@ -79,7 +79,8 @@ void handle_unlink(const std::vector<std::pair<std::string, std::string> >& regi
         const ChangeDescriptor::ObjectTypeEnum& object_type, const std::string& parent_fidstr, const int64_t& file_size,
         rsComm_t* _comm, icatSessionStruct *icss, const rodsLong_t& user_id, bool direct_db_access);
 
-void handle_batch_unlink(const std::vector<std::string>& fidstr_list, const int64_t& maximum_records_per_sql_command, rsComm_t* _comm, icatSessionStruct *icss); 
+void handle_batch_unlink(const std::vector<std::string>& fidstr_list, const int64_t& resource_id, 
+        const int64_t& maximum_records_per_sql_command, rsComm_t* _comm, icatSessionStruct *icss); 
 
 void handle_rmdir(const std::vector<std::pair<std::string, std::string> >& register_map, const int64_t& resource_id, 
         const std::string& resource_name, const std::string& fidstr, const std::string& lustre_path, const std::string& object_name, 

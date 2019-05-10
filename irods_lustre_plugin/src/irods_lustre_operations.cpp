@@ -503,26 +503,26 @@ void handle_batch_create(const std::vector<std::pair<std::string, std::string> >
         // Insert access time into R_META_MAIN
 
         time_t now = time(NULL);
-	    
+    
         insert_sql = "insert into R_META_MAIN (meta_id, meta_attr_name, meta_attr_value) values (" +
                      std::to_string(metadata_sequences[insert_count])  + ", '" + 
                      metadata_key_for_storage_tiering_time_violation + "', '" +
                      std::to_string(now) + "')";
 
-	cllBindVarCount = 0;
-	status = cmlExecuteNoAnswerSql(insert_sql.c_str(), icss);
-	if (status != 0) {
-	    rodsLog(LOG_ERROR, "Error inserting metadata into R_META_MAIN for %s.  Error is %i.  SQL is %s.", 
+    cllBindVarCount = 0;
+    status = cmlExecuteNoAnswerSql(insert_sql.c_str(), icss);
+    if (status != 0) {
+        rodsLog(LOG_ERROR, "Error inserting metadata into R_META_MAIN for %s.  Error is %i.  SQL is %s.", 
                     metadata_key_for_storage_tiering_time_violation.c_str(), status, insert_sql.c_str());
-	    return;
-	}
+        return;
+    }
 
 #if !defined(COCKROACHDB_ICAT)
         status =  cmlExecuteNoAnswerSql("commit", icss);
         if (status != 0) {
-   	    rodsLog(LOG_ERROR, "Error committing insert into R_META_MAIN.  Error is %i", status);
-	    return;
-	} 
+           rodsLog(LOG_ERROR, "Error committing insert into R_META_MAIN.  Error is %i", status);
+        return;
+    } 
 #endif
 
     } // set_metadata_for_storage_tiering_time_violation
@@ -1098,127 +1098,174 @@ void handle_unlink(const std::vector<std::pair<std::string, std::string> >& regi
 
 #if !defined(COCKROACHDB_ICAT)
 
-    void handle_batch_unlink(const std::vector<std::string>& fidstr_list, const int64_t& maximum_records_per_sql_command, rsComm_t* _comm, icatSessionStruct *icss) {
-
+    void handle_batch_unlink(const std::vector<std::string>& fidstr_list, const int64_t& resource_id, 
+            const int64_t& maximum_records_per_sql_command, rsComm_t* _comm, icatSessionStruct *icss) {
+    
         //size_t transactions_per_update = 1;
         int64_t delete_count = fidstr_list.size();
         int status;
-
+    
         // delete from R_DATA_MAIN
-
+    
         std::string query_objects_sql(220 + maximum_records_per_sql_command*20, 0); 
         std::string delete_sql(50 + maximum_records_per_sql_command*20, 0);
-
+    
         // Do deletion in batches of size maximum_records_per_sql_command.  
-        
+            
         // batch_begin is start of current batch
         int64_t batch_begin = 0;
         while (batch_begin < delete_count) {
-
-        // Build up a list of object id's to be deleted on this pass
-        // Note:  Doing this in code rather than in a subquery seems to free up DB processing and
-        //   also resolves deadlock potential.
-
-        std::vector<std::string> object_id_list;
-
-        std::string query_objects_sql = "select R_OBJT_METAMAP.object_id from R_OBJT_METAMAP inner join R_META_MAIN on R_META_MAIN.meta_id = R_OBJT_METAMAP.meta_id "
-                        "where R_META_MAIN.meta_attr_name = 'lustre_identifier' and R_META_MAIN.meta_attr_value in (";
-         
-        for (int64_t i = 0; batch_begin + i < delete_count && i < maximum_records_per_sql_command; ++i) {
-            query_objects_sql += "'" + fidstr_list[batch_begin + i] + "'";
-            if (batch_begin + i == delete_count - 1 || maximum_records_per_sql_command - 1 == i) {
-            query_objects_sql += ")";
-            } else {
-            query_objects_sql += ", ";
+    
+            // Build up a list of object id's to be deleted on this pass
+            // Note:  Doing this in steps rather than in subqueries free up DB processing and
+            //   also resolves deadlock potential.
+    
+            std::vector<std::string> object_id_list;
+    
+            std::string query_objects_sql = "select R_OBJT_METAMAP.object_id from R_OBJT_METAMAP inner join R_META_MAIN on R_META_MAIN.meta_id = R_OBJT_METAMAP.meta_id "
+                            "where R_META_MAIN.meta_attr_name = 'lustre_identifier' and R_META_MAIN.meta_attr_value in (";
+             
+            for (int64_t i = 0; batch_begin + i < delete_count && i < maximum_records_per_sql_command; ++i) {
+                query_objects_sql += "'" + fidstr_list[batch_begin + i] + "'";
+                if (batch_begin + i == delete_count - 1 || maximum_records_per_sql_command - 1 == i) {
+                query_objects_sql += ")";
+                } else {
+                query_objects_sql += ", ";
+                }
             }
-        }
-
-        std::vector<std::string> emptyBindVars;
-        int stmt_num;
-        status = cmlGetFirstRowFromSqlBV(query_objects_sql.c_str(), emptyBindVars, &stmt_num, icss);
-         if ( status < 0 ) {
-            rodsLog(LOG_ERROR, "retrieving object for unlink - query %s, failure %d", query_objects_sql.c_str(), status);
-            cllFreeStatement(icss, stmt_num);
-            return;
-        }
-
-        size_t nCols = icss->stmtPtr[stmt_num]->numOfCols;
-
-        if (nCols != 1) {
-            rodsLog(LOG_ERROR, "cmlGetFirstRowFromSqlBV for query %s, unexpected number of columns %d", query_objects_sql.c_str(), nCols);
-            cllFreeStatement(icss, stmt_num);
-            return;
-        }
-
-        object_id_list.push_back(icss->stmtPtr[stmt_num]->resultValue[0]);
-
-        while (cmlGetNextRowFromStatement( stmt_num, icss ) == 0) {
-
+    
+            std::vector<std::string> emptyBindVars;
+            int stmt_num;
+            status = cmlGetFirstRowFromSqlBV(query_objects_sql.c_str(), emptyBindVars, &stmt_num, icss);
+             if ( status < 0 ) {
+                rodsLog(LOG_ERROR, "retrieving object for unlink - query %s, failure %d", query_objects_sql.c_str(), status);
+                cllFreeStatement(icss, stmt_num);
+                return;
+            }
+    
+            size_t nCols = icss->stmtPtr[stmt_num]->numOfCols;
+    
+            if (nCols != 1) {
+                rodsLog(LOG_ERROR, "cmlGetFirstRowFromSqlBV for query %s, unexpected number of columns %d", query_objects_sql.c_str(), nCols);
+                cllFreeStatement(icss, stmt_num);
+                return;
+            }
+    
             object_id_list.push_back(icss->stmtPtr[stmt_num]->resultValue[0]);
-        }
-
-        cllFreeStatement(icss, stmt_num);
-
-
-        // Now do the delete
+    
+            while (cmlGetNextRowFromStatement( stmt_num, icss ) == 0) {
+    
+                object_id_list.push_back(icss->stmtPtr[stmt_num]->resultValue[0]);
+            }
+    
+            cllFreeStatement(icss, stmt_num);
+    
+    
+            // Now do the delete for objects on resc_id
+            
+            delete_sql = "delete from R_DATA_MAIN where data_id in (";
+            for (size_t i = 0; i < object_id_list.size(); ++i) {
+                delete_sql += object_id_list[i];
+                if (i == object_id_list.size() - 1) {
+                    delete_sql += ")";
+                } else {
+                    delete_sql += ", ";
+                }
+            }
+            delete_sql += " and resc_id = " + std::to_string(resource_id);
+    
+            rodsLog(LOG_DEBUG, "delete sql is %s", delete_sql.c_str());
+    
+            cllBindVarCount = 0;
+            status = cmlExecuteNoAnswerSql(delete_sql.c_str(), icss);
+            if (status != 0) {
+                rodsLog(LOG_ERROR, "Error performing batch delete from R_DATA_MAIN.  Error is %i.  SQL is %s.", status, delete_sql.c_str());
+                return;
+            }
+    
+            status =  cmlExecuteNoAnswerSql("commit", icss);
+            if (status != 0) {
+                rodsLog(LOG_ERROR, "Error committing batched deletion from R_DATA_MAIN.  Error is %i", status);
+                return;
+            }
+    
+            // get a list of these deleted replicas that no longer have replicas so we can delete their metadata from the map
+            
+            std::vector<std::string> object_id_with_no_replicas_list;
+    
+            query_objects_sql = "select R_OBJT_METAMAP.object_id from R_OBJT_METAMAP left outer join R_DATA_MAIN on R_OBJT_METAMAP.object_id = R_DATA_MAIN.data_id "
+                            "where R_OBJT_METAMAP.object_id in (";
+             
+            for (size_t i = 0; i < object_id_list.size(); ++i) {
+                query_objects_sql += object_id_list[i];
+                if (i == object_id_list.size() - 1) {
+                    query_objects_sql += ")";
+                } else {
+                    query_objects_sql += ", ";
+                }
+            }
+            query_objects_sql +=  " and R_DATA_MAIN.data_id is NULL";
+            
+            rodsLog(LOG_DEBUG, "sql for querying objects that no longer exist is  %s", query_objects_sql.c_str());
+    
+            status = cmlGetFirstRowFromSqlBV(query_objects_sql.c_str(), emptyBindVars, &stmt_num, icss);
+             if ( status < 0 ) {
+                rodsLog(LOG_ERROR, "retrieving objects to remove metadata - query %s, failure %d", query_objects_sql.c_str(), status);
+                cllFreeStatement(icss, stmt_num);
+                return;
+            }
+    
+            nCols = icss->stmtPtr[stmt_num]->numOfCols;
+    
+            if (nCols != 1) {
+                rodsLog(LOG_ERROR, "cmlGetFirstRowFromSqlBV for query %s, unexpected number of columns %d", query_objects_sql.c_str(), nCols);
+                cllFreeStatement(icss, stmt_num);
+                return;
+            }
+    
+            object_id_with_no_replicas_list.push_back(icss->stmtPtr[stmt_num]->resultValue[0]);
+    
+            while (cmlGetNextRowFromStatement( stmt_num, icss ) == 0) {
+                object_id_with_no_replicas_list.push_back(icss->stmtPtr[stmt_num]->resultValue[0]);
+            }
+    
+            cllFreeStatement(icss, stmt_num);
+    
+    
+            // delete from R_OBJT_METAMAP for objects that have no replicas 
+    
+            if (object_id_with_no_replicas_list.size() > 0) {
+    
+                delete_sql = "delete from R_OBJT_METAMAP where object_id in (";
+                for (size_t i = 0; i < object_id_with_no_replicas_list.size(); ++i) {
+                    delete_sql += object_id_with_no_replicas_list[i];
+                    if (i == object_id_with_no_replicas_list.size() - 1) {
+                        delete_sql += ")";
+                    } else {
+                        delete_sql += ", ";
+                    }
+                }
         
-        delete_sql = "delete from R_DATA_MAIN where data_id in (";
-        for (size_t i = 0; i < object_id_list.size(); ++i) {
-            delete_sql += object_id_list[i];
-            if (i == object_id_list.size() - 1) {
-                delete_sql += ")";
-            } else {
-                delete_sql += ", ";
+                rodsLog(LOG_DEBUG, "delete sql is %s", delete_sql.c_str());
+        
+                cllBindVarCount = 0;
+                status = cmlExecuteNoAnswerSql(delete_sql.c_str(), icss);
+                if (status != 0) {
+                    rodsLog(LOG_ERROR, "Error performing batch delete from R_DATA_MAIN.  Error is %i.  SQL is %s.", status, delete_sql.c_str());
+                    return;
+                }
+        
+                status =  cmlExecuteNoAnswerSql("commit", icss);
+                if (status != 0) {
+                    rodsLog(LOG_ERROR, "Error committing batched deletion of data objects.  Error is %i", status);
+                    return;
+                }
             }
+    
+            batch_begin += maximum_records_per_sql_command;
+    
         }
-
-        rodsLog(LOG_DEBUG, "delete sql is %s", delete_sql.c_str());
-
-        cllBindVarCount = 0;
-        status = cmlExecuteNoAnswerSql(delete_sql.c_str(), icss);
-        if (status != 0) {
-            rodsLog(LOG_ERROR, "Error performing batch delete from R_DATA_MAIN.  Error is %i.  SQL is %s.", status, delete_sql.c_str());
-            return;
-        }
-
-        status =  cmlExecuteNoAnswerSql("commit", icss);
-        if (status != 0) {
-            rodsLog(LOG_ERROR, "Error committing batched deletion from R_DATA_MAIN.  Error is %i", status);
-            return;
-        }
-
-        // delete from R_OBJT_METAMAP
-
-        delete_sql = "delete from R_OBJT_METAMAP where object_id in (";
-        for (size_t i = 0; i < object_id_list.size(); ++i) {
-            delete_sql += object_id_list[i];
-            if (i == object_id_list.size() - 1) {
-            delete_sql += ")";
-            } else {
-            delete_sql += ", ";
-            }
-        }
-
-        rodsLog(LOG_DEBUG, "delete sql is %s", delete_sql.c_str());
-
-        cllBindVarCount = 0;
-        status = cmlExecuteNoAnswerSql(delete_sql.c_str(), icss);
-        if (status != 0) {
-            rodsLog(LOG_ERROR, "Error performing batch delete from R_DATA_MAIN.  Error is %i.  SQL is %s.", status, delete_sql.c_str());
-            return;
-        }
-
-        status =  cmlExecuteNoAnswerSql("commit", icss);
-        if (status != 0) {
-            rodsLog(LOG_ERROR, "Error committing batched deletion of data objects.  Error is %i", status);
-            return;
-        }
-
-
-        batch_begin += maximum_records_per_sql_command;
-
-        }
-
+    
     }
 
 #endif // !defined(COCKROACHDB_ICAT)
