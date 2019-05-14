@@ -638,10 +638,12 @@ void handle_mkdir(const std::vector<std::pair<std::string, std::string> >& regis
         memset(&coll_info, 0, sizeof(coll_info));
         strncpy(coll_info.collName, irods_path.c_str(), MAX_NAME_LEN);
 
-        // register object
+        // register collection  
         status = chlRegColl(_comm, &coll_info);
         rodsLog(LOG_NOTICE, "Return value from chlRegColl = %i", status);
-        if (status < 0) {
+
+        // if collection already exists (-809000), do not consider it an error
+        if (0 > status && -809000 != status) {
             rodsLog(LOG_ERROR, "Error registering collection %s.  Error is %i", fidstr.c_str(), status);
             return;
         } 
@@ -665,7 +667,9 @@ void handle_mkdir(const std::vector<std::pair<std::string, std::string> >& regis
         memset(&coll_input, 0, sizeof(coll_input));
         strncpy(coll_input.collName, irods_path.c_str(), MAX_NAME_LEN);
         status = rsCollCreate(_comm, &coll_input); 
-        if (status < 0) {
+
+        // if collection already exists (-809000), do not consider it an error
+        if (0 > status && -809000 != status) {
             rodsLog(LOG_ERROR, "Error registering collection %s.  Error is %i", fidstr.c_str(), status);
             return;
         } 
@@ -1137,25 +1141,28 @@ void handle_unlink(const std::vector<std::pair<std::string, std::string> >& regi
             std::vector<std::string> emptyBindVars;
             int stmt_num;
             status = cmlGetFirstRowFromSqlBV(query_objects_sql.c_str(), emptyBindVars, &stmt_num, icss);
-             if ( status < 0 ) {
-                rodsLog(LOG_ERROR, "retrieving object for unlink - query %s, failure %d", query_objects_sql.c_str(), status);
-                cllFreeStatement(icss, stmt_num);
-                return;
-            }
+
+            if ( CAT_NO_ROWS_FOUND != status ) {
+                if ( status < 0 ) {
+                    rodsLog(LOG_ERROR, "retrieving object for unlink - query %s, failure %d", query_objects_sql.c_str(), status);
+                    cllFreeStatement(icss, stmt_num);
+                    return;
+                }
     
-            size_t nCols = icss->stmtPtr[stmt_num]->numOfCols;
+                size_t nCols = icss->stmtPtr[stmt_num]->numOfCols;
     
-            if (nCols != 1) {
-                rodsLog(LOG_ERROR, "cmlGetFirstRowFromSqlBV for query %s, unexpected number of columns %d", query_objects_sql.c_str(), nCols);
-                cllFreeStatement(icss, stmt_num);
-                return;
-            }
-    
-            object_id_list.push_back(icss->stmtPtr[stmt_num]->resultValue[0]);
-    
-            while (cmlGetNextRowFromStatement( stmt_num, icss ) == 0) {
+                if (nCols != 1) {
+                    rodsLog(LOG_ERROR, "cmlGetFirstRowFromSqlBV for query %s, unexpected number of columns %d", query_objects_sql.c_str(), nCols);
+                    cllFreeStatement(icss, stmt_num);
+                    return;
+                }
     
                 object_id_list.push_back(icss->stmtPtr[stmt_num]->resultValue[0]);
+    
+                while (cmlGetNextRowFromStatement( stmt_num, icss ) == 0) {
+    
+                    object_id_list.push_back(icss->stmtPtr[stmt_num]->resultValue[0]);
+                }
             }
     
             cllFreeStatement(icss, stmt_num);
@@ -1209,24 +1216,28 @@ void handle_unlink(const std::vector<std::pair<std::string, std::string> >& regi
             rodsLog(LOG_DEBUG, "sql for querying objects that no longer exist is  %s", query_objects_sql.c_str());
     
             status = cmlGetFirstRowFromSqlBV(query_objects_sql.c_str(), emptyBindVars, &stmt_num, icss);
-             if ( status < 0 ) {
-                rodsLog(LOG_ERROR, "retrieving objects to remove metadata - query %s, failure %d", query_objects_sql.c_str(), status);
-                cllFreeStatement(icss, stmt_num);
-                return;
-            }
-    
-            nCols = icss->stmtPtr[stmt_num]->numOfCols;
-    
-            if (nCols != 1) {
-                rodsLog(LOG_ERROR, "cmlGetFirstRowFromSqlBV for query %s, unexpected number of columns %d", query_objects_sql.c_str(), nCols);
-                cllFreeStatement(icss, stmt_num);
-                return;
-            }
-    
-            object_id_with_no_replicas_list.push_back(icss->stmtPtr[stmt_num]->resultValue[0]);
-    
-            while (cmlGetNextRowFromStatement( stmt_num, icss ) == 0) {
+
+            if ( CAT_NO_ROWS_FOUND != status ) {
+
+                if ( 0 > status ) {
+                    rodsLog(LOG_ERROR, "retrieving objects to remove metadata - query %s, failure %d", query_objects_sql.c_str(), status);
+                    cllFreeStatement(icss, stmt_num);
+                    return;
+                }
+        
+                size_t nCols = icss->stmtPtr[stmt_num]->numOfCols;
+        
+                if (nCols != 1) {
+                    rodsLog(LOG_ERROR, "cmlGetFirstRowFromSqlBV for query %s, unexpected number of columns %d", query_objects_sql.c_str(), nCols);
+                    cllFreeStatement(icss, stmt_num);
+                    return;
+                }
+        
                 object_id_with_no_replicas_list.push_back(icss->stmtPtr[stmt_num]->resultValue[0]);
+        
+                while (cmlGetNextRowFromStatement( stmt_num, icss ) == 0) {
+                    object_id_with_no_replicas_list.push_back(icss->stmtPtr[stmt_num]->resultValue[0]);
+                }
             }
     
             cllFreeStatement(icss, stmt_num);
@@ -1310,26 +1321,30 @@ void handle_unlink(const std::vector<std::pair<std::string, std::string> >& regi
             std::vector<std::string> emptyBindVars;
             int stmt_num;
             status = cmlGetFirstRowFromSqlBV(query_objects_sql.c_str(), emptyBindVars, &stmt_num, icss);
-             if ( status < 0 ) {
-                rodsLog(LOG_ERROR, "retrieving object for unlink - query %s, failure %d", query_objects_sql.c_str(), status);
-                cllFreeStatement(stmt_num);
-                return;
-            }
 
-            
-            size_t nCols = result_sets[stmt_num]->row_size();
+            if ( CAT_NO_ROWS_FOUND != status ) {
 
-            if (nCols != 1) {
-                rodsLog(LOG_ERROR, "cmlGetFirstRowFromSqlBV for query %s, unexpected number of columns %d", query_objects_sql.c_str(), nCols);
-                cllFreeStatement(stmt_num);
-                return;
-            }
-
-            object_id_list.push_back(result_sets[stmt_num]->get_value(0));
-
-            while (cmlGetNextRowFromStatement( stmt_num, icss ) == 0) {
-
+                if ( status < 0 ) {
+                    rodsLog(LOG_ERROR, "retrieving object for unlink - query %s, failure %d", query_objects_sql.c_str(), status);
+                    cllFreeStatement(stmt_num);
+                    return;
+                }
+    
+                
+                size_t nCols = result_sets[stmt_num]->row_size();
+    
+                if (nCols != 1) {
+                    rodsLog(LOG_ERROR, "cmlGetFirstRowFromSqlBV for query %s, unexpected number of columns %d", query_objects_sql.c_str(), nCols);
+                    cllFreeStatement(stmt_num);
+                    return;
+                }
+    
                 object_id_list.push_back(result_sets[stmt_num]->get_value(0));
+
+                while (cmlGetNextRowFromStatement( stmt_num, icss ) == 0) {
+                    object_id_list.push_back(result_sets[stmt_num]->get_value(0));
+                }
+   
             }
 
             cllFreeStatement(stmt_num);
@@ -1407,7 +1422,8 @@ void handle_rmdir(const std::vector<std::pair<std::string, std::string> >& regis
     if (direct_db_access_flag) { 
 
 
-        cllBindVars[0] = fidstr.c_str();
+        // don't delete the collection , simply remove the lustre identifier metadata
+        /*cllBindVars[0] = fidstr.c_str();
         cllBindVarCount = 1;
         status = cmlExecuteNoAnswerSql(rmdir_sql.c_str(), icss);
 
@@ -1415,7 +1431,7 @@ void handle_rmdir(const std::vector<std::pair<std::string, std::string> >& regis
             rodsLog(LOG_ERROR, "Error deleting directory %s.  Error is %i", fidstr.c_str(), status);
             cmlExecuteNoAnswerSql("rollback", icss);
             return;
-        }
+        }*/
 
         // delete the metadata on the collection 
         cllBindVars[0] = fidstr.c_str();
