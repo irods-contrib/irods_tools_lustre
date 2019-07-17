@@ -11,8 +11,10 @@ This is a connector to synchronize Lustre files with iRODS using the Lustre chan
 - The irods-dev package has been installed.
 - Sqlite3 has been installed:
    - sudo apt-get install sqlite3 sqlite3-dev
+   - sudo yum install libsqlite3x-devel
 - ZMQ has been installed:
    - sudo apt-get install libzmq-dev
+   - sudo yum install zeromq-devel
 - ODBC Dev has been installed:
    - sudo yum install unixODBC-devel
    - sudo apt-get install unixodbc unixodbc-dev
