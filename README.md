@@ -8,9 +8,14 @@ This is a connector to synchronize Lustre files with iRODS using the Lustre chan
   Note:  If the Lustre connector is to be run by a non-privileged account, mount the file system using the `-o user_fid2path`.  Example: `mount -o user_fid2path -t lustre mds1@tcp1:/lustre01 /lustreResc/lustre01`
 - The account that will run this connector has the iRODS connection configured (via iinit). 
 - The iRODS externals packages have been installed.  See https://packages.irods.org/.  
+- The irods-dev package has been installed.
+- Sqlite3 has been installed:
+   - sudo apt-get install sqlite3 sqlite3-dev
+- ZMQ has been installed:
+   - sudo apt-get install libzmq-dev
 - ODBC Dev has been installed:
-   sudo yum install unixODBC-devel
-   sudo apt-get install unixodbc unixodbc-dev
+   - sudo yum install unixODBC-devel
+   - sudo apt-get install unixodbc unixodbc-dev
 - If running on RHEL, install the package rpm-build. 
 
 # Build Instructions  

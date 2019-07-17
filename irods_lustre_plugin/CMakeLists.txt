@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.5.0 FATAL_ERROR) #CPACK_DEBIAN_<COMPONENT>_PACK
 
 project(irods-lustre-api C CXX)
 
-find_package(IRODS 4.2.5 EXACT REQUIRED)
+find_package(IRODS 4.2.6 EXACT REQUIRED)
 
 if (NOT ODBC_LIBRARY)
   find_library(ODBC_LIBRARY odbc)
@@ -141,6 +141,6 @@ endif()
 endforeach()
 
 add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/../lustre_irods_connector/src/change_table.capnp.h 
-    COMMAND capnp compile -oc++ ${CMAKE_SOURCE_DIR}/../lustre_irods_connector/src/change_table.capnp)
+    COMMAND capnp compile -oc++:${CMAKE_SOURCE_DIR}/../lustre_irods_connector/src --src-prefix=${CMAKE_SOURCE_DIR}/../lustre_irods_connector/src ${CMAKE_SOURCE_DIR}/../lustre_irods_connector/src/change_table.capnp)
 
 include(CPack) 
