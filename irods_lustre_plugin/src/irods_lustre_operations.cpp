@@ -1079,7 +1079,8 @@ void handle_unlink(const std::vector<std::pair<std::string, std::string> >& regi
         status = find_irods_path_with_avu(_comm, fidstr_avu_key, fidstr, "", false, irods_path); 
 
         if (status != 0) {
-            rodsLog(LOG_ERROR, "Error unregistering data object %s.  Error is %i", fidstr.c_str(), status);
+            // Log as debug since this is a normal condition when the data object is not in register map.
+            rodsLog(LOG_DEBUG, "Error unregistering data object %s.  Error is %i", fidstr.c_str(), status);
             return;
         }
 
@@ -1460,7 +1461,8 @@ void handle_rmdir(const std::vector<std::pair<std::string, std::string> >& regis
         status = find_irods_path_with_avu(_comm, fidstr_avu_key, fidstr, "", true, irods_path); 
 
         if (status != 0) {
-            rodsLog(LOG_ERROR, "Error deleting directory %s.  Error is %i", fidstr.c_str(), status);
+            // Log as debug since this is a normal condition when the collection is not in register map.
+            rodsLog(LOG_DEBUG, "Error deleting directory %s.  Error is %i", fidstr.c_str(), status);
             return;
         }
 
