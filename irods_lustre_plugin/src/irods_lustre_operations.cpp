@@ -226,17 +226,29 @@ int lustre_path_to_irods_path(const std::string& lustre_path, const std::vector<
 int irods_path_to_lustre_path(const std::string& irods_path, const std::vector<std::pair<std::string, std::string> >& register_map,
         std::string& lustre_path) {
 
+    // make sure we match the longest possible match
+    size_t match_length = 0; 
+    std::string matched_irods_path_prefix;
+    std::string matched_lustre_prefix;
+
     for (auto& iter : register_map) {
         const std::string& irods_path_prefix = iter.second;
-        if (irods_path.compare(0, irods_path_prefix.length(), irods_path_prefix) == 0) {
-            lustre_path = iter.first + irods_path.substr(irods_path_prefix.length());
-            return 0;
+        if (irods_path.compare(0, irods_path_prefix.length(), irods_path_prefix) == 0) { 
+            if (irods_path_prefix.length() > match_length) {
+                match_length = irods_path_prefix.length();
+                matched_irods_path_prefix = irods_path_prefix;
+                matched_lustre_prefix = iter.first;
+            }
         }
-    }
+    }    
+
+    if (match_length > 0) { 
+        lustre_path = matched_lustre_prefix + irods_path.substr(matched_irods_path_prefix.length());
+        return 0;
+    }    
 
     return -1;
 }
-
 
 int get_user_id(rsComm_t* _comm, icatSessionStruct *icss, rodsLong_t& user_id, bool direct_db_access_flag) {
 
