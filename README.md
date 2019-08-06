@@ -118,6 +118,9 @@ This will create an executable called lustre_irods_connector and a configuration
 - register_map - an array of lustre_path to irods_path mappings
     - The lustre_root_path needs to be in the register_map and must be the last entry in this map.
     - The entries must be ordered from more specific to less specific.  For example, "/mnt/dir1" should appear in the map before "/mnt"
+    - The register map should not result in the possibility of two Lustre paths that map to the same path in iRODS.  In the mapping below, the files /mnt/lustre/home/public/file1 and /mnt/lustre/file1 would both map to the same iRODS object (/tempZone/home/public/file1).
+        - /mnt/lustre/home -> /tempZone/home
+        - /mnt/lustre -> /tempZone/home/public
 - thread_{n}_connection_paramters - irods_host and irods_port that thread n connects to.  If this is not defined the local iRODS environment (iinit) is used.
 - set_metadata_for_storage_tiering_time_violation (optional) - If set to "true" sets the metadata for update time on data objects to be compatible with the storage tiering plugin when using time violation policy.
 - metadata_key_for_storage_tiering_time_violation (optional) - The metdata key used for the update time metdata on data objects.  The default is "irods::access_time".  This should be set to the same value that is configured in storage tiering.
