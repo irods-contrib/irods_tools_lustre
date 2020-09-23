@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.5.0 FATAL_ERROR) #CPACK_DEBIAN_<COMPONENT>_PACK
 
 project(irods-lustre-api C CXX)
 
-find_package(IRODS 4.2.6 EXACT REQUIRED)
+find_package(IRODS 4.2.8 EXACT REQUIRED)
 
 if (NOT ODBC_LIBRARY)
   find_library(ODBC_LIBRARY odbc)
@@ -41,7 +41,8 @@ set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -stdlib=libc++")
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -stdlib=libc++")
 add_compile_options(-nostdinc++ -Wall -Wextra -Werror -Wno-unused-parameter)
 link_libraries(c++abi)
-include_directories(${IRODS_EXTERNALS_FULLPATH_CLANG}/include/c++/v1)
+include_directories(${IRODS_EXTERNALS_FULLPATH_CLANG}/include/c++/v1
+                    ${IRODS_EXTERNALS_FULLPATH_JSON}/include)
 set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-z,defs")
 
 #include(icommand.cmake)
